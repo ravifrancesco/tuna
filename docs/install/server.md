@@ -7,8 +7,15 @@ Tuna runs in Docker next to Navidrome and Lidarr. These steps use Portainer; pla
 
 Portainer → **Stacks → Add stack** → name it `tuna` → paste [`docker-compose.yml`](../../docker-compose.yml).
 
-- `MUSIC_DIR`: your music folder on the server (Navidrome reads it, Lidarr adds to it).
-- `DOWNLOADS_DIR`: where qBittorrent puts finished downloads, so Lidarr can move them into the music folder.
+- `DATA_BASE_PATH`: the data folder Sonarr, Radarr and qBittorrent already use (mounted as `/data`).
+  Music goes in its `media/music` folder.
+- Before deploying, create `media/music` in the data folder and `/docker-data-volumes/navidrome-data`,
+  both owned by user 1000. Navidrome runs as that user and can't fix the owner itself, unlike Lidarr:
+
+  ```bash
+  sudo mkdir -p /docker-data-volumes/navidrome-data <data folder>/media/music
+  sudo chown 1000:1000 /docker-data-volumes/navidrome-data <data folder>/media/music
+  ```
 - Already running Navidrome or Lidarr? Delete that service from the file.
 
 **Deploy the stack.**
@@ -22,17 +29,20 @@ sign in to Tuna with. Navidrome scans the music folder by itself.
 
 Open `http://<your-server>:8686`:
 
-1. **Settings → Media Management → Root Folders**: add `/music`.
-2. **Settings → Download Clients**: add your qBittorrent (category `lidarr`).
-3. In **Prowlarr → Settings → Apps**, add Lidarr (`http://lidarr:8686` or the server's address, with
-   Lidarr's API key) so it gets your indexers.
-4. Copy Lidarr's API key from **Settings → General → Security**.
+1. **Settings → Media Management → Root Folders**: add `/data/media/music`.
+2. **Settings → Media Management → Rename Tracks**: on, so albums land as `Artist/Album (Year)/01 - Title`.
+3. **Settings → Metadata → Tag Audio Files with Metadata**: **For new downloads only**. Navidrome builds
+   your library from the tags inside the files, and Tuna uses their MusicBrainz IDs.
+4. **Settings → Download Clients**: add your qBittorrent (category `lidarr`).
+5. In **Prowlarr → Settings → Apps**, add Lidarr (`http://<your-server>:8686`, with Lidarr's API key)
+   so it gets your indexers.
+6. Copy Lidarr's API key from **Settings → General → Security**.
 
 ## 4. Tuna
 
 Open `http://<your-server>:7778`. The first time it asks for:
 
-- the **setup code**: Portainer → Containers → tuna → **Logs**;
+- the **setup code**: Portainer → Containers → Tuna → **Logs**;
 - **Navidrome's address**, e.g. `http://<your-server>:4533`;
 - **Lidarr's address and API key** (optional; you can add them later in Settings → Connections).
 

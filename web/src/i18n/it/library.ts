@@ -17,6 +17,7 @@ export default {
   Discover: 'Scopri',
   'Nothing in your library for "{q}".': 'Niente nella tua libreria per “{q}”.',
   'Not in your library': 'Non nella tua libreria',
+  "Couldn't search all music right now.": 'Non riesco a cercare tra tutta la musica, per ora.',
   'In your library': 'Nella tua libreria',
   'Open in your library': 'Apri nella tua libreria',
   'Recently added': 'Aggiunti di recente',

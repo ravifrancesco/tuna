@@ -30,9 +30,9 @@ person, synced lyrics, and apps for every screen. It's the sister of
 ## Install the server
 
 In Portainer: **Stacks → Add stack**, paste [`docker-compose.yml`](docker-compose.yml), set
-`MUSIC_DIR` to your music folder, **Deploy**. Open `http://<your-server>:7778`: Tuna asks for
-Navidrome's address (and Lidarr's), with the setup code from its log. Then sign in with your
-Navidrome account. More in [docs/install/server.md](docs/install/server.md).
+`DATA_BASE_PATH` to your data folder (music goes in `media/music`), **Deploy**. Open
+`http://<your-server>:7778`: Tuna asks for Navidrome's address (and Lidarr's), with the setup code
+from its log. Then sign in with your Navidrome account. More in [docs/install/server.md](docs/install/server.md).
 
 Image: `ghcr.io/ravifrancesco/tuna:0.1.0` (amd64 and arm64).
 

@@ -91,8 +91,9 @@ export async function request<T>(
       signal: AbortSignal.timeout(opts.timeoutMs ?? 15_000),
     });
   } catch (err) {
-    const e = err as Error & { cause?: { code?: string } };
-    const reason = e.name === 'TimeoutError' ? t('timed out') : (e.cause?.code ?? e.message);
+    // Node hides the real reason (ENOTFOUND, ECONNREFUSED, CERT_NOT_YET_VALID…) in the cause.
+    const e = err as Error & { cause?: { code?: string; message?: string; errors?: Array<{ code?: string }> } };
+    const reason = e.name === 'TimeoutError' ? t('timed out') : (e.cause?.code ?? e.cause?.errors?.[0]?.code ?? e.cause?.message ?? e.message);
     throw new UpstreamError(service, 502, t('{service} is unreachable ({reason})', { service, reason }));
   }
 

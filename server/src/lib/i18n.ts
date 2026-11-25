@@ -112,6 +112,7 @@ const IT: Record<string, string> = {
   '{n} min': '{n} min',
   '{n} h': '{n} h',
   'Lidarr has no music folder yet': 'Lidarr non ha ancora una cartella per la musica',
+  "Couldn't search all music right now": 'Non riesco a cercare tra tutta la musica, per ora',
   "Lidarr doesn't know this artist": 'Lidarr non conosce questo artista',
   "Lidarr doesn't know this album yet": 'Lidarr non conosce ancora questo album',
   'Getting music needs Lidarr: an admin can add it in Settings → Connections':

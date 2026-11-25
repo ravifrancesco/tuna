@@ -2,6 +2,9 @@ import type { SearchResult, WorldAlbum, WorldArtist } from '@tuna/shared';
 import { subsonic, type AlbumID3, type ArtistID3, type Child, type SubsonicAuth } from '../clients/navidrome';
 import { mbSearchAlbums, mbSearchArtists } from '../clients/public';
 import { settle } from '../lib/async';
+import { t } from '../lib/i18n';
+import { log } from '../lib/log';
+import { HttpError } from '../lib/upstream';
 import { findArtist, libraryIndex, norm, playlists, toAlbum, toArtist, toTrack } from './library';
 import { freshen } from './getting';
 import { toWorldAlbum } from './world';
@@ -30,16 +33,25 @@ export async function searchLibrary(auth: SubsonicAuth, q: string): Promise<Omit
   };
 }
 
+// Why MusicBrainz can't be searched, in the log once every few minutes rather than every keystroke.
+let warned = 0;
+function failed(err: unknown): undefined {
+  if (Date.now() - warned > 5 * 60_000) log.warn('search', "Couldn't search MusicBrainz", err);
+  warned = Date.now();
+  return undefined;
+}
+
 export async function searchWorld(auth: SubsonicAuth, q: string): Promise<SearchResult['world']> {
   const query = q.trim();
   if (query.length < 2) return { artists: [], albums: [] };
   await freshen();
   const escaped = query.replace(/([+\-&|!(){}[\]^"~*?:\\/])/g, '\\$1');
   const [artists, groups, idx] = await Promise.all([
-    settle(mbSearchArtists(escaped), []),
-    settle(mbSearchAlbums(escaped), []),
+    mbSearchArtists(escaped).catch(failed),
+    mbSearchAlbums(escaped).catch(failed),
     libraryIndex(auth),
   ]);
+  if (!artists || !groups) throw new HttpError(502, t("Couldn't search all music right now"));
   const worldArtists: WorldArtist[] = artists
     .filter((a) => (a.score ?? 0) >= 60)
     .slice(0, 6)

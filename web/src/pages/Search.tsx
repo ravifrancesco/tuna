@@ -27,7 +27,7 @@ export function Search() {
   }, [q, setParams]);
 
   const lib = useQuery({ queryKey: ['search', q], queryFn: () => api.search(q), enabled: q.length > 0, staleTime: 30_000 });
-  const world = useQuery({ queryKey: ['searchWorld', qWorld], queryFn: () => api.searchWorld(qWorld), enabled: qWorld.length > 1, staleTime: 5 * 60_000 });
+  const world = useQuery({ queryKey: ['searchWorld', qWorld], queryFn: () => api.searchWorld(qWorld), enabled: qWorld.length > 1, staleTime: 5 * 60_000, retry: 1 });
   const r = lib.data;
   const top = r?.artists[0] ?? r?.albums[0];
 
@@ -113,6 +113,7 @@ export function Search() {
         {q.length > 1 && (
           <>
             {world.isLoading && qWorld === q && <Spinner />}
+            {world.isError && qWorld === q && <p className="muted">{t("Couldn't search all music right now.")}</p>}
             {world.data && (world.data.albums.some((a) => !a.albumId) || world.data.artists.some((a) => !a.artistId)) && (
               <>
                 <div className="row__head" style={{ marginTop: 10 }}>
