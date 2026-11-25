@@ -30,6 +30,12 @@ export function Search() {
   const world = useQuery({ queryKey: ['searchWorld', qWorld], queryFn: () => api.searchWorld(qWorld), enabled: qWorld.length > 1, staleTime: 5 * 60_000, retry: 1 });
   const r = lib.data;
   const top = r?.artists[0] ?? r?.albums[0];
+  // Everything else that exists (through Lidarr), in the same rows after what's in the library.
+  const w = qWorld === q ? world.data : undefined;
+  const moreArtists = w?.artists.filter((a) => !a.artistId) ?? [];
+  const moreAlbums = w?.albums.filter((a) => !a.albumId) ?? [];
+  const lookingFurther = q.length > 1 && (qWorld !== q || world.isLoading);
+  const libEmpty = r && !top && !r.tracks.length && !r.playlists.length;
 
   return (
     <div className="page--flush">
@@ -104,43 +110,35 @@ export function Search() {
                 )}
               </div>
             )}
-            {r.artists.length > 0 && <Row title={t('Artists')}>{r.artists.map((a) => <ArtistCard key={a.id} artist={a} />)}</Row>}
-            {r.albums.length > 0 && <Row title={t('Albums')}>{r.albums.map((a) => <AlbumCard key={a.id} album={a} />)}</Row>}
+            {(r.artists.length > 0 || moreArtists.length > 0) && (
+              <Row title={t('Artists')}>
+                {r.artists.map((a) => (
+                  <ArtistCard key={a.id} artist={a} />
+                ))}
+                {moreArtists.map((a) => (
+                  <WorldArtistCard key={a.mbid} artist={a} />
+                ))}
+              </Row>
+            )}
+            {(r.albums.length > 0 || moreAlbums.length > 0) && (
+              <Row title={t('Albums')}>
+                {r.albums.map((a) => (
+                  <AlbumCard key={a.id} album={a} />
+                ))}
+                {moreAlbums.map((a) => (
+                  <WorldAlbumCard key={a.mbid} album={a} />
+                ))}
+              </Row>
+            )}
             {r.playlists.length > 0 && <Row title={t('Playlists')}>{r.playlists.map((p) => <PlaylistCard key={p.id} playlist={p} />)}</Row>}
-            {!top && !r.tracks.length && !r.playlists.length && <p className="muted">{t('Nothing in your library for "{q}".', { q })}</p>}
-          </>
-        )}
-        {q.length > 1 && (
-          <>
-            {world.isLoading && qWorld === q && <Spinner />}
-            {world.isError && qWorld === q && <p className="muted">{t("Couldn't search all music right now.")}</p>}
-            {world.data && (world.data.albums.some((a) => !a.albumId) || world.data.artists.some((a) => !a.artistId)) && (
-              <>
-                <div className="row__head" style={{ marginTop: 10 }}>
-                  <h2>{t('Not in your library')}</h2>
-                </div>
-                {world.data.artists.some((a) => !a.artistId) && (
-                  <Row title={t('Artists')}>
-                    {world.data.artists
-                      .filter((a) => !a.artistId)
-                      .map((a) => (
-                        <WorldArtistCard key={a.mbid} artist={a} />
-                      ))}
-                  </Row>
-                )}
-                {world.data.albums.some((a) => !a.albumId) && (
-                  <Row title={t('Albums')}>
-                    {world.data.albums
-                      .filter((a) => !a.albumId)
-                      .map((a) => (
-                        <WorldAlbumCard key={a.mbid} album={a} />
-                      ))}
-                  </Row>
-                )}
-              </>
+            {libEmpty && world.isError && <p className="muted">{t('Nothing in your library for "{q}".', { q })}</p>}
+            {libEmpty && !lookingFurther && !world.isError && !moreArtists.length && !moreAlbums.length && (
+              <p className="muted">{t('Nothing found for "{q}".', { q })}</p>
             )}
           </>
         )}
+        {lookingFurther && r && <Spinner />}
+        {world.isError && qWorld === q && <p className="muted">{t("Couldn't search all music right now.")}</p>}
       </div>
     </div>
   );

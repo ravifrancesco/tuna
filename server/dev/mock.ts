@@ -6,6 +6,7 @@
  *
  *   Users: demo/demo (admin), sam/sam, admin/admin (admin). Lidarr key: mock-lidarr-key.
  *   MOCK_GET_SECONDS (default 40): how long a Get takes to "download".
+ *   MOCK_EMPTY_LIBRARY=1: nothing in the library yet, as a new install.
  *   ListenBrainz token for Settings: mock-lb.
  */
 import crypto from 'node:crypto';
@@ -14,6 +15,7 @@ import zlib from 'node:zlib';
 
 const PORT = Number(process.env.MOCK_PORT ?? 7701);
 const GET_SECONDS = Number(process.env.MOCK_GET_SECONDS ?? 40);
+const EMPTY_LIBRARY = process.env.MOCK_EMPTY_LIBRARY === '1';
 
 // ---- A made-up world, the same every time ------------------------------------------------------
 
@@ -129,7 +131,7 @@ for (const [ai, a] of ARTISTS.entries()) {
     const name = type === 'Single' ? `${pick(r, SONG_A)} ${pick(r, SONG_B)}` : `${pick(r, WORDS_A)} ${pick(r, WORDS_B)}`;
     const id = `al${ai + 1}-${n + 1}`;
     // In the library: most albums of library artists; the newest one or two are only "out there".
-    const inLibrary = a.inLibrary && (n < count - 2 || (n === count - 2 && r() < 0.4));
+    const inLibrary = a.inLibrary && (n < count - 2 || (n === count - 2 && r() < 0.4)) && !EMPTY_LIBRARY;
     const year = 2008 + n * 3 + Math.floor(r() * 3);
     const album: MAlbum = {
       id,
@@ -195,7 +197,7 @@ const users: User[] = [
 ];
 const jwts = new Map<string, User>();
 
-for (const u of users.slice(0, 2)) {
+for (const u of EMPTY_LIBRARY ? [] : users.slice(0, 2)) {
   const r = rng(`listens:${u.userName}`);
   const lib = libTracks();
   for (let i = 0; i < 260; i++) {
@@ -216,7 +218,7 @@ interface MPlaylist {
   created: string;
 }
 const playlists: MPlaylist[] = [];
-{
+if (!EMPTY_LIBRARY) {
   const r = rng('playlists');
   const lib = libTracks();
   for (const [owner, name, n] of [
@@ -568,6 +570,8 @@ function navidrome(method: string, q: URLSearchParams, req: http.IncomingMessage
     case 'ping':
       return ok(res);
     case 'getArtists': {
+      // As Navidrome: an empty library is an error, not an empty list.
+      if (!libArtists().length) return fail(res, 70, 'Library not found or empty');
       const groups = new Map<string, MArtist[]>();
       for (const a of libArtists()) {
         const letter = a.name.replace(/^the /i, '')[0].toUpperCase();

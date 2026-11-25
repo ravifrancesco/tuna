@@ -69,7 +69,8 @@ Notes for anyone (person or AI assistant) working on Tuna's code.
 - Node 22 or later. `npm install` at the root (npm workspaces).
 - `npm run dev:mock` runs the mock services (:7701), the server against them (:7778) and the web
   dev server (:5174). Mock users: demo/demo, sam/sam, admin/admin. Lidarr's fake downloads take
-  `MOCK_GET_SECONDS` (40). ListenBrainz token for Settings: `mock-lb`.
+  `MOCK_GET_SECONDS` (40); `MOCK_EMPTY_LIBRARY=1` starts with nothing in the library, as a new install.
+  ListenBrainz token for Settings: `mock-lb`.
 - `npm run typecheck` checks server and web; `npm run check:i18n` the Italian.
 - **Develop against the mock**, never against a real household's server.
 - A running server serves the web files from `web/dist` as they are: `npm run build -w web` to

@@ -3,6 +3,7 @@ import { subsonic, type AlbumID3, type ArtistID3, type Child, type PlaylistInfo,
 import { MINUTE, TTLCache } from '../lib/cache';
 import { t } from '../lib/i18n';
 import { log } from '../lib/log';
+import { UpstreamError } from '../lib/upstream';
 
 /** The library, from Navidrome, in Tuna's shapes. */
 
@@ -83,7 +84,12 @@ export async function album(auth: SubsonicAuth, id: string): Promise<AlbumDetail
 }
 
 export async function artists(auth: SubsonicAuth): Promise<Artist[]> {
-  const r = await subsonic<{ artists?: { index?: Array<{ artist?: ArtistID3[] }> } }>(auth, 'getArtists');
+  // An empty library is an error to Navidrome ("Library not found or empty"); to us it's no artists yet.
+  type Index = { artists?: { index?: Array<{ artist?: ArtistID3[] }> } };
+  const r = await subsonic<Index>(auth, 'getArtists').catch((err): Index => {
+    if (err instanceof UpstreamError && err.status === 404) return {};
+    throw err;
+  });
   return (r.artists?.index ?? []).flatMap((i) => i.artist ?? []).map(toArtist);
 }
 
