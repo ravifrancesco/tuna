@@ -103,6 +103,8 @@ interface MAlbum {
   mbid: string;
   type: 'Album' | 'EP' | 'Single';
   inLibrary: boolean;
+  /** Lidarr has filed it in the music folder; Navidrome hasn't scanned it yet. */
+  filed?: number;
   created: string;
   tracks: MTrack[];
   lidarrId: number;
@@ -472,12 +474,19 @@ function tickDownloads() {
   for (const d of [...downloads]) {
     if (Date.now() - d.started >= GET_SECONDS * 1000) {
       const a = albums.get(d.albumId)!;
-      a.inLibrary = true;
-      a.created = new Date().toISOString();
+      a.filed = Date.now();
       downloads.splice(downloads.indexOf(d), 1);
-      console.log(`mock lidarr: "${a.name}" by ${a.artist} is in the library now`);
+      console.log(`mock lidarr: "${a.name}" by ${a.artist} is in the music folder; Navidrome sees it when it scans`);
     }
   }
+  // As Navidrome's own scheduled scan, for when nobody asks for one.
+  for (const a of albums.values()) if (a.filed && Date.now() - a.filed > 5 * 60_000) scanned(a);
+}
+function scanned(a: MAlbum) {
+  a.filed = undefined;
+  a.inLibrary = true;
+  a.created = new Date().toISOString();
+  console.log(`mock navidrome: "${a.name}" by ${a.artist} is in the library now`);
 }
 setInterval(tickDownloads, 1000);
 
@@ -492,7 +501,12 @@ const lidarrAlbum = (a: MAlbum) => {
     albumType: a.type,
     releaseDate: `${a.year}-05-01T00:00:00Z`,
     artist: { id: artist.lidarrId ?? 0, artistName: artist.name, foreignArtistId: artist.mbid },
-    statistics: { trackFileCount: a.inLibrary ? a.tracks.length : 0, trackCount: a.tracks.length, totalTrackCount: a.tracks.length, percentOfTracks: a.inLibrary ? 100 : 0 },
+    statistics: {
+      trackFileCount: a.inLibrary || a.filed ? a.tracks.length : 0,
+      trackCount: a.tracks.length,
+      totalTrackCount: a.tracks.length,
+      percentOfTracks: a.inLibrary || a.filed ? 100 : 0,
+    },
   };
 };
 const lidarrArtist = (a: MArtist) => ({ id: a.lidarrId ?? 0, artistName: a.name, foreignArtistId: a.mbid, monitored: true, disambiguation: '' });
@@ -718,6 +732,9 @@ function navidrome(method: string, q: URLSearchParams, req: http.IncomingMessage
       return ok(res);
     }
     case 'startScan':
+      for (const a of albums.values()) if (a.filed) scanned(a);
+      return ok(res, { scanStatus: { scanning: false, count: libTracks().length } });
+    case 'getScanStatus':
       return ok(res, { scanStatus: { scanning: false, count: libTracks().length } });
     case 'stream':
     case 'download': {

@@ -326,6 +326,29 @@ body.resizing .right {
 .btn--danger {
   color: var(--bad);
 }
+/* How many albums are on their way, as Netfish's count by Activity. */
+.nav__count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: auto;
+  padding: 0 5px;
+  border-radius: 99px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+.icon-btn--count {
+  position: relative;
+}
+.icon-btn--count .nav__count {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  margin: 0;
+}
 .icon-btn {
   display: inline-grid;
   place-items: center;

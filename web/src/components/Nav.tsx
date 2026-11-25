@@ -7,10 +7,21 @@ import { Brand } from './Logo';
 import { pickPlaylist } from './Menu';
 import { Cover, LikedCover } from './ui';
 
+/** How many albums are being looked for or downloaded, as Netfish's count by Activity. */
+export function useOnItsWay() {
+  const { data } = useQuery({
+    queryKey: ['getting'],
+    queryFn: api.getting,
+    refetchInterval: (q) => (q.state.data?.some((x) => x.get.state === 'looking' || x.get.state === 'downloading') ? 15_000 : 60_000),
+  });
+  return (data ?? []).filter((x) => x.get.state === 'looking' || x.get.state === 'downloading').length;
+}
+
 /** Computers and TVs: the sidebar, with your playlists. */
 export function Sidebar() {
   const lists = useQuery({ queryKey: ['playlists'], queryFn: api.playlists });
   const loc = useLocation();
+  const onItsWay = useOnItsWay();
   return (
     <nav className="side" aria-label={t('Menu')}>
       <div className="side__top">
@@ -26,6 +37,7 @@ export function Sidebar() {
         </NavLink>
         <NavLink className="navlink" to="/getting">
           <Activity size={22} /> {t('On its way')}
+          {onItsWay > 0 && <span className="nav__count">{onItsWay}</span>}
         </NavLink>
         <NavLink className="navlink" to="/settings">
           <Settings size={22} /> {t('Settings')}

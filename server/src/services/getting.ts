@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { GetItem, GetState } from '@tuna/shared';
 import * as lidarr from '../clients/lidarr';
+import { subsonic } from '../clients/navidrome';
 import { coverArtFor, mbReleaseGroup } from '../clients/public';
 import { config } from '../config';
 import { has } from '../connections';
@@ -9,7 +10,7 @@ import { t } from '../lib/i18n';
 import { log } from '../lib/log';
 import { writeJson } from '../lib/storage';
 import { HttpError } from '../lib/upstream';
-import type { Session } from '../sessions';
+import { adminAuth, type Session } from '../sessions';
 import { forgetLibraryIndex } from './library';
 
 /**
@@ -48,6 +49,36 @@ let timer: NodeJS.Timeout | undefined;
 
 const pending = () => requests.filter((r) => !r.ready && r.lidarrAlbumId);
 
+/** Songs Lidarr has filed for each album, to notice new ones. */
+const filesSeen = new Map<number, number>();
+
+// Lidarr filed new songs: Navidrome looks now rather than at its next scheduled scan.
+let scanning = false;
+let scanAgain = false;
+async function scanNavidrome() {
+  if (scanning) return void (scanAgain = true);
+  const auth = adminAuth();
+  if (!auth) return forgetLibraryIndex();
+  scanning = true;
+  try {
+    do {
+      scanAgain = false;
+      await subsonic(auth, 'startScan');
+      for (let i = 0; i < 90; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const s = await subsonic<{ scanStatus?: { scanning?: boolean } }>(auth, 'getScanStatus');
+        if (!s.scanStatus?.scanning) break;
+      }
+      forgetLibraryIndex();
+    } while (scanAgain);
+  } catch (err) {
+    log.warn('get', "Couldn't ask Navidrome to look for new music", err);
+    forgetLibraryIndex();
+  } finally {
+    scanning = false;
+  }
+}
+
 async function refresh() {
   if (!has.lidarr() || Date.now() - state.at < 4000) return;
   refreshing ??= (async () => {
@@ -60,18 +91,21 @@ async function refresh() {
       for (const a of albums) if (a) map.set(a.id, a);
       state = { at: Date.now(), queue, albums: map };
       let changed = false;
+      let landed = false;
       for (const r of pending()) {
         const s = map.get(r.lidarrAlbumId!)?.statistics;
+        const files = s?.trackFileCount ?? 0;
+        if (files > (filesSeen.get(r.lidarrAlbumId!) ?? 0)) landed = true;
+        filesSeen.set(r.lidarrAlbumId!, files);
         if (s && s.trackCount > 0 && s.trackFileCount >= s.trackCount) {
           r.ready = new Date().toISOString();
           changed = true;
+          filesSeen.delete(r.lidarrAlbumId!);
           log.info('get', `Ready: "${r.title}" by ${r.artist} (asked for by ${r.by})`);
         }
       }
-      if (changed) {
-        save();
-        forgetLibraryIndex();
-      }
+      if (changed) save();
+      if (landed) void scanNavidrome();
     } catch (err) {
       log.warn('get', "Couldn't check on Lidarr", err);
       state.at = Date.now();
