@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The window shows the mark while the app starts (values-v31: Android 12's start-up screen). -->
+    <style name="Tuna" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@drawable/splash</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+    <color name="background">#07060c</color>
+    <color name="accent">#9b7bff</color>
+</resources>

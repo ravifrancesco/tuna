@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>Tuna</title>
+<!--
+  Tuna without the server: what's downloaded on this device, played by the app's own player. The
+  app serves this page from its own address (see docs/native-bridge.md, "Downloads"), with the same
+  bridge as the server's page, and opens it when the server can't be reached.
+-->
+<style>
+  :root { color-scheme: dark; --bg: #0b0a10; --panel: #13111b; --panel-2: #1b1826; --line: rgba(255,255,255,.08); --text: #f1eefc; --muted: #a59fba; --accent: #9b7bff; --accent-light: #dccbff; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font: 15px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+  body { padding: calc(env(safe-area-inset-top) + 18px) 16px calc(env(safe-area-inset-bottom) + 96px); max-width: 860px; margin: 0 auto; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  header svg { width: 36px; height: 36px; flex: none; }
+  h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; margin: 0; flex: 1; }
+  .note { display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-bottom: 18px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+  .note span { flex: 1; }
+  .note.back { border-color: color-mix(in srgb, var(--accent) 40%, transparent); color: var(--text); }
+  .btn { height: 36px; padding: 0 16px; border-radius: 999px; background: var(--panel-2); font-weight: 650; white-space: nowrap; }
+  .btn.primary { background: linear-gradient(135deg, var(--accent-light), #7c4dff); color: #140a2e; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
+  .card { display: grid; gap: 6px; text-align: left; min-width: 0; }
+  .art { aspect-ratio: 1; border-radius: 10px; background: linear-gradient(135deg, #3d2a7a, #1b1826); background-size: cover; background-position: center; display: grid; place-items: center; color: var(--accent-light); font-size: 34px; }
+  .art.round { border-radius: 50%; }
+  .card b, .card small, .row b, .row small, .bar b, .bar small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card small, .row small, .bar small { color: var(--muted); font-size: 13px; }
+  .detail-head { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+  .detail-head .art { width: 120px; flex: none; }
+  .detail-head div { min-width: 0; }
+  .detail-head h2 { margin: 0 0 4px; font-size: 24px; letter-spacing: -0.02em; }
+  .rows { display: grid; gap: 2px; }
+  .row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px; border-radius: 10px; text-align: left; }
+  .row:hover, .row.on { background: var(--panel); }
+  .row.on b { color: var(--accent-light); }
+  .row span { flex: 1; min-width: 0; }
+  .row .n { width: 24px; flex: none; color: var(--muted); text-align: center; }
+  .row.missing { opacity: 0.4; pointer-events: none; }
+  .empty { color: var(--muted); text-align: center; padding: 40px 0; }
+  .bar { position: fixed; left: 10px; right: 10px; bottom: calc(env(safe-area-inset-bottom) + 10px); max-width: 840px; margin: 0 auto; display: none; align-items: center; gap: 12px; padding: 8px 12px 8px 8px; border-radius: 999px; background: color-mix(in srgb, #2a2140 75%, transparent); backdrop-filter: blur(30px) saturate(2); -webkit-backdrop-filter: blur(30px) saturate(2); box-shadow: 0 10px 30px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.3); }
+  .bar.on { display: flex; }
+  .bar .art { width: 44px; border-radius: 50%; flex: none; font-size: 18px; }
+  .bar span { flex: 1; min-width: 0; }
+  .bar .play { width: 44px; height: 44px; border-radius: 50%; background: var(--text); color: #140a2e; display: grid; place-items: center; flex: none; }
+  .bar .skip { width: 36px; height: 36px; display: grid; place-items: center; flex: none; }
+</style>
+</head>
+<body>
+<header>
+  <svg viewBox="0 0 64 64" aria-hidden="true">
+    <defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x1="2.44" y1="12" x2="50.81" y2="53.99"><stop offset="0" stop-color="#dccbff"/><stop offset="1" stop-color="#7c4dff"/></linearGradient></defs>
+    <g transform="translate(32 32) scale(1.0957) translate(-26.625 -32.995)">
+      <path d="M10.94 45.31 L2.44 37.81 L2.44 52.81 Z" fill="url(#g)" stroke="url(#g)" stroke-width="3" stroke-linejoin="round"/>
+      <rect x="36.76" y="12" width="4.6" height="30.69" fill="url(#g)"/>
+      <path d="M37.36 12.6 L41.36 12.6 C42.71 17.55 50.81 20.25 50.81 28.35 C50.81 31.5 49.91 33.75 48.56 36 C49.1 29.7 45.86 25.65 41.36 23.85 L37.36 23.85 Z" fill="url(#g)" stroke="url(#g)" stroke-width="1.2" stroke-linejoin="round"/>
+      <g transform="rotate(-12 28 44)"><ellipse cx="28" cy="44" rx="13.5" ry="9.8" fill="url(#g)"/><circle cx="32.05" cy="41.06" r="2.7" fill="#140a2e"/></g>
+    </g>
+  </svg>
+  <h1 id="title"></h1>
+</header>
+<div class="note" id="note"><span id="noteText"></span><button class="btn" id="retry"></button></div>
+<main id="main"></main>
+<div class="bar" id="bar">
+  <div class="art" id="barArt">♪</div>
+  <span><b id="barTitle"></b><small id="barArtist"></small></span>
+  <button class="skip" id="prev" aria-label="Previous"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+  <button class="play" id="toggle" aria-label="Play"></button>
+  <button class="skip" id="next" aria-label="Next"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M16 5h2v14h-2zM4 5l11 7-11 7z"/></svg></button>
+</div>
+<script>
+(() => {
+  const it = /^it\b/i.test((navigator.languages && navigator.languages[0]) || navigator.language || '');
+  const T = it
+    ? { title: 'Download', note: 'Il server non risponde. Questi brani sono su questo dispositivo.', back: 'Il server è tornato.', retry: 'Riprova', open: 'Torna a Tuna', none: 'Niente di scaricato su questo dispositivo.', songs: (n) => (n === 1 ? '1 brano' : n + ' brani'), notHere: 'non scaricato', liked: 'Brani che ti piacciono' }
+    : { title: 'Downloads', note: 'Your server isn’t answering. These are on this device.', back: 'Your server is back.', retry: 'Try again', open: 'Back to Tuna', none: 'Nothing downloaded on this device.', songs: (n) => (n === 1 ? '1 song' : n + ' songs'), notHere: 'not downloaded', liked: 'Liked songs' };
+  const $ = (id) => document.getElementById(id);
+  $('title').textContent = T.title;
+
+  // The bridge, as on the server's page (docs/native-bridge.md).
+  const w = window;
+  const post = (msg) => {
+    if (w.TunaAndroid) w.TunaAndroid.post(JSON.stringify(msg));
+    else if (w.webkit && w.webkit.messageHandlers && w.webkit.messageHandlers.tuna) w.webkit.messageHandlers.tuna.postMessage(msg);
+    else if (w.chrome && w.chrome.webview) w.chrome.webview.postMessage(msg);
+  };
+  let nextId = 1;
+  const waiting = new Map();
+  const ask = (cmd, args, timeout = 8000) =>
+    new Promise((resolve) => {
+      const id = nextId++;
+      const timer = setTimeout(() => (waiting.delete(id), resolve(undefined)), timeout);
+      waiting.set(id, (v) => (clearTimeout(timer), resolve(v)));
+      post({ cmd, args, id });
+    });
+  const send = (cmd, args) => post({ cmd, args });
+  let queue = [];
+  let state = {};
+  const receive = (raw) => {
+    const msg = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (msg.type === 'reply') {
+      const fn = waiting.get(msg.id);
+      waiting.delete(msg.id);
+      if (fn) fn(msg.value);
+    } else if (msg.type === 'audio') {
+      state = msg.state || {};
+      bar();
+    } else if (msg.type === 'event' && msg.name === 'downloads') {
+      downloads = msg.value || [];
+      render();
+    }
+  };
+  w.__tuna = receive;
+  if (w.chrome && w.chrome.webview) w.chrome.webview.addEventListener('message', (e) => e.data && (typeof e.data === 'string' || e.data.type) && receive(e.data));
+
+  let downloads = [];
+  let open; // the download shown, by id
+
+  const art = (d, extra) => {
+    const el = document.createElement('div');
+    el.className = 'art' + (extra || '');
+    if (d.localCover) el.style.backgroundImage = `url("${d.localCover}")`;
+    else el.textContent = d.kind === 'liked' ? '♥' : '♪';
+    return el;
+  };
+  const text = (tag, value) => {
+    const el = document.createElement(tag);
+    el.textContent = value || '';
+    return el;
+  };
+
+  function render() {
+    const main = $('main');
+    main.replaceChildren();
+    const d = downloads.find((x) => x.id === open);
+    if (d) return detail(main, d);
+    open = undefined;
+    if (!downloads.length) return main.append(text('p', T.none)), (main.firstChild.className = 'empty');
+    const grid = document.createElement('div');
+    grid.className = 'grid';
+    for (const x of downloads) {
+      const card = document.createElement('button');
+      card.className = 'card';
+      card.append(art(x), text('b', x.kind === 'liked' ? T.liked : x.title), text('small', x.subtitle || T.songs(x.ready.length)));
+      card.onclick = () => ((open = x.id), render(), scrollTo(0, 0));
+      grid.append(card);
+    }
+    main.append(grid);
+  }
+
+  function detail(main, d) {
+    const head = document.createElement('div');
+    head.className = 'detail-head';
+    const words = document.createElement('div');
+    const back = document.createElement('button');
+    back.className = 'btn';
+    back.textContent = '←';
+    back.onclick = () => ((open = undefined), render());
+    words.append(text('h2', d.kind === 'liked' ? T.liked : d.title), text('small', [d.subtitle, T.songs(d.ready.length)].filter(Boolean).join(' · ')));
+    head.append(back, art(d), words);
+    const rows = document.createElement('div');
+    rows.className = 'rows';
+    const playable = d.tracks.filter((t) => d.ready.includes(t.id));
+    d.tracks.forEach((t, i) => {
+      const row = document.createElement('button');
+      const here = d.ready.includes(t.id);
+      row.className = 'row' + (here ? '' : ' missing') + (queue[state.index] && queue[state.index].id === t.id ? ' on' : '');
+      const words = document.createElement('span');
+      words.append(text('b', t.title), text('small', here ? t.artist : `${t.artist} · ${T.notHere}`));
+      row.append(text('span', String(i + 1)), words);
+      row.firstChild.className = 'n';
+      row.onclick = () => {
+        queue = playable;
+        send('audio.load', { tracks: playable, index: Math.max(0, playable.indexOf(t)), start: 0, play: true });
+      };
+      rows.append(row);
+    });
+    main.append(head, rows);
+  }
+
+  const PLAY = '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+  const PAUSE = '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>';
+  function bar() {
+    const t = queue[state.index];
+    $('bar').classList.toggle('on', Boolean(t));
+    if (!t) return;
+    $('barTitle').textContent = t.title;
+    $('barArtist').textContent = t.artist;
+    $('toggle').innerHTML = state.playing ? PAUSE : PLAY;
+    const d = downloads.find((x) => x.tracks.some((y) => y.id === t.id));
+    $('barArt').style.backgroundImage = d && d.localCover ? `url("${d.localCover}")` : '';
+    $('barArt').textContent = d && d.localCover ? '' : '♪';
+    if (open) render();
+  }
+  // The system's Back (Android): an open download closes first.
+  w.tunaBack = () => (open ? ((open = undefined), render(), true) : false);
+  $('toggle').onclick = () => send('audio.command', { name: 'toggle' });
+  $('prev').onclick = () => send('audio.command', { name: 'previous' });
+  $('next').onclick = () => send('audio.command', { name: 'next' });
+
+  // Back to the server as soon as it answers.
+  let back = false;
+  const check = async () => {
+    const ok = await ask('server.reachable', undefined, 12000);
+    if (ok && !back) {
+      back = true;
+      $('note').classList.add('back');
+      $('noteText').textContent = T.back;
+      $('retry').textContent = T.open;
+      $('retry').classList.add('primary');
+    }
+  };
+  $('noteText').textContent = T.note;
+  $('retry').textContent = T.retry;
+  $('retry').onclick = () => (back ? send('server.open') : check());
+  setInterval(check, 15000);
+
+  (async () => {
+    downloads = (await ask('downloads.list')) || [];
+    const now = await ask('audio.current', undefined, 3000);
+    if (now && now.tracks) ((queue = now.tracks), (state = now.state || {}));
+    render();
+    bar();
+  })();
+})();
+</script>
+</body>
+</html>

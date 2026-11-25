@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+    <title>Tuna</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #07060c;
+        --accent: #9b7bff;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: radial-gradient(ellipse 70% 55% at 50% 30%, #161126 0%, var(--bg) 70%);
+        color: #f1eefc;
+        font: 15px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      form {
+        width: min(420px, calc(100vw - 48px));
+        display: grid;
+        gap: 16px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+      .brand span {
+        font-size: 34px;
+        font-weight: 800;
+        letter-spacing: -0.035em;
+      }
+      p {
+        margin: 0;
+        color: #a59fba;
+      }
+      label {
+        display: grid;
+        gap: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        color: #c9c3dc;
+      }
+      input {
+        height: 44px;
+        padding: 0 14px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: #13111b;
+        color: inherit;
+        font: inherit;
+        font-size: 16px; /* iPhone zooms into smaller fields */
+        outline: none;
+      }
+      input:focus {
+        border-color: var(--accent);
+      }
+      button {
+        height: 46px;
+        border: 0;
+        border-radius: 8px;
+        background: linear-gradient(135deg, #dccbff, #7c4dff);
+        color: #120a2b;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      button[disabled] {
+        opacity: 0.6;
+      }
+      .error {
+        min-height: 20px;
+        color: #ff7b8a;
+        font-size: 14px;
+      }
+      small {
+        color: #6f6985;
+      }
+    </style>
+  </head>
+  <body>
+    <form id="form">
+      <div class="brand">
+        <svg viewBox="0 0 64 64" width="44" height="44" aria-hidden="true">
+          <defs>
+            <linearGradient id="g" gradientUnits="userSpaceOnUse" x1="2.44" y1="12" x2="50.81" y2="53.99">
+              <stop offset="0" stop-color="#dccbff" />
+              <stop offset="1" stop-color="#7c4dff" />
+            </linearGradient>
+          </defs>
+          <g transform="translate(32 32) scale(1.0957) translate(-26.625 -32.995)">
+            <path d="M10.94 45.31 L2.44 37.81 L2.44 52.81 Z" fill="url(#g)" stroke="url(#g)" stroke-width="3" stroke-linejoin="round" />
+            <rect x="36.76" y="12" width="4.6" height="30.69" fill="url(#g)" />
+            <path d="M37.36 12.6 L41.36 12.6 C42.71 17.55 50.81 20.25 50.81 28.35 C50.81 31.5 49.91 33.75 48.56 36 C49.1 29.7 45.86 25.65 41.36 23.85 L37.36 23.85 Z" fill="url(#g)" stroke="url(#g)" stroke-width="1.2" stroke-linejoin="round" />
+            <g transform="rotate(-12 28 44)">
+              <ellipse cx="28" cy="44" rx="13.5" ry="9.8" fill="url(#g)" />
+              <circle cx="32.05" cy="41.06" r="2.7" fill="#140a2e" />
+            </g>
+          </g>
+        </svg>
+        <span>tuna</span>
+      </div>
+      <p data-t>Where is your Tuna server?</p>
+      <label>
+        <span data-t>Server address</span>
+        <input id="url" placeholder="192.168.1.50:7778" autocomplete="url" autocapitalize="none" spellcheck="false" autofocus />
+      </label>
+      <small data-t>The address you open Tuna at in a browser, e.g. http://192.168.1.50:7778</small>
+      <div class="error" id="error"></div>
+      <button id="go" data-t>Connect</button>
+    </form>
+    <script>
+      // Italian when the system language is Italian, English otherwise. Keys are the exact English text.
+      const lang = (navigator.languages && navigator.languages[0]) || navigator.language || 'en';
+      const italian = /^it\b/i.test(lang);
+      const IT = {
+        'Where is your Tuna server?': "Dov'è il tuo server Tuna?",
+        'Server address': 'Indirizzo del server',
+        'The address you open Tuna at in a browser, e.g. http://192.168.1.50:7778': "L'indirizzo con cui apri Tuna nel browser, ad es. http://192.168.1.50:7778",
+        Connect: 'Connetti',
+        'Connecting…': 'Connessione in corso…',
+      };
+      const t = (text) => (italian && IT[text]) || text;
+      if (italian) {
+        document.documentElement.lang = 'it';
+        for (const el of document.querySelectorAll('[data-t]')) el.textContent = t(el.textContent.replace(/\s+/g, ' ').trim());
+      }
+
+      // Talking to the app: { cmd, args, id } in, { type: 'reply', id, value, error? } back.
+      let nextId = 1;
+      const waiting = new Map();
+      window.__tuna = (msg) => {
+        if (msg.type !== 'reply' || !waiting.has(msg.id)) return;
+        const done = waiting.get(msg.id);
+        waiting.delete(msg.id);
+        done(msg);
+      };
+      const ask = (cmd, args) =>
+        new Promise((resolve, reject) => {
+          const id = nextId++;
+          waiting.set(id, (msg) => (msg.error ? reject(new Error(msg.error)) : resolve(msg.value)));
+          window.webkit.messageHandlers.tuna.postMessage({ cmd, args, id });
+        });
+
+      const form = document.getElementById('form');
+      const input = document.getElementById('url');
+      const error = document.getElementById('error');
+      const go = document.getElementById('go');
+      error.textContent = new URLSearchParams(location.search).get('error') ?? '';
+      ask('currentServer').then((url) => url && (input.value = url));
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        error.textContent = '';
+        go.disabled = true;
+        go.textContent = t('Connecting…');
+        try {
+          await ask('connect', { address: input.value });
+        } catch (err) {
+          error.textContent = String(err.message || err);
+          go.disabled = false;
+          go.textContent = t('Connect');
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,10 @@
+Tuna for Windows includes:
+
+- .NET (Microsoft, MIT licence), the C#/WinRT projection of the Windows SDK (Microsoft, MIT
+  licence) and the Microsoft Edge WebView2 SDK (Microsoft, BSD-style licence).
+
+- tuna-tunnel.exe (WireGuard away from home) is built from Tuna's apps/common/tunnel with
+  wireguard-go (https://git.zx2c4.com/wireguard-go, MIT licence), gVisor's network stack
+  (https://gvisor.dev, Apache 2.0 licence) and Go (https://go.dev, BSD-style licence).
+
+Music is played by Windows itself (Windows.Media.Playback).

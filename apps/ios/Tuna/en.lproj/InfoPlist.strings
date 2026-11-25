@@ -1,0 +1,2 @@
+/* Shown when iOS asks to let Tuna find devices on your network. */
+"NSLocalNetworkUsageDescription" = "Tuna connects to your Tuna server on your home network.";

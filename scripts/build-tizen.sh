@@ -1,0 +1,19 @@
+#!/bin/bash
+# Packages the Samsung TV app (apps/tizen) into release/Tuna-<version>-samsung.wgt.
+# The package isn't signed: Samsung TVs only install apps signed for that TV, so it gets
+# signed on the way in (Tizen Studio or TizenBrew, see docs/install/samsung-tv.md).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+VERSION=$(node -p "require('./package.json').version")
+WORK="${XDG_CACHE_HOME:-$HOME/Library/Caches}/tuna-build/tizen"
+rm -rf "$WORK"
+mkdir -p "$WORK" release
+sed "s/__VERSION__/$VERSION/" apps/tizen/config.xml > "$WORK/config.xml"
+sed "s/__VERSION__/$VERSION/" apps/tizen/index.html > "$WORK/index.html"
+sed "s/__VERSION__/$VERSION/" apps/tizen/app.js > "$WORK/app.js"
+cp apps/tizen/style.css "$WORK/style.css"
+# The launcher icon, from the shared artwork.
+sips -z 512 512 apps/common/icon.png --out "$WORK/icon.png" >/dev/null 2>&1 || cp apps/common/icon.png "$WORK/icon.png"
+rm -f "release/Tuna-$VERSION-samsung.wgt"
+(cd "$WORK" && zip -q -X -r "$OLDPWD/release/Tuna-$VERSION-samsung.wgt" config.xml index.html style.css app.js icon.png)
+echo "Built release/Tuna-$VERSION-samsung.wgt"

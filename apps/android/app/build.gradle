@@ -1,0 +1,100 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Version shown in Settings; keep in step with the root package.json.
+def tunaVersion = '0.1.0'
+
+android {
+    namespace 'app.tuna.music'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'app.tuna.music'
+        // Fire OS 6 (Fire TV Stick 2nd gen) and newer.
+        minSdk 25
+        targetSdk 35
+        // 0.2.0 → 200: always higher for a newer release, so Android installs it as an update.
+        versionCode tunaVersion.tokenize('.').collect { it as int }.with { it[0] * 10000 + it[1] * 100 + it[2] }
+        versionName tunaVersion
+        buildConfigField 'String', 'TUNA_VERSION', "\"${tunaVersion}\""
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    buildTypes {
+        // A separate test copy (own settings, page inspectable from a computer) next to the real app.
+        debug {
+            applicationIdSuffix '.debug'
+            versionNameSuffix '-debug'
+        }
+        release {
+            minifyEnabled false
+            // Signed with the local debug key so the APK can be sideloaded as-is.
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    // The loading and offline pages are shared with the other apps (apps/common); so is the tunnel (below).
+    sourceSets {
+        main {
+            assets.srcDirs += [layout.buildDirectory.dir('generated/commonAssets').get().asFile]
+            jniLibs.srcDirs += [layout.buildDirectory.dir('generated/tunnel').get().asFile]
+        }
+    }
+
+    // The tunnel is a program the app runs: Android only lets apps run files it installed itself
+    // (unpacked from the APK), so native libraries are unpacked on install.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+}
+
+// tuna-tunnel (apps/common/tunnel, Go: WireGuard away from home), built for each kind of
+// processor as libtunatunnel.so. 32-bit ARM and x86 as Linux programs (Android's own Go
+// targets need the NDK there), which run on Android just the same.
+def go = ['/opt/homebrew/bin/go', '/usr/local/go/bin/go', '/usr/local/bin/go'].find { new File(it).exists() } ?: 'go'
+def tunnelTargets = ['arm64-v8a': ['android', 'arm64'], 'armeabi-v7a': ['linux', 'arm'], 'x86_64': ['linux', 'amd64']]
+tunnelTargets.each { abi, target ->
+    tasks.register("buildTunnel-${abi}", Exec) {
+        def source = file('../../common/tunnel')
+        def output = layout.buildDirectory.file("generated/tunnel/${abi}/libtunatunnel.so").get().asFile
+        inputs.dir(source)
+        outputs.file(output)
+        workingDir source
+        environment 'CGO_ENABLED', '0'
+        environment 'GOOS', target[0]
+        environment 'GOARCH', target[1]
+        environment 'GOARM', '7'
+        commandLine go, 'build', '-trimpath', '-ldflags', '-s -w', '-o', output.path, '.'
+    }
+}
+tasks.named('preBuild') { dependsOn tunnelTargets.keySet().collect { "buildTunnel-${it}" } }
+
+tasks.register('copyCommonPages', Copy) {
+    from('../../common') { include 'loading.html', 'offline.html' }
+    into layout.buildDirectory.dir('generated/commonAssets')
+}
+tasks.named('preBuild') { dependsOn 'copyCommonPages' }
+
+// The player: ExoPlayer (Media3) in a MediaSessionService (notification, lock screen, headset
+// and Bluetooth buttons), with Jellyfin's FFmpeg audio decoders for what the device can't decode
+// itself (ALAC on most phones), so the server sends the file as it is.
+def media3 = '1.8.0'
+dependencies {
+    implementation "androidx.media3:media3-exoplayer:$media3"
+    implementation "androidx.media3:media3-session:$media3"
+    implementation "org.jellyfin.media3:media3-ffmpeg-decoder:$media3+1"
+    // The page's own connections through the tunnel (WebView's proxy setting).
+    implementation 'androidx.webkit:webkit:1.12.1'
+    compileOnly 'androidx.annotation:annotation:1.6.0'
+}

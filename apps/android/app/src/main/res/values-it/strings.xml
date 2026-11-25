@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Italian (informal "tu"). -->
+<resources>
+    <!-- Server address (setup page) -->
+    <string name="error_server_unreachable">Impossibile raggiungere %1$s (%2$s). Il server è acceso?</string>
+    <string name="nothing_answered">nessuna risposta</string>
+    <string name="error_enter_address">Inserisci l\'indirizzo del tuo server Tuna</string>
+    <string name="error_not_an_address">Questo non sembra un indirizzo</string>
+    <string name="error_not_tuna">%1$s non sembra un server Tuna</string>
+    <string name="error_cant_reach">Impossibile raggiungere %1$s (%2$s)</string>
+    <string name="error_not_allowed">Non consentito qui</string>
+    <!-- Loading page, away from home -->
+
+    <!-- The music notification's channel, in Android's settings -->
+    <string name="like">Aggiungi ai brani che ti piacciono</string>
+    <string name="unlike">Rimuovi dai brani che ti piacciono</string>
+    <string name="playing_channel">In riproduzione</string>
+
+    <!-- Updates -->
+    <string name="update_not_this_build">Questa versione di prova non può aggiornarsi da sola</string>
+    <string name="update_no_file">La nuova versione non ha l\'app Android</string>
+    <string name="update_wrong_file">Quel file non è un aggiornamento di Tuna per quest\'app</string>
+    <string name="update_allow">Consenti a Tuna di installare app (si è appena aperta quell\'impostazione), poi premi di nuovo Aggiorna.</string>
+    <string name="update_allow_tv">Consenti a Tuna di installare app: Impostazioni → La mia Fire TV → Opzioni sviluppatore → Installa app sconosciute → Tuna. Poi premi di nuovo Aggiorna.</string>
+    <string name="update_download_failed">Il download dell\'aggiornamento non è riuscito (%1$s)</string>
+    <string name="update_failed">L\'aggiornamento non è stato installato (%1$s)</string>
+    <string name="update_cancelled">Aggiornamento annullato</string>
+</resources>

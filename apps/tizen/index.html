@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920" />
+    <title>Tuna</title>
+    <!--
+      Tuna for Samsung TVs: asks once where your Tuna server is, then opens it
+      in TV mode (the remote's arrows, OK and Back work everywhere). The music plays in the page.
+      Plain old JavaScript on purpose: even TVs too old for Tuna can say so. Its style and
+      script are files of their own (style.css, app.js): a TV app's own policy allows only those.
+    -->
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="box">
+      <div class="brand">
+        <svg viewBox="0 0 64 64" aria-hidden="true">
+          <defs>
+            <linearGradient id="g" gradientUnits="userSpaceOnUse" x1="2.44" y1="12" x2="50.81" y2="53.99">
+              <stop offset="0" stop-color="#dccbff" />
+              <stop offset="1" stop-color="#7c4dff" />
+            </linearGradient>
+          </defs>
+          <g transform="translate(32 32) scale(1.0957) translate(-26.625 -32.995)" fill="url(#g)">
+            <path d="M10.94 45.31 L2.44 37.81 L2.44 52.81 Z" stroke="url(#g)" stroke-width="3" stroke-linejoin="round" />
+            <rect x="36.76" y="12" width="4.6" height="30.69" />
+            <path d="M37.36 12.6 L41.36 12.6 C42.71 17.55 50.81 20.25 50.81 28.35 C50.81 31.5 49.91 33.75 48.56 36 C49.1 29.7 45.86 25.65 41.36 23.85 L37.36 23.85 Z" stroke="url(#g)" stroke-width="1.2" stroke-linejoin="round" />
+            <g transform="rotate(-12 28 44)">
+              <ellipse cx="28" cy="44" rx="13.5" ry="9.8" />
+              <circle cx="32.05" cy="41.06" r="2.7" fill="#140a2e" />
+            </g>
+          </g>
+        </svg>
+        <span class="fish">tuna</span>
+      </div>
+
+      <div id="opening" class="hidden">
+        <p><span class="spinner"></span><span id="opening-text" data-t>Opening Tuna…</span></p>
+        <p class="hint" data-t>Press ▲ on the remote to use a different server.</p>
+      </div>
+
+      <div id="old" class="hidden">
+        <p data-t>This TV's web browser is older than Tuna needs. Tuna works on Samsung TVs from 2022 onwards.</p>
+        <button id="anyway" class="secondary" data-t>Try anyway</button>
+      </div>
+
+      <form id="setup" class="hidden">
+        <p data-t>Where is your Tuna server?</p>
+        <label for="url" data-t>Server address</label>
+        <input id="url" placeholder="192.168.1.50" autocomplete="off" spellcheck="false" />
+        <button id="go" type="submit" data-t>Connect</button>
+        <div class="error" id="error"></div>
+        <p class="hint" data-t>The address you open Tuna at in a browser, e.g. 192.168.1.50 or http://myserver.local:7778. Press OK on the field to type with the remote.</p>
+      </form>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

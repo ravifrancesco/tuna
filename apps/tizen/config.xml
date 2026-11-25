@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Tuna for Samsung TVs (Tizen). Packaged by scripts/build-tizen.sh; __VERSION__ comes from package.json. -->
+<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets" id="https://github.com/ravifrancesco/tuna" version="__VERSION__" viewmodes="maximized">
+    <tizen:application id="TunaTzn0001.Tuna" package="TunaTzn0001" required_version="3.0"/>
+    <content src="index.html"/>
+    <name>Tuna</name>
+    <icon src="icon.png"/>
+    <feature name="http://tizen.org/feature/screen.size.all"/>
+    <!-- The interface comes from your Tuna server, wherever it is. -->
+    <access origin="*" subdomains="true"/>
+    <tizen:allow-navigation>*</tizen:allow-navigation>
+    <!-- Without one, a TV app gets Tizen's default (no inline style or script): the start page
+         keeps its own in style.css and app.js, and Tuna's pages come from your server. -->
+    <tizen:content-security-policy>default-src * data: blob:; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; img-src * data: blob:; media-src * data: blob:; connect-src *; font-src * data:</tizen:content-security-policy>
+    <tizen:privilege name="http://tizen.org/privilege/internet"/>
+    <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+    <tizen:profile name="tv-samsung"/>
+    <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable" encryption="disable" install-location="auto" hwkey-event="enable"/>
+</widget>

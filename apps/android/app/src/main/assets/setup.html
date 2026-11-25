@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>Tuna</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #07060c;
+        --accent: #9b7bff;
+        --accent-2: #7c4dff;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        overflow-x: hidden;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: radial-gradient(ellipse 70% 55% at 50% 30%, #15102a 0%, var(--bg) 70%);
+        color: #f1eefc;
+        font: 18px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif;
+      }
+      /* Never wider than the screen, whatever the phone's font size. */
+      form {
+        width: 100%;
+        max-width: 568px;
+        padding: 0 24px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 18px;
+      }
+      input,
+      button {
+        width: 100%;
+        min-width: 0;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 6px;
+      }
+      .brand span {
+        font-size: 40px;
+        font-weight: 800;
+        letter-spacing: -0.035em;
+      }
+      p {
+        margin: 0;
+        color: #a59fba;
+      }
+      input {
+        height: 56px;
+        padding: 0 18px;
+        border-radius: 10px;
+        border: 2px solid rgba(255, 255, 255, 0.14);
+        background: #13111b;
+        color: inherit;
+        font: inherit;
+        font-size: 22px;
+        outline: none;
+      }
+      button {
+        height: 56px;
+        border: 2px solid transparent;
+        border-radius: 10px;
+        background: var(--accent-2);
+        color: #fff;
+        font: inherit;
+        font-weight: 700;
+      }
+      input:focus,
+      button:focus {
+        border-color: #fff;
+        outline: 3px solid var(--accent);
+        outline-offset: 2px;
+      }
+      button:focus {
+        background: var(--accent);
+      }
+      button[disabled] {
+        opacity: 0.6;
+      }
+      .error {
+        min-height: 24px;
+        color: #ff7b8a;
+      }
+      small {
+        color: #6f6985;
+        font-size: 15px;
+      }
+    </style>
+  </head>
+  <body>
+    <form id="form">
+      <div class="brand">
+        <svg viewBox="0 0 64 64" width="56" height="56" aria-hidden="true">
+          <defs>
+            <linearGradient id="g" gradientUnits="userSpaceOnUse" x1="2.44" y1="12" x2="50.81" y2="53.99">
+              <stop offset="0" stop-color="#dccbff" />
+              <stop offset="1" stop-color="#7c4dff" />
+            </linearGradient>
+          </defs>
+          <g transform="translate(32 32) scale(1.0957) translate(-26.625 -32.995)">
+            <path d="M10.94 45.31 L2.44 37.81 L2.44 52.81 Z" fill="url(#g)" stroke="url(#g)" stroke-width="3" stroke-linejoin="round" />
+            <rect x="36.76" y="12" width="4.6" height="30.69" fill="url(#g)" />
+            <path
+              d="M37.36 12.6 L41.36 12.6 C42.71 17.55 50.81 20.25 50.81 28.35 C50.81 31.5 49.91 33.75 48.56 36 C49.1 29.7 45.86 25.65 41.36 23.85 L37.36 23.85 Z"
+              fill="url(#g)"
+              stroke="url(#g)"
+              stroke-width="1.2"
+              stroke-linejoin="round"
+            />
+            <g transform="rotate(-12 28 44)">
+              <ellipse cx="28" cy="44" rx="13.5" ry="9.8" fill="url(#g)" />
+              <circle cx="32.05" cy="41.06" r="2.7" fill="#140a2e" />
+            </g>
+          </g>
+        </svg>
+        <span>tuna</span>
+      </div>
+      <p data-t>Where is your Tuna server?</p>
+      <input id="url" placeholder="192.168.1.50" inputmode="url" autocomplete="off" spellcheck="false" aria-label="Server address" />
+      <small data-t>The address you open Tuna at in a browser. Just the numbers is enough, e.g. 192.168.1.50</small>
+      <div class="error" id="error"></div>
+      <button id="go" data-t>Connect</button>
+    </form>
+    <script>
+      // Italian when the device's language is Italian (same wording as the other apps' setup page).
+      const italian = /^it\b/i.test((navigator.languages && navigator.languages[0]) || navigator.language || '');
+      const IT = {
+        'Where is your Tuna server?': "Dov'è il tuo server Tuna?",
+        'Server address': 'Indirizzo del server',
+        'The address you open Tuna at in a browser. Just the numbers is enough, e.g. 192.168.1.50':
+          "L'indirizzo con cui apri Tuna nel browser. Bastano i numeri, ad es. 192.168.1.50",
+        Connect: 'Connetti',
+        'Connecting…': 'Connessione in corso…',
+        'Open this page in the Tuna app': "Apri questa pagina nell'app Tuna",
+      };
+      const t = (text) => (italian && IT[text]) || text;
+      if (italian) {
+        document.documentElement.lang = 'it';
+        for (const el of document.querySelectorAll('[data-t]')) el.textContent = t(el.textContent.replace(/\s+/g, ' ').trim());
+        document.getElementById('url').setAttribute('aria-label', t('Server address'));
+      }
+      const app = window.TunaAndroid;
+      const form = document.getElementById('form');
+      const input = document.getElementById('url');
+      const error = document.getElementById('error');
+      const go = document.getElementById('go');
+      error.textContent = new URLSearchParams(location.search).get('error') || '';
+      input.value = (app && app.currentServer()) || '';
+      // Start on the button when there's already an address (Retry), otherwise on the field.
+      (input.value && error.textContent ? go : input).focus();
+
+      // The remote's up/down move between the field and the button.
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown' && document.activeElement === input) (e.preventDefault(), go.focus());
+        if (e.key === 'ArrowUp' && document.activeElement === go) (e.preventDefault(), input.focus());
+      });
+      input.addEventListener('keydown', (e) => {
+        // The on-screen keyboard's Done/Enter connects straight away.
+        if (e.key === 'Enter') (e.preventDefault(), form.requestSubmit());
+      });
+
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        error.textContent = '';
+        go.disabled = true;
+        go.textContent = t('Connecting…');
+        // Let "Connecting…" paint before the (blocking) check.
+        setTimeout(() => {
+          const problem = app ? app.connect(input.value) : t('Open this page in the Tuna app');
+          if (problem) {
+            error.textContent = problem;
+            go.disabled = false;
+            go.textContent = t('Connect');
+            go.focus();
+          }
+        }, 50);
+      });
+    </script>
+  </body>
+</html>

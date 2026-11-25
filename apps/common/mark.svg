@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Tuna's mark: a music note that is a fish (shape C, violet). Same 64-unit grid, tail and gradient style as Netfish's. -->
+  <defs>
+    <linearGradient id="g" gradientUnits="userSpaceOnUse" x1="2.44" y1="12" x2="50.81" y2="53.99">
+      <stop offset="0" stop-color="#dccbff"/>
+      <stop offset="1" stop-color="#7c4dff"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(32 32) scale(1.0957) translate(-26.625 -32.995)">
+    <path d="M10.94 45.31 L2.44 37.81 L2.44 52.81 Z" fill="url(#g)" stroke="url(#g)" stroke-width="3" stroke-linejoin="round"/>
+    <rect x="36.76" y="12" width="4.6" height="30.69" fill="url(#g)"/>
+    <path d="M37.36 12.6 L41.36 12.6 C42.71 17.55 50.81 20.25 50.81 28.35 C50.81 31.5 49.91 33.75 48.56 36 C49.1 29.7 45.86 25.65 41.36 23.85 L37.36 23.85 Z" fill="url(#g)" stroke="url(#g)" stroke-width="1.2" stroke-linejoin="round"/>
+    <g transform="rotate(-12 28 44)">
+      <ellipse cx="28" cy="44" rx="13.5" ry="9.8" fill="url(#g)"/>
+      <circle cx="32.05" cy="41.06" r="2.7" fill="#140a2e"/>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,66 @@
+# Tuna — Portainer stack
+#
+# Portainer → Stacks → Add stack → paste this → Deploy. Then open http://<your-server>:7778:
+# Tuna asks for Navidrome's address (and Lidarr's, if you want Get), with the setup code from
+# its log. Sign in with a Navidrome account.
+#
+# Already run Navidrome and Lidarr? Delete those two services below and give Tuna their addresses.
+# Tuna only talks to them through their APIs; it never changes their settings.
+#
+# Lidarr finds music through Prowlarr and downloads it with qBittorrent: add Lidarr as an app in
+# Prowlarr, and qBittorrent as a download client in Lidarr, as you did for Radarr and Sonarr.
+# Lidarr's root folder must be the same music folder Navidrome reads (/music in both below).
+
+services:
+  tuna:
+    image: ${TUNA_IMAGE:-ghcr.io/ravifrancesco/tuna:latest}
+    container_name: tuna
+    restart: unless-stopped
+    ports:
+      - "7778:7778"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Settings, sessions and what's been asked for live here and survive updates.
+      - /docker-data-volumes/tuna-data:/config
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: ${TZ:-Etc/UTC}
+      # All optional: easier to set in the app (Settings → Connections).
+      NAVIDROME_URL: ${NAVIDROME_URL:-}
+      LIDARR_URL: ${LIDARR_URL:-}
+      LIDARR_API_KEY: ${LIDARR_API_KEY:-}
+      LASTFM_API_KEY: ${LASTFM_API_KEY:-}
+
+  navidrome:
+    image: deluan/navidrome:latest
+    container_name: navidrome
+    restart: unless-stopped
+    user: "1000:1000"
+    ports:
+      - "4533:4533"
+    environment:
+      TZ: ${TZ:-Etc/UTC}
+      ND_SCANSCHEDULE: 1h
+      ND_SCANNER_WATCHERWAIT: 5s
+      ND_LOGLEVEL: info
+    volumes:
+      - /docker-data-volumes/navidrome-data:/data
+      - ${MUSIC_DIR:-/srv/music}:/music:ro
+
+  lidarr:
+    image: lscr.io/linuxserver/lidarr:latest
+    container_name: lidarr
+    restart: unless-stopped
+    ports:
+      - "8686:8686"
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: ${TZ:-Etc/UTC}
+    volumes:
+      - /docker-data-volumes/lidarr-config:/config
+      - ${MUSIC_DIR:-/srv/music}:/music
+      # Where qBittorrent puts finished downloads, at the same path as in qBittorrent's container.
+      - ${DOWNLOADS_DIR:-/srv/downloads}:/downloads

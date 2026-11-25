@@ -1,0 +1,105 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
+
+namespace Tuna;
+
+/// <summary>
+/// Where the app keeps its things: %LOCALAPPDATA%\Tuna. TUNA_DATA points a test run
+/// somewhere else, so tests never touch a real sign-in.
+/// </summary>
+static class AppData
+{
+    public static readonly string Root = Environment.GetEnvironmentVariable("TUNA_DATA") is { Length: > 0 } test
+        ? test
+        : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Tuna");
+    static readonly string ConfigFile = Path.Combine(Root, "config.json");
+
+    public static JsonObject Config()
+    {
+        try { return JsonNode.Parse(File.ReadAllText(ConfigFile)) as JsonObject ?? new JsonObject(); }
+        catch { return new JsonObject(); }
+    }
+
+    public static void SaveConfig(Action<JsonObject> change)
+    {
+        var config = Config();
+        change(config);
+        Directory.CreateDirectory(Root);
+        File.WriteAllText(ConfigFile, config.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+    }
+}
+
+/// <summary>
+/// Where the Tuna server is. The app remembers only this; everything else
+/// comes from the server, so updating the container updates the app too.
+/// </summary>
+static class Server
+{
+    public static Uri? Url
+    {
+        get => AppData.Config()["serverUrl"]?.GetValue<string>() is { } s && Uri.TryCreate(s, UriKind.Absolute, out var u) ? u : null;
+        set => AppData.SaveConfig(c => c["serverUrl"] = value?.GetLeftPart(UriPartial.Authority));
+    }
+
+    static readonly HttpClient quick = new() { Timeout = TimeSpan.FromSeconds(4) };
+
+    /// <summary>Is the server there? Any answer counts. Asked before loading Tuna, so a server that's away shows within seconds.</summary>
+    public static async Task<bool> Reachable(Uri server)
+    {
+        try
+        {
+            using var response = await quick.GetAsync(new Uri(server, "/api/health"), HttpCompletionOption.ResponseHeadersRead);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>True when the address is on the saved server (same scheme, host and port).</summary>
+    public static bool Owns(Uri? url)
+    {
+        var server = Url;
+        return url != null && server != null && url.Scheme == server.Scheme && url.Host == server.Host && url.Port == server.Port;
+    }
+
+    /// <summary>"192.168.1.50" → http://192.168.1.50:7778. Real domains keep their own port.</summary>
+    public static Uri Normalize(string input)
+    {
+        var value = (input ?? "").Trim();
+        if (value.Length == 0) throw new Problem(L("Enter the address of your Tuna server"));
+        if (!Regex.IsMatch(value, "^https?://", RegexOptions.IgnoreCase)) value = "http://" + value;
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var url) || url.Host.Length == 0) throw new Problem(L("That doesn't look like an address"));
+        var host = url.Host;
+        var local = Regex.IsMatch(host, @"^\d{1,3}(\.\d{1,3}){3}$") || host.EndsWith(".local") || !host.Contains('.');
+        var builder = new UriBuilder(url.Scheme.ToLowerInvariant(), host, url.IsDefaultPort && url.Scheme == "http" && local ? 7778 : url.Port);
+        return new Uri(builder.Uri.GetLeftPart(UriPartial.Authority));
+    }
+
+    static readonly HttpClient http = new() { Timeout = TimeSpan.FromSeconds(6) };
+
+    /// <summary>
+    /// Make sure the address really is a Tuna server before saving it. Returns where it
+    /// really answers (a server that redirects http:// to https:// is saved as https://).
+    /// </summary>
+    public static async Task<Uri> Probe(Uri origin)
+    {
+        HttpResponseMessage response;
+        try { response = await http.GetAsync(new Uri(origin, "/api/health")); }
+        catch (Exception e) { throw new Problem(L("Can't reach {server} ({why})", ("server", origin.GetLeftPart(UriPartial.Authority)), ("why", e is TaskCanceledException ? L("no answer") : e.Message))); }
+        JsonNode? body = null;
+        try { body = JsonNode.Parse(await response.Content.ReadAsStringAsync()); } catch { }
+        // {"ok":true}; a sister server (Netfish) answers the same, with its own name.
+        var ok = body?["ok"] is JsonValue v && v.TryGetValue<bool>(out var yes) && yes;
+        var name = body?["name"] is JsonValue n && n.TryGetValue<string>(out var s) ? s : null;
+        if (!response.IsSuccessStatusCode || !ok || (name != null && name != "tuna"))
+            throw new Problem(L("{server} doesn't look like a Tuna server", ("server", origin.GetLeftPart(UriPartial.Authority))));
+        var answered = response.RequestMessage?.RequestUri ?? origin;
+        return new Uri(answered.GetLeftPart(UriPartial.Authority));
+    }
+}
+
+/// <summary>An error whose message is shown to people as-is.</summary>
+sealed class Problem(string message) : Exception(message);

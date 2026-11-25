@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+<title>Tuna</title>
+<!--
+  Tuna's loading animation: the note's stem and flag drop in on a line, with a hook at the bottom.
+  The fish swims in and bites, the tug tilts it nose-up onto the stem, and together they are the
+  logo. It's held for a moment, then reeled up and away, and it starts again.
+-->
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #0b0a10; color: #f1eefc; font: 15px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif; -webkit-font-smoothing: antialiased; overflow: hidden; }
+  body { display: grid; place-items: center; }
+  .stage { position: relative; display: grid; }
+  svg { display: block; width: 96px; height: 96px; overflow: visible; }
+  .below { position: absolute; top: calc(100% + 18px); left: 50%; transform: translateX(-50%); display: grid; justify-items: center; gap: 18px; white-space: nowrap; }
+  .word { font-size: 26px; font-weight: 800; letter-spacing: -0.035em; animation: in 0.5s ease-out both; }
+  .status { min-height: 1.5em; color: #8a84a0; font-size: 14px; opacity: 0; animation: in 0.6s ease-out 1.4s forwards; }
+  .tunnel .status, .through .status { color: #b9a3ff; opacity: 1; animation: none; }
+
+  /* Away from home (tunaTunnel below), as in Netfish: the tunnel, an oval ring seen from the side,
+     breathes ahead of the mark; once through, the mark swims into it and is gone past its middle,
+     and the ring comes to the centre, growing. The web page's opening animation (web Splash, with
+     #tunnel) takes over the same ring at the same place, size and breath. */
+  .mark { position: relative; width: 96px; height: 96px; }
+  .ring { position: absolute; left: 112px; top: 48px; width: 20px; height: 46px; transform: translate(-50%, -50%); opacity: 0; transition: opacity 0.6s ease; }
+  .ring i { position: absolute; inset: 0; box-sizing: border-box; border: 2px solid #9b7bff; border-radius: 50%; }
+  .ring.back { clip-path: inset(-30% 50% -30% -30%); }
+  .ring.front { clip-path: inset(-30% -30% -30% 50%); }
+  .tunnel .ring, .through .ring { opacity: 1; }
+  .tunnel .ring i, .through .ring i { animation: breathe 1.6s ease-in-out infinite; }
+  .through .ring { animation: come 0.75s cubic-bezier(0.6, 0, 0.3, 1) forwards; }
+  .through .mark svg { animation: swim-in 0.8s cubic-bezier(0.45, 0, 0.7, 0.55) forwards; }
+  .through .mark .clip { animation: hide 0.75s cubic-bezier(0.6, 0, 0.3, 1) forwards; }
+  .through .word { animation: out 0.4s ease forwards; }
+  @keyframes breathe { 0%, 100% { transform: scale(1); opacity: 0.7; } 50% { transform: scale(1.12); opacity: 1; } }
+  @keyframes come { to { left: 48px; transform: translate(-50%, -50%) scale(1.7); } }
+  @keyframes hide { from { clip-path: inset(-60% -30px -60% -60%); } to { clip-path: inset(-60% 48px -60% -60%); } }
+  @keyframes swim-in { to { transform: translateX(64px); } }
+  @keyframes out { from { opacity: 1; } to { opacity: 0; transform: translateY(-4px); } }
+
+  /* Local units, origin at the mark's own 0,0. The resting values are the logo itself. */
+  .all, .hook, .fish, .tailpos { transform-box: view-box; transform-origin: 0 0; }
+  .fish { transform: translate(0.02px, -2.8px) translate(41.34px, 45.49px) rotate(-12deg) translate(-41.34px, -45.49px); }
+  .tailpos { transform: translate(0.14px, 1.31px); }
+  .curl { opacity: 0; }
+
+  .all { animation: all 3.2s infinite; }
+  .hook { animation: hook 3.2s infinite; }
+  .curl { animation: curl 3.2s infinite; }
+  .fish { animation: fish 3.2s infinite; }
+  .tailpos { animation: tailpos 3.2s infinite; }
+  .tail { transform-box: fill-box; transform-origin: 100% 50%; animation: wag 0.45s ease-in-out infinite alternate; }
+
+  /* The tug, a gentle hold, then reeled up and away. */
+  @keyframes all {
+    0%, 47% { transform: translate(0px, 0px); opacity: 1; animation-timing-function: cubic-bezier(0.2, 0.8, 0.3, 1); }
+    50% { transform: translate(0px, -5px); animation-timing-function: ease-in-out; }
+    56% { transform: translate(0px, 1px); animation-timing-function: ease-in-out; }
+    61% { transform: translate(0px, 0px); animation-timing-function: ease-in-out; }
+    72% { transform: translate(0px, -1.5px); animation-timing-function: ease-in-out; }
+    84% { transform: translate(0px, 0px); opacity: 1; animation-timing-function: cubic-bezier(0.5, 0, 0.8, 0.4); }
+    100% { transform: translate(0px, -70px); opacity: 0; }
+  }
+  /* The hook drops in on its line and dangles. */
+  @keyframes hook {
+    0% { transform: translate(0px, -46px); opacity: 0; animation-timing-function: cubic-bezier(0.3, 0.6, 0.4, 1); }
+    5% { opacity: 1; }
+    13% { transform: translate(0px, 2px); animation-timing-function: ease-in-out; }
+    19% { transform: translate(0px, 0px); animation-timing-function: ease-in-out; }
+    31% { transform: translate(0px, -1.5px); animation-timing-function: ease-in-out; }
+    42% { transform: translate(0px, 0.5px); animation-timing-function: ease-in-out; }
+    49%, 100% { transform: translate(0px, 0px); }
+  }
+  /* No fade: the hook stays until the bite covers it whole, then it's gone. */
+  @keyframes curl { 0%, 49% { opacity: 1; animation-timing-function: steps(1, end); } 50%, 100% { opacity: 0; } }
+  /* The fish swims up to the hook and stops just short of it, draws back a little, then bites in one
+     quick snap, taking the whole hook at once. The tug lifts it and tilts it nose-up about its mouth. */
+  @keyframes fish {
+    0%, 14% { transform: translate(-46px, -1px) translate(41.34px, 45.49px) rotate(0deg) translate(-41.34px, -45.49px); opacity: 0; animation-timing-function: cubic-bezier(0.25, 0.6, 0.45, 1); }
+    22% { opacity: 1; }
+    28% { transform: translate(-27px, -2.2px) translate(41.34px, 45.49px) rotate(0deg) translate(-41.34px, -45.49px); animation-timing-function: ease-in-out; }
+    36% { transform: translate(-13.5px, -1.4px) translate(41.34px, 45.49px) rotate(0deg) translate(-41.34px, -45.49px); animation-timing-function: ease-in-out; }
+    42% { transform: translate(-15.5px, -1px) translate(41.34px, 45.49px) rotate(0deg) translate(-41.34px, -45.49px); animation-timing-function: cubic-bezier(0.7, 0, 1, 0.6); }
+    47% { transform: translate(0px, -1px) translate(41.34px, 45.49px) rotate(0deg) translate(-41.34px, -45.49px); animation-timing-function: cubic-bezier(0.3, 1.5, 0.5, 1); }
+    54%, 100% { transform: translate(0.02px, -2.8px) translate(41.34px, 45.49px) rotate(-12deg) translate(-41.34px, -45.49px); opacity: 1; }
+  }
+  /* The tail keeps up with the fish and, once it's hooked, settles level, as in the logo. */
+  @keyframes tailpos {
+    0%, 14% { transform: translate(-46px, -1px); opacity: 0; animation-timing-function: cubic-bezier(0.25, 0.6, 0.45, 1); }
+    22% { opacity: 1; }
+    28% { transform: translate(-27px, -2.2px); animation-timing-function: ease-in-out; }
+    36% { transform: translate(-13.5px, -1.4px); animation-timing-function: ease-in-out; }
+    42% { transform: translate(-15.5px, -1px); animation-timing-function: cubic-bezier(0.7, 0, 1, 0.6); }
+    47% { transform: translate(0px, -1px); animation-timing-function: cubic-bezier(0.3, 1.5, 0.5, 1); }
+    54%, 100% { transform: translate(0.14px, 1.31px); opacity: 1; }
+  }
+  @keyframes wag { from { transform: rotate(-10deg); } to { transform: rotate(10deg); } }
+  @keyframes in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .all, .hook, .curl, .fish, .tailpos, .tail, .word, .status, .ring i { animation: none !important; }
+    .status { opacity: 1; }
+  }
+
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="mark">
+  <span class="ring back"><i></i></span>
+  <div class="clip">
+  <svg viewBox="0 0 64 64" aria-hidden="true">
+    <defs>
+      <linearGradient id="g" gradientUnits="userSpaceOnUse" x1="2.44" y1="12" x2="50.81" y2="53.99">
+        <stop offset="0" stop-color="#dccbff" /><stop offset="1" stop-color="#7c4dff" />
+      </linearGradient>
+    </defs>
+    <g transform="translate(32 32) scale(1.0957) translate(-26.625 -32.995)">
+      <g class="all">
+        <g class="hook">
+          <line x1="39.06" y1="-90" x2="39.06" y2="13" stroke="#b9a3ff" stroke-width="0.9" opacity="0.5" />
+          <!-- The hook: the stem itself, its full width, bent tight round into a point. It sits where the fish's head will be, so the bite covers it. -->
+          <path class="curl" d="M36.76 42.4 L41.36 42.4 L41.36 43 A5.2 5.2 0 0 1 30.96 43 L30.96 41 L33.26 37.4 L35.56 41 L35.56 43 A0.6 0.6 0 0 0 36.76 43 Z" fill="url(#g)" />
+          <rect x="36.76" y="12" width="4.6" height="30.69" fill="url(#g)" />
+          <path d="M37.36 12.6 L41.36 12.6 C42.71 17.55 50.81 20.25 50.81 28.35 C50.81 31.5 49.91 33.75 48.56 36 C49.1 29.7 45.86 25.65 41.36 23.85 L37.36 23.85 Z" fill="url(#g)" stroke="url(#g)" stroke-width="1.2" stroke-linejoin="round" />
+        </g>
+        <g class="tailpos">
+          <path class="tail" d="M10.8 44 L2.3 36.5 L2.3 51.5 Z" fill="url(#g)" stroke="url(#g)" stroke-width="3" stroke-linejoin="round" />
+        </g>
+        <g class="fish">
+          <ellipse cx="28" cy="44" rx="13.5" ry="9.8" fill="url(#g)" />
+          <circle cx="32.05" cy="41.06" r="2.7" fill="#140a2e" />
+        </g>
+      </g>
+    </g>
+  </svg>
+  </div>
+  <span class="ring front"><i></i></span>
+  </div>
+  <div class="below">
+    <span class="word">tuna</span>
+    <span class="status">Looking for your server…</span>
+  </div>
+</div>
+<script>
+  // What the apps show while they look for the server: the hook and the fish, on a loop.
+  if (/^it\b/i.test((navigator.languages && navigator.languages[0]) || navigator.language || '')) {
+    document.documentElement.lang = 'it';
+    document.querySelector('.status').textContent = 'Cerco il tuo server…';
+  }
+  // The apps can say what's happening: tunaStatus('…').
+  const status = document.querySelector('.status');
+  window.tunaStatus = (text) => (status.textContent = text);
+
+  // The loop on the clock, as the web page's opening animation is: the hand-over carries on in step.
+  const onClock = (period, names) => {
+    if (!document.timeline || !Element.prototype.getAnimations) return;
+    for (const a of document.getAnimations()) if (names.includes(a.animationName)) a.startTime = document.timeline.currentTime - (Date.now() % period);
+  };
+  onClock(3200, ['all', 'hook', 'curl', 'fish', 'tailpos']);
+  onClock(900, ['wag']);
+
+  const it = document.documentElement.lang === 'it';
+  const SAYS = it
+    ? { connecting: 'Fuori casa, mi collego…', connected: 'Connesso tramite WireGuard' }
+    : { connecting: 'Away from home, connecting…', connected: 'Connected through WireGuard' };
+  // The apps, away from home: 'connecting' (the ring appears, breathing), then 'connected' (the mark
+  // swims into it; the apps open Tuna with #tunnel once it's in).
+  window.tunaTunnel = (state) => {
+    document.body.classList.toggle('tunnel', state === 'connecting');
+    document.body.classList.toggle('through', state === 'connected');
+    onClock(1600, ['breathe']);
+    if (SAYS[state] && status.textContent !== SAYS[state]) {
+      status.textContent = SAYS[state];
+      if (status.animate) status.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 350, easing: 'ease-out' });
+    }
+  };
+</script>
+</body>
+</html>

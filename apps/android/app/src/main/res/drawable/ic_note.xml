@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tuna's mark, white, for the status bar and the music notification (the eye is a hole). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+    <group android:pivotX="26.625" android:pivotY="32.995" android:scaleX="1.0957" android:scaleY="1.0957" android:translateX="5.375" android:translateY="-0.995">
+        <path android:pathData="M10.94,45.31 L2.44,37.81 L2.44,52.81 Z" android:fillColor="#FFFFFFFF" android:strokeColor="#FFFFFFFF" android:strokeWidth="3" android:strokeLineJoin="round" />
+        <path android:pathData="M36.76,12 L41.36,12 L41.36,42.69 L36.76,42.69 Z" android:fillColor="#FFFFFFFF" />
+        <path android:pathData="M37.36,12.6 L41.36,12.6 C42.71,17.55 50.81,20.25 50.81,28.35 C50.81,31.5 49.91,33.75 48.56,36 C49.1,29.7 45.86,25.65 41.36,23.85 L37.36,23.85 Z" android:fillColor="#FFFFFFFF" android:strokeColor="#FFFFFFFF" android:strokeWidth="1.2" android:strokeLineJoin="round" />
+        <group android:pivotX="28" android:pivotY="44" android:rotation="-12">
+            <path android:pathData="M14.5,44 a13.5,9.8 0 1,0 27,0 a13.5,9.8 0 1,0 -27,0 Z M29.35,41.06 a2.7,2.7 0 1,0 5.4,0 a2.7,2.7 0 1,0 -5.4,0 Z" android:fillColor="#FFFFFFFF" android:fillType="evenOdd" />
+        </group>
+    </group>
+</vector>

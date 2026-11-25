@@ -1,0 +1,2 @@
+/* Shown when macOS asks to let Tuna find devices on your network. */
+"NSLocalNetworkUsageDescription" = "Tuna si connette al tuo server Tuna sulla rete di casa.";
