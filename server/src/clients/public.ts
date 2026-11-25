@@ -1,7 +1,7 @@
 import { config, userAgent } from '../config';
 import { lastfmKey } from '../connections';
 import { HOUR, TTLCache } from '../lib/cache';
-import { request } from '../lib/upstream';
+import { request, UpstreamError } from '../lib/upstream';
 
 /**
  * The public services: MusicBrainz (everything that exists), the Cover Art Archive (its covers),
@@ -15,10 +15,18 @@ const headers = () => ({ 'user-agent': userAgent() });
 
 let mbNext = 0;
 async function mb<T>(path: string, query: Record<string, string | number>): Promise<T> {
-  const wait = Math.max(0, mbNext - Date.now());
-  mbNext = Math.max(Date.now(), mbNext) + 1100;
-  if (wait) await new Promise((r) => setTimeout(r, wait));
-  return request<T>('MusicBrainz', config.musicbrainzUrl, path, { query: { ...query, fmt: 'json' }, headers: headers(), timeoutMs: 12_000 });
+  for (let attempt = 0; ; attempt++) {
+    const wait = Math.max(0, mbNext - Date.now());
+    mbNext = Math.max(Date.now(), mbNext) + 1100;
+    if (wait) await new Promise((r) => setTimeout(r, wait));
+    try {
+      return await request<T>('MusicBrainz', config.musicbrainzUrl, path, { query: { ...query, fmt: 'json' }, headers: headers(), timeoutMs: 12_000 });
+    } catch (err) {
+      // "Currently busy" (503): MusicBrainz asks everyone to slow down and try again shortly.
+      if (attempt >= 2 || !(err instanceof UpstreamError && err.status === 503)) throw err;
+      mbNext = Math.max(mbNext, Date.now() + 2000 * (attempt + 1));
+    }
+  }
 }
 
 const mbCache = new TTLCache<unknown>(1000);
