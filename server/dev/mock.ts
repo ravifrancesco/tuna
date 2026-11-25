@@ -806,9 +806,21 @@ async function lidarr(path: string, q: URLSearchParams, req: http.IncomingMessag
   if (p === '/metadataprofile') return json(res, 200, [{ id: 1, name: 'Standard' }]);
   if (p === '/artist' && req.method === 'GET') return json(res, 200, artists.filter((a) => a.lidarrId).map(lidarrArtist));
   if (p === '/artist/lookup') {
-    const mbid = (q.get('term') ?? '').replace(/^lidarr:/, '');
-    const a = artists.find((x) => x.mbid === mbid || x.name.toLowerCase() === mbid.toLowerCase());
-    return json(res, 200, a ? [{ ...lidarrArtist(a), id: undefined }] : []);
+    const term = q.get('term') ?? '';
+    if (term.startsWith('lidarr:')) {
+      const a = artists.find((x) => x.mbid === term.slice(7));
+      return json(res, 200, a ? [{ ...lidarrArtist(a), id: undefined }] : []);
+    }
+    // A name, as Lidarr's "Add new" search.
+    const query = cleanQuery(term);
+    const found = artists.filter((a) => score(a.name, query) > 0).sort((x, y) => score(y.name, query) - score(x.name, query));
+    return json(res, 200, found.slice(0, 10).map((a) => ({ ...lidarrArtist(a), id: undefined })));
+  }
+  if (p === '/album/lookup') {
+    const query = cleanQuery(q.get('term') ?? '');
+    const rank = (a: MAlbum) => Math.max(score(a.name, query), score(a.artist, query));
+    const found = [...albums.values()].filter((a) => rank(a) > 0).sort((x, y) => rank(y) - rank(x) || y.year - x.year);
+    return json(res, 200, found.slice(0, 20).map((a) => ({ ...lidarrAlbum(a), id: undefined, secondaryTypes: [] })));
   }
   if (p === '/artist' && req.method === 'POST') {
     const b = await body(req);

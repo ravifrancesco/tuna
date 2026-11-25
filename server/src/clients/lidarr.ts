@@ -60,6 +60,23 @@ export const metadataProfiles = () => call<Array<{ id: number; name: string }>>(
 
 export const lookupArtist = (mbid: string) => call<LArtist[]>('/artist/lookup', { query: { term: `lidarr:${mbid}` } });
 
+/** Lidarr's own search by name (its metadata server, not MusicBrainz directly), as its "Add new" page. */
+export interface LFoundArtist {
+  artistName: string;
+  foreignArtistId: string;
+  disambiguation?: string;
+}
+export interface LFoundAlbum {
+  title: string;
+  foreignAlbumId: string;
+  albumType?: string;
+  secondaryTypes?: Array<string | { name?: string }>;
+  releaseDate?: string;
+  artist?: { artistName: string; foreignArtistId: string };
+}
+export const findArtists = (term: string) => call<LFoundArtist[]>('/artist/lookup', { query: { term }, timeoutMs: 20_000 });
+export const findAlbums = (term: string) => call<LFoundAlbum[]>('/album/lookup', { query: { term }, timeoutMs: 20_000 });
+
 export const addArtist = (body: Record<string, unknown>) => call<LArtist>('/artist', { method: 'POST', body });
 export const monitorAlbums = (albumIds: number[]) => call<unknown>('/album/monitor', { method: 'PUT', body: { albumIds, monitored: true } });
 export const searchAlbums = (albumIds: number[]) => call<unknown>('/command', { method: 'POST', body: { name: 'AlbumSearch', albumIds } });
