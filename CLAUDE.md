@@ -85,7 +85,8 @@ Notes for anyone (person or AI assistant) working on Tuna's code.
 2. Add `## X.Y.Z (date)` to `CHANGELOG.md`.
 3. Commit "Tuna X.Y.Z", push `main`.
 4. `scripts/release.sh` builds every app, tags `vX.Y.Z` and uploads 7 files. The tag makes GitHub
-   Actions build the Docker image.
+   Actions build the Docker image. Then it writes `apps/ios/sidestore.json` (SideStore's source for
+   the iPhone app, pointing at the new `.ipa`) and pushes it to `main`.
 
 ## Keeping this file current
 

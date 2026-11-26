@@ -34,13 +34,17 @@ In Portainer: **Stacks → Add stack**, paste [`docker-compose.yml`](docker-comp
 `http://<your-server>:7778`: Tuna asks for Navidrome's address (and Lidarr's), with the setup code
 from its log. Then sign in with your Navidrome account. More in [docs/install/server.md](docs/install/server.md).
 
-Image: `ghcr.io/ravifrancesco/tuna:0.3.0` (amd64 and arm64).
+Image: `ghcr.io/ravifrancesco/tuna:0.3.1` (amd64 and arm64).
 
 ## The apps
 
 From the [latest release](https://github.com/ravifrancesco/tuna/releases/latest): Tuna-mac.dmg,
 Tuna-windows.exe, Tuna-android.apk (phones, tablets, Android TV, Fire TV), Tuna-samsung.wgt and
 Tuna-ios.ipa. Each asks for your server's address once.
+
+On an iPhone or iPad with AltStore or SideStore, add Tuna's source under **Sources** → **+**, then
+install Tuna from **Browse**; new versions show up in **My Apps**:
+`https://raw.githubusercontent.com/ravifrancesco/tuna/main/apps/ios/sidestore.json`
 
 ## Developing
 

@@ -65,5 +65,11 @@ gh release create "$TAG" --title "Tuna $VERSION" --notes-file "$STAGE/notes.md" 
   "$STAGE/Tuna-server.tar.gz" "$STAGE/Tuna-mac.dmg" "$STAGE/Tuna-mac.zip" "$STAGE/Tuna-windows.exe" "$STAGE/Tuna-android.apk" \
   "$STAGE/Tuna-samsung.wgt" "$STAGE/Tuna-ios.ipa"
 rm -rf "$STAGE"
+# SideStore's source (apps/ios/sidestore.json) points at the iPhone app just uploaded: SideStore offers
+# the update to everyone who installed Tuna from it.
+node scripts/sidestore-source.mjs "$OWNER"
+git add apps/ios/sidestore.json
+git commit -q -m "Tuna $VERSION: SideStore source"
+git push -q origin main
 find release -maxdepth 1 -name 'Tuna-*' ! -name "Tuna-$VERSION-*" -delete
 echo "Published https://github.com/$OWNER/tuna/releases/tag/$TAG"

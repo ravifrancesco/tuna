@@ -1,0 +1,44 @@
+{
+  "name": "Tuna",
+  "identifier": "app.tuna.source",
+  "subtitle": "Your music at home.",
+  "iconURL": "https://raw.githubusercontent.com/ravifrancesco/tuna/main/apps/ios/Tuna/Assets.xcassets/AppIcon.appiconset/icon-1024.png",
+  "website": "https://github.com/ravifrancesco/tuna",
+  "tintColor": "#9b7bff",
+  "apps": [
+    {
+      "name": "Tuna",
+      "bundleIdentifier": "app.tuna.music",
+      "developerName": "Tuna",
+      "subtitle": "Your music at home.",
+      "localizedDescription": "Your music from your Tuna server, with mixes and lyrics. Download songs to play offline.",
+      "iconURL": "https://raw.githubusercontent.com/ravifrancesco/tuna/main/apps/ios/Tuna/Assets.xcassets/AppIcon.appiconset/icon-1024.png",
+      "tintColor": "#9b7bff",
+      "category": "entertainment",
+      "versions": [
+        {
+          "version": "0.3.0",
+          "buildVersion": "1",
+          "date": "2026-11-26",
+          "localizedDescription": "New\n- Equalizer: six bands and presets (bass boost, vocals, rock, small speakers…), in the player's menu and in Settings. It's kept on each device, for every song, in the iPhone, Mac and Android apps and in a browser. Not on Windows yet, and not while casting. On iPhone and Mac, songs have a short pause between them while it's on.\n- Download quality: Normal, High or Original for the songs you download on a device, in Settings. High is the default (about 8 MB a song instead of 30 MB in FLAC).\n- Get the missing songs: on your playlists from Spotify and on Liked songs, one button asks for every album that's missing, in the playlist's order.\n- Couldn't find: On its way lists the albums Tuna couldn't find when asked for them by name.\n\nChanged\n- Liked songs from Spotify are all there, in Spotify's order: songs not in the library yet show greyed where they belong and are liked by themselves as they arrive. Likes made in Tuna come first.\n- Get all asks for every missing album (it stopped at 100), most played first, a few seconds apart so Lidarr and the indexers aren't flooded.\n- Albums are found through Lidarr first, and without Spotify's extras: \"Currents (Deluxe Edition)\" or \"Currents - Single\" is looked for as \"Currents\".\n- The apps play ahead five songs, on Wi-Fi and mobile data alike, in the sound quality you chose: when it changes, the songs kept ahead are fetched again.\n\nFixed\n- Liked songs from Spotify showed only the songs already in the library.\n- Some songs from Spotify playlists were never asked for (album names like \"… (Deluxe Edition)\").\n\nTo update: the server (pull the new image) and the apps.",
+          "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.3.0/Tuna-ios.ipa",
+          "size": 949730,
+          "sha256": "d4d6f73137cee5250b97e980e23684e61cea79737a1a4a1c7fb592752cd57b33",
+          "minOSVersion": "16.0"
+        }
+      ],
+      "version": "0.3.0",
+      "versionDate": "2026-11-26",
+      "versionDescription": "New\n- Equalizer: six bands and presets (bass boost, vocals, rock, small speakers…), in the player's menu and in Settings. It's kept on each device, for every song, in the iPhone, Mac and Android apps and in a browser. Not on Windows yet, and not while casting. On iPhone and Mac, songs have a short pause between them while it's on.\n- Download quality: Normal, High or Original for the songs you download on a device, in Settings. High is the default (about 8 MB a song instead of 30 MB in FLAC).\n- Get the missing songs: on your playlists from Spotify and on Liked songs, one button asks for every album that's missing, in the playlist's order.\n- Couldn't find: On its way lists the albums Tuna couldn't find when asked for them by name.\n\nChanged\n- Liked songs from Spotify are all there, in Spotify's order: songs not in the library yet show greyed where they belong and are liked by themselves as they arrive. Likes made in Tuna come first.\n- Get all asks for every missing album (it stopped at 100), most played first, a few seconds apart so Lidarr and the indexers aren't flooded.\n- Albums are found through Lidarr first, and without Spotify's extras: \"Currents (Deluxe Edition)\" or \"Currents - Single\" is looked for as \"Currents\".\n- The apps play ahead five songs, on Wi-Fi and mobile data alike, in the sound quality you chose: when it changes, the songs kept ahead are fetched again.\n\nFixed\n- Liked songs from Spotify showed only the songs already in the library.\n- Some songs from Spotify playlists were never asked for (album names like \"… (Deluxe Edition)\").\n\nTo update: the server (pull the new image) and the apps.",
+      "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.3.0/Tuna-ios.ipa",
+      "size": 949730,
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {
+          "NSLocalNetworkUsageDescription": "Tuna connects to your Tuna server on your home network."
+        }
+      }
+    }
+  ],
+  "news": []
+}
