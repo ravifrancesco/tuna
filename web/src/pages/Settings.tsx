@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ExternalLink } from 'lucide-react';
-import type { Me, Person, Prefs, SpotifyImport, Stocking, StockingWhy } from '@tuna/shared';
+import type { Me, Person, Prefs, SoulseekFiles, SpotifyImport, Stocking, StockingWhy } from '@tuna/shared';
 import { api, ApiError } from '../api';
 import { AwayFromHome } from '../components/AwayFromHome';
 import { Mark } from '../components/Logo';
@@ -528,6 +528,13 @@ function WeeklyPicks() {
   );
 }
 
+/** Which copies of a song slskd gets: the choice, and what it means. */
+const SOULSEEK_FILES: Array<{ value: SoulseekFiles; label: () => string; detail: () => string }> = [
+  { value: 'cd', label: () => t('Lossless, CD quality'), detail: () => t('FLAC, never hi-res · about 30 MB a song') },
+  { value: 'lossless', label: () => t('Lossless, hi-res too'), detail: () => t('The best there is · up to 150 MB a song') },
+  { value: 'mp3', label: () => t('MP3 320'), detail: () => t('Or the closest there is · about 9 MB a song') },
+];
+
 function ConnectionsSection() {
   const qc = useQueryClient();
   const conn = useQuery({ queryKey: ['connections'], queryFn: api.connections });
@@ -564,6 +571,16 @@ function ConnectionsSection() {
       setError(failed(err));
     }
   };
+  const files = conn.data?.slskd.files ?? 'cd';
+  const saveFiles = async (value: SoulseekFiles) => {
+    setError(undefined);
+    try {
+      qc.setQueryData(['connections'], await api.saveConnections({ slskdFiles: value }));
+      toast(t('Saved'));
+    } catch (err) {
+      setError(failed(err));
+    }
+  };
   return (
     <section className="panel">
       <h2>{t('Connections')}</h2>
@@ -592,6 +609,17 @@ function ConnectionsSection() {
           <input className="input" value={slskdKey} onChange={(e) => setSlskdKey(e.target.value)} placeholder={conn.data?.slskd?.apiKey ? t('Saved (type to replace)') : t('Optional')} />
         </label>
       </div>
+      <label className="field">
+        <span>{t('Songs from Soulseek')}</span>
+        <select className="input" value={files} onChange={(e) => void saveFiles(e.target.value as SoulseekFiles)}>
+          {SOULSEEK_FILES.map((f) => (
+            <option key={f.value} value={f.value}>
+              {f.label()}
+            </option>
+          ))}
+        </select>
+        <small className="muted">{SOULSEEK_FILES.find((f) => f.value === files)?.detail()}</small>
+      </label>
       <label className="field">
         <span>{t('Last.fm API key')}</span>
         <input className="input" value={lastfm} onChange={(e) => setLastfm(e.target.value)} placeholder={conn.data?.lastfm.apiKey ? t('Saved (type to replace)') : t('Optional')} />

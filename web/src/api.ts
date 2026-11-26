@@ -1,4 +1,4 @@
-import type { Album, AlbumDetail, Artist, ArtistDetail, Connections, DeviceCommand, GetItem, GetState, Home, Listen, ListeningStats, Lyrics, Me, MissedAlbum, Mix, Person, Playlist, PlaylistDetail, Prefs, SearchResult, ServerInfo, SpotifyImport, StatsPeriod, Stocking, TogetherControl, TogetherRoom, TogetherSummary, Track, WaitingSong, WorldAlbum, WorldAlbumDetail, WorldArtistDetail, YearInReview } from '@tuna/shared';
+import type { Album, AlbumDetail, Artist, ArtistDetail, Connections, DeviceCommand, GetItem, GetState, Home, Listen, ListeningStats, Lyrics, Me, MissedAlbum, Mix, Person, Playlist, PlaylistDetail, Prefs, SearchResult, ServerInfo, SoulseekFiles, SpotifyImport, StatsPeriod, Stocking, TogetherControl, TogetherRoom, TogetherSummary, Track, WaitingSong, WorldAlbum, WorldAlbumDetail, WorldArtistDetail, YearInReview } from '@tuna/shared';
 import { language } from './i18n';
 import { app } from './lib/native';
 
@@ -128,7 +128,7 @@ export const api = {
   gettingOpened: () => call<GetItem[]>('POST', '/getting/opened'),
 
   connections: () => call<Connections>('GET', '/connections'),
-  saveConnections: (patch: { navidromeUrl?: string; lidarrUrl?: string; lidarrApiKey?: string; slskdUrl?: string; slskdApiKey?: string; lastfmApiKey?: string }) =>
+  saveConnections: (patch: { navidromeUrl?: string; lidarrUrl?: string; lidarrApiKey?: string; slskdUrl?: string; slskdApiKey?: string; slskdFiles?: SoulseekFiles; lastfmApiKey?: string }) =>
     call<Connections>('PUT', '/connections', patch),
   waves: () => call<NightWaves>('GET', '/waves'),
   stocking: () => call<Stocking>('GET', '/stocking'),

@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Connections } from '@tuna/shared';
+import type { Connections, SoulseekFiles } from '@tuna/shared';
 import { config } from './config';
 import { t } from './lib/i18n';
 import { log } from './lib/log';
@@ -19,6 +19,7 @@ interface Saved {
   lidarrApiKey?: string;
   slskdUrl?: string;
   slskdApiKey?: string;
+  slskdFiles?: SoulseekFiles;
   lastfmApiKey?: string;
 }
 
@@ -51,6 +52,9 @@ export const slskd = () => {
   const apiKey = config.env.slskdApiKey ?? saved.slskdApiKey;
   return url && apiKey ? { url, apiKey } : undefined;
 };
+/** Which copies of a song to get from Soulseek (lossless up to CD quality unless an admin chose otherwise). */
+export const soulseekFiles = (): SoulseekFiles => saved.slskdFiles ?? 'cd';
+const FILES: SoulseekFiles[] = ['cd', 'lossless', 'mp3'];
 export const lastfmKey = () => config.env.lastfmApiKey ?? saved.lastfmApiKey;
 
 export const has = {
@@ -64,7 +68,7 @@ export function connections(): Connections {
   return {
     navidrome: { url: navidromeUrl() },
     lidarr: { url: config.env.lidarrUrl ?? saved.lidarrUrl, apiKey: Boolean(config.env.lidarrApiKey ?? saved.lidarrApiKey) },
-    slskd: { url: config.env.slskdUrl ?? saved.slskdUrl, apiKey: Boolean(config.env.slskdApiKey ?? saved.slskdApiKey) },
+    slskd: { url: config.env.slskdUrl ?? saved.slskdUrl, apiKey: Boolean(config.env.slskdApiKey ?? saved.slskdApiKey), files: soulseekFiles() },
     lastfm: { apiKey: has.lastfm() },
   };
 }
@@ -84,6 +88,7 @@ export interface ConnectionsPatch {
   lidarrApiKey?: string;
   slskdUrl?: string;
   slskdApiKey?: string;
+  slskdFiles?: SoulseekFiles;
   lastfmApiKey?: string;
 }
 
@@ -116,9 +121,12 @@ export async function saveConnections(patch: ConnectionsPatch): Promise<Connecti
     if (!res.ok) throw new HttpError(400, t("Couldn't reach slskd at that address"));
   }
   if (patch.lastfmApiKey !== undefined) next.lastfmApiKey = patch.lastfmApiKey.trim() || undefined;
+  if (patch.slskdFiles !== undefined && FILES.includes(patch.slskdFiles)) next.slskdFiles = patch.slskdFiles;
   writeJson(FILE(), next, 0o600);
   const changed = (['navidromeUrl', 'lidarrUrl', 'lidarrApiKey', 'slskdUrl', 'slskdApiKey', 'lastfmApiKey'] as const).filter((k) => next[k] !== saved[k]);
+  const files = next.slskdFiles !== saved.slskdFiles;
   saved = next;
   if (changed.length) log.info('settings', `Connections changed: ${changed.map((k) => k.replace(/Url$|ApiKey$/, '')).join(', ')}`);
+  if (files) log.info('settings', `Songs from Soulseek: ${{ cd: 'lossless up to CD quality', lossless: 'any lossless, hi-res too', mp3: 'MP3 320' }[soulseekFiles()]}`);
   return connections();
 }

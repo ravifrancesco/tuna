@@ -308,10 +308,13 @@ export interface ServerInfo {
   services: { navidrome: boolean; lidarr: boolean; slskd: boolean; lastfm: boolean };
 }
 
+/** Which copies of a song to get from Soulseek: lossless up to CD quality, any lossless (hi-res too), or MP3 320. */
+export type SoulseekFiles = 'cd' | 'lossless' | 'mp3';
+
 export interface Connections {
   navidrome: { url?: string };
   lidarr: { url?: string; apiKey?: boolean };
-  slskd: { url?: string; apiKey?: boolean };
+  slskd: { url?: string; apiKey?: boolean; files: SoulseekFiles };
   lastfm: { apiKey?: boolean };
 }
 

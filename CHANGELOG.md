@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.7 (2026-11-26)
+
+**New**
+- **Songs from Soulseek** (Settings → Connections, under slskd): which copies of a song Tuna gets.
+  **Lossless, CD quality** (the default now), **Lossless, hi-res too**, or **MP3 320**. Until now it
+  took any lossless copy, so hi-res files of 100 MB or more a song came in. When nobody has the kind
+  chosen, the nearest one comes instead.
+
+To update: the server (pull the new image); the apps don't need updating.
+
 ## 0.4.6 (2026-11-26)
 
 **New**

@@ -58,6 +58,9 @@ Sign in with your Navidrome account. Add the rest of the household in **Settings
   Settings → Connections. Lidarr files each song into its album, so slskd's downloads folder must
   be visible to Lidarr at the same path, or through a remote path mapping in Lidarr for slskd's
   host (as Tubifarry needs too). The number of new songs a week is in Settings → Weekly picks.
+  **Songs from Soulseek**, under slskd's address, chooses which copies it gets: lossless up to CD
+  quality (the default: no hi-res files of 100 MB or more a song), any lossless, or MP3 320. Sharing
+  a folder in slskd (your music, read-only) means fewer people refuse to send you files.
 
 ## Updating
 

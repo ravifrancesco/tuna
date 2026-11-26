@@ -6,7 +6,7 @@ import * as lidarr from '../clients/lidarr';
 import { coverArtFor, mbSearchRecordings } from '../clients/public';
 import * as slskd from '../clients/slskd';
 import { config } from '../config';
-import { has, slskd as slskdConnection } from '../connections';
+import { has, slskd as slskdConnection, soulseekFiles } from '../connections';
 import { log } from '../lib/log';
 import { writeJson } from '../lib/storage';
 import { ensureArtist, findAlbum, scanNavidrome } from './getting';
@@ -194,12 +194,17 @@ async function place(s: Song): Promise<boolean> {
 const AUDIO = /\.(flac|mp3|m4a|aac|ogg|opus|wav|aiff?|alac)$/i;
 const UNWANTED = ['live', 'remix', 'instrumental', 'karaoke', 'cover', 'acapella', 'a capella', 'demo', 'slowed', 'sped up', 'reverb', '8d'];
 
-/** The best copy: the right song (title and artist in its path, its length), lossless if there's one, from someone who can send it now. */
+/**
+ * The best copy: the right song (title and artist in its path, its length), of the kind the household
+ * chose (Settings → Connections: lossless up to CD quality, any lossless, or MP3 320; another kind only
+ * when nobody has that), from someone who can send it now.
+ */
 function best(s: Song, responses: slskd.SResponse[]) {
   const title = words(cleanTitle(s.title));
   const artist = artistsOf(s.artist).map(words);
   const unwanted = UNWANTED.filter((u) => !norm(s.title).includes(u));
-  const out: Array<{ username: string; filename: string; size: number; score: number }> = [];
+  const files = soulseekFiles();
+  const out: Array<{ username: string; filename: string; size: number; rank: number; score: number }> = [];
   for (const r of responses) {
     for (const f of r.files) {
       if (f.isLocked || !AUDIO.test(f.filename) || s.tried?.includes(`${r.username}|${f.filename}`)) continue;
@@ -210,13 +215,22 @@ function best(s: Song, responses: slskd.SResponse[]) {
       if (unwanted.some((u) => file.includes(u))) continue;
       if (s.length && f.length && Math.abs(f.length - s.length) > 6) continue;
       const ext = f.filename.split('.').pop()!.toLowerCase();
-      const quality = ext === 'flac' || ext === 'alac' ? 30 : (f.bitRate ?? 0) >= 300 ? 22 : (f.bitRate ?? 0) >= 250 ? 16 : (f.bitRate ?? 0) >= 190 ? 8 : ext === 'mp3' ? 4 : 0;
+      const lossless = ext === 'flac' || ext === 'alac';
+      // Hi-res: more than CD's 16 bits at 44.1 or 48 kHz; when the file doesn't say, more than about 12 MB a minute.
+      const seconds = f.length || s.length;
+      const hires = lossless && ((f.bitDepth ?? 0) > 16 || (f.sampleRate ?? 0) > 48_000 || (!f.bitDepth && !f.sampleRate && Boolean(seconds) && f.size / seconds! > 200_000));
+      const kbps = f.bitRate ?? 0;
+      const lossy = kbps >= 300 ? 22 : kbps >= 250 ? 16 : kbps >= 190 ? 8 : ext === 'mp3' ? 4 : 0;
+      // The kind chosen first, then the nearest, hi-res last (unless that's the choice); within each, the best copy.
+      const chosen = files === 'mp3' ? !lossless && kbps >= 240 : files === 'cd' ? lossless && !hires : lossless;
+      const rank = chosen ? 2 : hires && files !== 'lossless' ? 0 : 1;
+      const quality = files === 'mp3' ? (lossless ? 6 : lossy) : lossless ? (hires && files === 'lossless' ? 34 : 30) : lossy;
       const peer = (r.hasFreeUploadSlot ? 15 : 0) - Math.min(r.queueLength, 15) + Math.min(10, Math.log2(1 + r.uploadSpeed / 100_000) * 2);
       const exact = s.length && f.length ? 6 - Math.abs(f.length - s.length) : 0;
-      out.push({ username: r.username, filename: f.filename, size: f.size, score: quality + peer + exact });
+      out.push({ username: r.username, filename: f.filename, size: f.size, rank, score: quality + peer + exact });
     }
   }
-  return out.sort((a, b) => b.score - a.score)[0];
+  return out.sort((a, b) => b.rank - a.rank || b.score - a.score)[0];
 }
 
 async function start(s: Song) {

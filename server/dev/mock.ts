@@ -680,15 +680,18 @@ function peersFor(text: string) {
     const other = r() < 0.5 ? Math.floor(r() * count) : -1;
     for (let k = 0; k < count; k++) {
       const flac = r() < 0.6;
+      // Some FLACs are hi-res (24-bit, 96 kHz: about 25 MB a minute), as vinyl rips often are.
+      const hires = flac && rng(`hires:${t.id}:${k}`)() < 0.4;
       const length = t.duration + (k === other ? (r() < 0.5 ? -1 : 1) * (25 + Math.floor(r() * 60)) : 0);
-      const folder = `${pick(r, ROOTS)}\\${t.artist}\\${a.name} (${a.year}) [${flac ? 'FLAC' : 'MP3 320'}]`;
+      const folder = `${pick(r, ROOTS)}\\${t.artist}\\${a.name} (${a.year}) [${hires ? '24-96 FLAC' : flac ? 'FLAC' : 'MP3 320'}]`;
       const username = PEERS[(first + k * 3) % PEERS.length];
+      const cd = flac ? 100_000 + Math.floor(r() * 40_000) : 0;
       byUser.set(username, [
         ...(byUser.get(username) ?? []),
         {
           filename: `${folder}\\${String(t.track).padStart(2, '0')} - ${t.title}.${flac ? 'flac' : 'mp3'}`,
-          size: flac ? length * (100_000 + Math.floor(r() * 40_000)) : length * 40_000 + 4096,
-          ...(flac ? { bitDepth: 16, sampleRate: 44100 } : { bitRate: 320 }),
+          size: hires ? length * 420_000 : flac ? length * cd : length * 40_000 + 4096,
+          ...(hires ? { bitDepth: 24, sampleRate: 96000 } : flac ? { bitDepth: 16, sampleRate: 44100 } : { bitRate: 320 }),
           length,
           extension: flac ? 'flac' : 'mp3',
           isLocked: false,
