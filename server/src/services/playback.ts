@@ -147,7 +147,8 @@ export async function cover(req: FastifyRequest<{ Params: { id: string }; Querys
   const id = req.params.id;
   const image = await cachedImage(`nd:${id}:${size}`, subsonicUrl(authOf(session), 'getCoverArt', { id, size }));
   if (!image) return reply.code(404).send();
-  reply.header('content-type', image.type).header('cache-control', 'private, max-age=604800');
+  // Kept by the browser and the apps for good: a cover's id changes when its picture does.
+  reply.header('content-type', image.type).header('cache-control', 'private, max-age=31536000, immutable');
   return reply.send(fs.createReadStream(image.file));
 }
 

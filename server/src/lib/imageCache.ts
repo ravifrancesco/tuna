@@ -49,9 +49,23 @@ function trim() {
   }
 }
 
+const hashOf = (key: string) => crypto.createHash('sha1').update(key).digest('hex');
+
+/** Whether a picture is kept already. */
+export const isCached = (key: string) => Boolean(find(hashOf(key)));
+
+/** How full the cache is: 0 empty, 1 at IMAGE_CACHE_MB. */
+export function cacheFull(): number {
+  try {
+    return fs.readdirSync(DIR()).reduce((n, name) => n + fs.statSync(path.join(DIR(), name)).size, 0) / LIMIT;
+  } catch {
+    return 0;
+  }
+}
+
 /** A picture by key, fetched from `url` the first time. A missing picture gives undefined. */
 export function cachedImage(key: string, url: string): Promise<CachedImage | undefined> {
-  const hash = crypto.createHash('sha1').update(key).digest('hex');
+  const hash = hashOf(key);
   const hit = find(hash);
   if (hit) return Promise.resolve(hit);
   const pending = inflight.get(hash);

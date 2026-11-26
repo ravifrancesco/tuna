@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.8 (2026-11-26)
+
+**Changed**
+- **Covers show at once.** Every album's cover is made ready ahead, a minute after Tuna starts and
+  then every 6 hours for new albums, so the first time a page shows them they no longer come in one
+  by one. Browsers and the apps now keep covers for good instead of a week.
+- **Pages open at once.** Each device keeps what Home, the library, playlists and the last albums and
+  artists showed, for the person signed in, and opens on that while the server answers. Signing out
+  removes it.
+
+To update: the server (pull the new image); the apps don't need updating.
+
 ## 0.4.7 (2026-11-26)
 
 **New**

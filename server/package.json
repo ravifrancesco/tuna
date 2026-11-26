@@ -1,6 +1,6 @@
 {
   "name": "@tuna/server",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "private": true,
   "scripts": {
     "dev": "tsx watch --clear-screen=false src/index.ts",

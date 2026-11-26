@@ -3,6 +3,7 @@ import { config } from './config';
 import { SETUP_CODE, has } from './connections';
 import { log, setLogTimeZone } from './lib/log';
 import { storageFix, storageWritable } from './lib/storage';
+import { startCovers } from './services/covers';
 import { startNightWaves } from './services/nightWaves';
 
 async function main() {
@@ -21,6 +22,7 @@ async function main() {
 
   await app.listen({ port: config.port, host: config.host });
   startNightWaves();
+  startCovers();
 
   const shutdown = async (signal: string) => {
     log.info('server', `${signal} received, shutting down`);

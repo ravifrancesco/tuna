@@ -11,6 +11,7 @@
  *   MOCK_SLSKD_EMPTY=1: Soulseek finds nothing. MOCK_SLSKD_FAIL=<user>: that peer's downloads fail.
  *   MOCK_SLSKD_MOVE_SECONDS (default 2): how long after a download succeeds its file is in slskd's
  *   downloads folder (taken off slskd's list before then, it never gets there, as in slskd).
+ *   MOCK_COVER_MS (default 0): how long each cover takes, as Navidrome resizing pictures on a Raspberry Pi.
  *   ListenBrainz token for Settings: mock-lb.
  */
 import crypto from 'node:crypto';
@@ -24,6 +25,7 @@ const SONG_SECONDS = Number(process.env.MOCK_GET_SECONDS ?? 8);
 const SLSKD_EMPTY = process.env.MOCK_SLSKD_EMPTY === '1';
 const SLSKD_FAIL = process.env.MOCK_SLSKD_FAIL;
 const SLSKD_MOVE_SECONDS = Number(process.env.MOCK_SLSKD_MOVE_SECONDS ?? 2);
+const COVER_MS = Number(process.env.MOCK_COVER_MS ?? 0);
 
 // ---- A made-up world, the same every time ------------------------------------------------------
 
@@ -1003,10 +1005,16 @@ function navidrome(method: string, q: URLSearchParams, req: http.IncomingMessage
       const id = (q.get('id') ?? '').replace(/_[0-9a-f]+$/, '');
       const s = Math.min(600, Math.max(32, Number(q.get('size') ?? 300)));
       const albumOf = id.startsWith('al-') ? id.slice(3) : id.startsWith('mf-') ? tracks.get(id.slice(3))?.albumId : albums.has(id) ? id : tracks.get(id)?.albumId;
-      if (albumOf && albums.has(albumOf)) return png(res, coverPng(albums.get(albumOf)!.mbid, s));
-      if (id.startsWith('ar-')) return png(res, coverPng(`artist:${id}`, s, true));
-      if (id.startsWith('pl-')) return png(res, coverPng(`playlist:${id}`, s));
-      return png(res, coverPng(id, s));
+      const image =
+        albumOf && albums.has(albumOf)
+          ? coverPng(albums.get(albumOf)!.mbid, s)
+          : id.startsWith('ar-')
+            ? coverPng(`artist:${id}`, s, true)
+            : id.startsWith('pl-')
+              ? coverPng(`playlist:${id}`, s)
+              : coverPng(id, s);
+      if (COVER_MS) return void setTimeout(() => png(res, image), COVER_MS);
+      return png(res, image);
     }
     default:
       return fail(res, 0, `Not in the mock: ${method}`);

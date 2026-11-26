@@ -1,12 +1,14 @@
 import { Link } from 'react-router';
 import type { Me } from '@tuna/shared';
 import { api, setBearer } from '../api';
+import { forgetPages } from '../lib/keep';
 import { stopAll } from '../lib/player';
 import { setMe, useMe } from '../lib/session';
 
 export async function signOut() {
   await api.logout().catch(() => undefined);
   stopAll();
+  forgetPages();
   setBearer(undefined);
   setMe(undefined);
 }

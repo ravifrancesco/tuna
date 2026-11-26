@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ServerInfo } from "@tuna/shared";
@@ -25,6 +25,7 @@ import {
   toggle,
 } from "./lib/player";
 import { setMe, useMe } from "./lib/session";
+import { forgetPages, keepPages } from "./lib/keep";
 import { Album } from "./pages/Album";
 import { Artist } from "./pages/Artist";
 import { Getting } from "./pages/Getting";
@@ -127,10 +128,15 @@ export function App() {
     () =>
       onSignedOut(() => {
         stopAll();
+        forgetPages();
         setMe(undefined);
       }),
     [],
   );
+  // The pages as they were last time, before they first draw (so they open at once).
+  useLayoutEffect(() => {
+    if (me) keepPages(qc, me.username);
+  }, [me?.username, qc]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (me) void restore();
     else qc.clear();

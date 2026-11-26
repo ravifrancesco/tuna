@@ -51,6 +51,11 @@ Notes for anyone (person or AI assistant) working on Tuna's code.
   Raise `VERSION` there when the measuring changes. ffmpeg is in the Docker image; developing needs it too (`brew install ffmpeg`).
 - **Mixes** are made when played (`server/src/services/mixes.ts`): Navidrome's similar songs when
   it has an outside source, else same artist and genre.
+- **Covers** are kept on Tuna's disk (`server/src/lib/imageCache.ts`, `cache/images`, `IMAGE_CACHE_MB`)
+  and by browsers and apps for good (a cover's id changes with its picture). Every album's cover is
+  made ready ahead at the sizes cards and lists use (`server/src/services/covers.ts`). The page keeps
+  what Home, the library and recent pages showed on the device, per person (`web/src/lib/keep.ts`),
+  so it opens on them at once.
 
 ## Conventions
 
@@ -73,7 +78,8 @@ Notes for anyone (person or AI assistant) working on Tuna's code.
   `MOCK_GET_SECONDS` (40); `MOCK_EMPTY_LIBRARY=1` starts with nothing in the library, as a new install.
   The fake slskd: `MOCK_SLSKD_EMPTY=1` (every search finds nothing), `MOCK_SLSKD_FAIL=<peer>` (that
   peer's downloads fail), `MOCK_SLSKD_MOVE_SECONDS` (2: how long a finished download takes to reach
-  slskd's downloads folder, as in slskd). ListenBrainz token for Settings: `mock-lb`.
+  slskd's downloads folder, as in slskd). `MOCK_COVER_MS` makes each cover that slow, as Navidrome
+  on a Raspberry Pi. ListenBrainz token for Settings: `mock-lb`.
 - `npm run typecheck` checks server and web; `npm run check:i18n` the Italian.
 - **Develop against the mock**, never against a real household's server.
 - A running server serves the web files from `web/dist` as they are: `npm run build -w web` to
