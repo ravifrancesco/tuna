@@ -323,14 +323,24 @@ function add(a: SpotifyImport | undefined, b: SpotifyImport): SpotifyImport {
     const was = albums.get(k);
     albums.set(k, { ...m, songs: (was?.songs ?? 0) + m.songs, plays: (was?.plays ?? 0) + m.plays });
   }
+  // A song in several playlists is one song to get.
+  const key = (s: { artist: string; title: string }) => `${s.artist.trim().toLowerCase()}|${s.title.trim().toLowerCase()}`;
+  const songs = new Map((a.missingSongs ?? []).map((s) => [key(s), s]));
+  let again = 0;
+  for (const s of b.missingSongs ?? []) {
+    const was = songs.get(key(s));
+    if (was) again++;
+    songs.set(key(s), { ...s, album: was?.album ?? s.album, plays: (was?.plays ?? 0) + s.plays });
+  }
   return {
     playlists: a.playlists + b.playlists,
     liked: a.liked + b.liked,
     albums: a.albums + b.albums,
     artists: a.artists + b.artists,
     plays: a.plays + b.plays,
-    missing: a.missing + b.missing,
-    missingAlbums: [...albums.values()].sort((x, y) => y.plays - x.plays).slice(0, 50),
+    missing: a.missing + b.missing - again,
+    missingAlbums: [...albums.values()].sort((x, y) => y.plays - x.plays).slice(0, 2000),
+    missingSongs: songs.size ? [...songs.values()].sort((x, y) => y.plays - x.plays).slice(0, 5000) : undefined,
   };
 }
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.4 (2026-11-26)
+
+**Fixed**
+- **Get all** after bringing in several files from Spotify at once (Exportify's CSV files) asked for
+  only the 50 most played albums. It now asks for every missing song, each once, however many
+  playlists it's in, and the count of songs not in the library no longer counts them twice.
+
+To update: the server (pull the new image); the apps don't need updating.
+
 ## 0.4.3 (2026-11-26)
 
 **New**
