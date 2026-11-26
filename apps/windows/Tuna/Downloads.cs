@@ -117,7 +117,7 @@ sealed class DownloadStore
         return Path.Combine(covers, Hash(url.AbsolutePath + "?" + string.Join("&", query)));
     }
 
-    static string Hash(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)), 0, 16).ToLowerInvariant();
+    internal static string Hash(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)), 0, 16).ToLowerInvariant();
 
     void Save()
     {
@@ -415,12 +415,16 @@ sealed class DownloadStore
 /// into %LOCALAPPDATA%\Tuna\Ahead so the music carries on through a dropped connection, a switch to
 /// the tunnel or a server restart. One song at a time, once the song playing has loaded, at its
 /// address with dl=1 (fetching it isn't playing it). About 500 MB at most, oldest first; ahead.json
-/// keeps each song's type and size. Songs that are downloaded are never fetched.
+/// keeps each song's type and size. Songs that are downloaded are never fetched. Copies are kept by
+/// their address without the media key, so they follow the sound quality: a song the queue now has
+/// at another address is fetched again, and its copy in the old quality deleted.
 /// </summary>
 sealed class SongCache
 {
     sealed class Song
     {
+        /// <summary>The song's id, to find its copy in another quality.</summary>
+        public string Id { get; set; } = "";
         public string Type { get; set; } = "audio/mpeg";
         public long Bytes { get; set; }
         /// <summary>When it was fetched or last played (ms since 1970): the oldest go first.</summary>
@@ -435,19 +439,21 @@ sealed class SongCache
     readonly DownloadStore downloads;
     readonly string folder = Path.Combine(AppData.Root, "Ahead");
     readonly string file = Path.Combine(AppData.Root, "ahead.json");
+    /// <summary>By <see cref="Key"/>.</summary>
     readonly Dictionary<string, Song> songs;
-    /// <summary>The songs to have here, in order, and those that didn't come this time round.</summary>
+    /// <summary>The songs to have here, in order, and those that didn't come this time round (by key).</summary>
     List<Track> wanted = new();
     readonly HashSet<string> refused = new();
     bool allowed, working, stopped;
-    (string Id, CancellationTokenSource Cancel)? fetching;
+    (string Key, CancellationTokenSource Cancel)? fetching;
 
     public SongCache(DownloadStore downloads)
     {
         this.downloads = downloads;
         try { songs = JsonSerializer.Deserialize<Dictionary<string, Song>>(File.ReadAllText(file), DownloadStore.Json) ?? new(); }
         catch { songs = new(); }
-        foreach (var id in songs.Keys.Where(id => !File.Exists(SongFile(id))).ToList()) songs.Remove(id);
+        // (Copies kept by song id, before they followed the sound quality, go here too.)
+        foreach (var key in songs.Keys.Where(key => !File.Exists(SongFile(key))).ToList()) songs.Remove(key);
         // Anything else in the folder (a song cut short) goes.
         var keep = songs.Keys.Select(SongFile).ToHashSet(StringComparer.OrdinalIgnoreCase);
         try
@@ -461,41 +467,68 @@ sealed class SongCache
 
     static long Now => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-    string SongFile(string id) => Path.Combine(folder, DownloadStore.FileName(id));
+    /// <summary>What a copy is kept by: the song's address without the media key (or dl), so a new sound quality is a new copy.</summary>
+    static string? Key(Track? track)
+    {
+        if (track?.Url is not { } url) return null;
+        var query = url.Query.TrimStart('?').Split('&').Where(p => p.Length > 0 && !p.StartsWith("k=") && !p.StartsWith("dl="));
+        return url.GetLeftPart(UriPartial.Path) + "?" + string.Join("&", query);
+    }
 
-    public bool Has(string id) => songs.ContainsKey(id);
+    string SongFile(string key) => Path.Combine(folder, DownloadStore.Hash(key));
+
+    public bool Has(Track track) => Key(track) is { } key && songs.ContainsKey(key);
 
     /// <summary>A song kept ahead, open for the player (it can still be deleted meanwhile); null when it isn't here.</summary>
-    public (FileStream File, string Type)? Open(string id)
+    public (FileStream File, string Type)? Open(Track track)
     {
-        if (!songs.TryGetValue(id, out var song)) return null;
+        if (Key(track) is not { } key || !songs.TryGetValue(key, out var song)) return null;
         try
         {
-            var stream = new FileStream(SongFile(id), FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            var stream = new FileStream(SongFile(key), FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             song.Used = Now;
             return (stream, song.Type);
         }
         catch
         {
-            songs.Remove(id);
+            songs.Remove(key);
             return null;
         }
     }
 
     /// <summary>
-    /// The songs to have here, in order (the player says on every change). A song coming in that's no
-    /// longer one of them stops. <paramref name="go"/>: the song playing has loaded, so the next may start.
+    /// The songs to have here, in order, after <paramref name="playing"/> (the player says on every
+    /// change). A song coming in that's no longer one of them stops; their copies at another address
+    /// (another sound quality) go. <paramref name="go"/>: the song playing has loaded, so the next may start.
     /// </summary>
-    public void Want(List<Track> next, bool go)
+    public void Want(Track? playing, List<Track> next, bool go)
     {
-        if (!next.Select(t => t.Id).SequenceEqual(wanted.Select(t => t.Id)))
+        if (!next.Select(Key).SequenceEqual(wanted.Select(Key)))
         {
             refused.Clear();
-            if (fetching is { } f && !next.Any(t => t.Id == f.Id)) f.Cancel.Cancel();
+            if (fetching is { } f && !next.Any(t => Key(t) == f.Key)) f.Cancel.Cancel();
         }
         wanted = next;
         allowed = go;
+        Forget(playing == null ? next : next.Prepend(playing));
         if (go) Work();
+    }
+
+    /// <summary>Copies of these songs at another address than theirs now (another sound quality): deleted.</summary>
+    void Forget(IEnumerable<Track> current)
+    {
+        var stale = new List<string>();
+        foreach (var track in current)
+            if (track.Id.Length > 0 && Key(track) is { } key)
+                stale.AddRange(songs.Where(s => s.Value.Id == track.Id && s.Key != key).Select(s => s.Key));
+        if (stale.Count == 0) return;
+        foreach (var key in stale)
+        {
+            // (The song playing carries on from its copy: open files can be deleted.)
+            songs.Remove(key);
+            DownloadStore.Delete(SongFile(key));
+        }
+        Save();
     }
 
     /// <summary>Tuna is quitting: the song coming in stops.</summary>
@@ -512,8 +545,8 @@ sealed class SongCache
         working = true;
         try
         {
-            while (allowed && !stopped && wanted.FirstOrDefault(t => t.Url != null && !songs.ContainsKey(t.Id) && !downloads.Has(t.Id) && !refused.Contains(t.Id)) is { } track)
-                await Keep(track.Id, track.Url!);
+            while (allowed && !stopped && wanted.FirstOrDefault(t => Key(t) is { } key && !songs.ContainsKey(key) && !downloads.Has(t.Id) && !refused.Contains(key)) is { } track)
+                await Keep(track);
         }
         finally
         {
@@ -521,16 +554,17 @@ sealed class SongCache
         }
     }
 
-    async Task Keep(string id, Uri url)
+    async Task Keep(Track track)
     {
         using var cancel = new CancellationTokenSource();
-        var path = SongFile(id);
-        fetching = (id, cancel);
+        var (url, key) = (track.Url!, Key(track)!);
+        var path = SongFile(key);
+        fetching = (key, cancel);
         try
         {
             var address = new Uri(url.OriginalString + (url.Query.Length > 1 ? "&" : "?") + "dl=1");
             var (type, bytes) = await Task.Run(() => DownloadStore.Fetch(address, path, cancel.Token));
-            songs[id] = new Song { Type = type, Bytes = bytes, Used = Now };
+            songs[key] = new Song { Id = track.Id, Type = type, Bytes = bytes, Used = Now };
             Trim();
             Save();
             Ready?.Invoke();
@@ -539,7 +573,7 @@ sealed class SongCache
         {
             // Not wanted any more, or it didn't come (tried again when the queue changes).
             DownloadStore.Delete(path + ".part");
-            if (!cancel.IsCancellationRequested) refused.Add(id);
+            if (!cancel.IsCancellationRequested) refused.Add(key);
         }
         finally
         {
@@ -551,12 +585,12 @@ sealed class SongCache
     void Trim()
     {
         var total = songs.Values.Sum(s => s.Bytes);
-        foreach (var (id, song) in songs.OrderBy(s => s.Value.Used).ToList())
+        foreach (var (key, song) in songs.OrderBy(s => s.Value.Used).ToList())
         {
             if (total <= Cap) break;
-            if (wanted.Any(t => t.Id == id)) continue;
-            songs.Remove(id);
-            DownloadStore.Delete(SongFile(id));
+            if (wanted.Any(t => Key(t) == key)) continue;
+            songs.Remove(key);
+            DownloadStore.Delete(SongFile(key));
             total -= song.Bytes;
         }
     }

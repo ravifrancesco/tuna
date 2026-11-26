@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import type { NativeAudioState, NativeOutput, NativeTrack, Quality, Track } from '@tuna/shared';
 import { app, nativeAudio } from './native';
 import { coverUrl, getMe, streamUrl } from './session';
+import { BANDS, onBrowserEq, type Eq } from './eq';
 
 /**
  * The player: what's queued, what's playing and where. Two engines play it: the app's own player
@@ -82,7 +83,14 @@ const browserFormats = (() => {
 })();
 
 let onMobileData = false;
-const refreshMobileData = () => void app.mobileData().then((on) => (onMobileData = on));
+const refreshMobileData = () =>
+  void app.mobileData().then((on) => {
+    if (on === onMobileData) return;
+    onMobileData = on;
+    // Automatic: what comes next follows the network (the song playing carries on), and so do the
+    // songs the app keeps ahead.
+    if ((getMe()?.prefs.quality ?? 'auto') === 'auto' && state.index >= 0) engine().update(state.queue, state.index);
+  });
 refreshMobileData();
 setInterval(refreshMobileData, 60_000);
 
@@ -172,6 +180,34 @@ const nativeEngine: Engine | undefined = na && {
 /** The page's own player: two <audio>s, so the next song is ready when this one ends. */
 let webAudio: (HTMLAudioElement & { webkitShowPlaybackTargetPicker?: () => void }) | undefined;
 
+// The equalizer in a browser: the page's player through six filters, built the first time it's on
+// (so casting from Chrome keeps working for whoever never uses it).
+let graph: { ctx: AudioContext; filters: BiquadFilterNode[]; pre: GainNode } | undefined;
+function browserEq(e: Eq) {
+  if (!graph) {
+    if (!e.on) return;
+    engine();
+    if (!webAudio) return;
+    const ctx = new AudioContext();
+    const filters = BANDS.map((f, i) => {
+      const b = ctx.createBiquadFilter();
+      b.type = i === 0 ? 'lowshelf' : i === BANDS.length - 1 ? 'highshelf' : 'peaking';
+      b.frequency.value = f;
+      b.Q.value = 1;
+      return b;
+    });
+    const pre = ctx.createGain();
+    [ctx.createMediaElementSource(webAudio), pre, ...filters].reduce((from, to) => (from.connect(to), to)).connect(ctx.destination);
+    graph = { ctx, filters, pre };
+  }
+  const { ctx, filters, pre } = graph;
+  const gains = e.on ? e.gains : e.gains.map(() => 0);
+  filters.forEach((b, i) => b.gain.setTargetAtTime(gains[i], ctx.currentTime, 0.02));
+  // Lowered by the highest boost, so nothing clips.
+  pre.gain.setTargetAtTime(10 ** (-Math.max(0, ...gains) / 20), ctx.currentTime, 0.02);
+  if (ctx.state === 'suspended') void ctx.resume();
+}
+
 function makeWebEngine(): Engine {
   const audio = new Audio();
   audio.preload = 'auto';
@@ -209,6 +245,7 @@ function makeWebEngine(): Engine {
   audio.addEventListener('timeupdate', () => set({ time: audio.currentTime }));
   audio.addEventListener('durationchange', () => Number.isFinite(audio.duration) && set({ duration: audio.duration }));
   audio.addEventListener('playing', () => set({ playing: true, buffering: false }));
+  audio.addEventListener('play', () => graph?.ctx.state === 'suspended' && void graph.ctx.resume());
   audio.addEventListener('pause', () => set({ playing: false }));
   audio.addEventListener('waiting', () => set({ buffering: true }));
   audio.addEventListener('canplay', () => set({ buffering: false }));
@@ -287,6 +324,8 @@ if ('mediaSession' in navigator && !nativeAudio) {
 }
 
 // ---- What people do ------------------------------------------------------------------------------------
+
+if (!nativeEngine) onBrowserEq(browserEq);
 
 /** In a browser: the music to a Chromecast (Chrome) or an AirPlay speaker (Safari), from a button. */
 export const browserOutputs =

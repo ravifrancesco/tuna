@@ -357,12 +357,15 @@ sealed class AudioPlayer : IDisposable
         tracks = sent.Select(Track.From).ToList();
     }
 
-    /// <summary>Where a song is in the new queue: at <paramref name="at"/>, the one after, or anywhere.</summary>
+    /// <summary>
+    /// Where a song is in the new queue: at <paramref name="at"/>, the one after, or anywhere. By id:
+    /// after a change of sound quality, its address is a new one.
+    /// </summary>
     int Find(Track track, int at)
     {
         foreach (var i in new[] { at, at + 1 })
-            if (i >= 0 && i < tracks.Count && tracks[i].Same(track)) return i;
-        var found = tracks.FindIndex(t => t.Same(track));
+            if (i >= 0 && i < tracks.Count && tracks[i].Id == track.Id) return i;
+        var found = tracks.FindIndex(t => t.Id == track.Id);
         return found >= 0 ? found : Math.Clamp(at, 0, tracks.Count - 1);
     }
 
@@ -442,7 +445,7 @@ sealed class AudioPlayer : IDisposable
         var slot = new Slot(tracks[i], i);
         var track = slot.Track;
         MediaSource source;
-        if ((downloads.Open(track.Id) ?? cache.Open(track.Id)) is { } local)
+        if ((downloads.Open(track.Id) ?? cache.Open(track)) is { } local)
         {
             // Downloaded or fetched ahead: the file, online too (it saves data).
             slot.Stream = local.File;
@@ -479,7 +482,7 @@ sealed class AudioPlayer : IDisposable
     /// </summary>
     bool BetterFromFile(Slot slot)
     {
-        if (slot.Local || !(downloads.Has(slot.Track.Id) || cache.Has(slot.Track.Id)) || !Opened()) return false;
+        if (slot.Local || !(downloads.Has(slot.Track.Id) || cache.Has(slot.Track)) || !Opened()) return false;
         var session = player.PlaybackSession;
         return session.NaturalDuration - session.Position > Prefetch + TimeSpan.FromSeconds(5);
     }
@@ -723,11 +726,11 @@ sealed class AudioPlayer : IDisposable
         Emit(State());
     }
 
-    /// <summary>The next 3 songs for the cache, fetched once the song playing has loaded.</summary>
+    /// <summary>The next 5 songs for the cache, fetched once the song playing has loaded.</summary>
     void KeepAhead()
     {
         var ahead = new List<Track>();
-        for (var k = 1; k <= 3 && current != null && !ended; k++)
+        for (var k = 1; k <= 5 && current != null && !ended; k++)
         {
             var i = index + k;
             if (i >= tracks.Count)
@@ -738,7 +741,9 @@ sealed class AudioPlayer : IDisposable
             if (i == index) break;
             ahead.Add(tracks[i]);
         }
-        cache.Want(ahead, current != null && (current.Local || Opened()));
+        // (The queue's own entry for the song playing: its address may be a new sound quality.)
+        var playing = current != null && index >= 0 && index < tracks.Count ? tracks[index] : null;
+        cache.Want(playing, ahead, current != null && (current.Local || Opened()));
     }
 
     void Emit(JsonObject state) => Changed?.Invoke(state);

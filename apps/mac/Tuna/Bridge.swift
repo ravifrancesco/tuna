@@ -14,17 +14,17 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             "version": version,
             // What AVPlayer plays as-is; the server converts the rest.
             "formats": ["mp3", "aac", "m4a", "alac", "flac", "wav"],
-            "features": ["audio", "changeServer", "downloads", "outputs", "sleep", "tunnel", "update"],
+            "features": ["audio", "changeServer", "downloads", "eq", "outputs", "sleep", "tunnel", "update"],
         ]
         let json = { (value: Any) in (try? JSONSerialization.data(withJSONObject: value)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}" }
         let server = json(hello)
-        // The app's own pages (the offline page): only the player and the downloads.
-        hello["features"] = ["audio", "downloads"]
+        // The app's own pages (the offline page): only the player (with its equalizer) and the downloads.
+        hello["features"] = ["audio", "downloads", "eq"]
         return "window.tunaHello = location.protocol === '\(LocalScheme.scheme):' ? \(json(hello)) : \(server);"
     }()
 
     /// What the bundled pages may ask: the address page, and the offline page.
-    private static let localCommands: Set = ["connect", "currentServer", "audio.load", "audio.update", "audio.command", "audio.current", "downloads.list", "server.reachable", "server.open"]
+    private static let localCommands: Set = ["connect", "currentServer", "audio.load", "audio.update", "audio.command", "audio.current", "audio.eq", "downloads.list", "server.reachable", "server.open"]
 
     private static let selfTest = Bundle.main.bundleIdentifier?.hasSuffix(".selftest") == true
 
@@ -95,6 +95,8 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             return audio.currentQueue ?? NSNull()
         case "audio.sleep":
             audio.sleep(minutes: (args["minutes"] as? NSNumber)?.doubleValue, endOfSong: args["endOfSong"] as? Bool ?? false)
+        case "audio.eq":
+            Equalizer.shared.set(args)
         case "audio.outputs":
             window.showOutputs(at: NSRect(x: Self.double(args["x"]), y: Self.double(args["y"]), width: Self.double(args["width"]), height: Self.double(args["height"])))
 

@@ -42,6 +42,7 @@ window.tunaHello = {
   screen off. Without it the page keeps the timer (the browser, TVs).
 - `haptics`: `app.haptic` gives a short vibration (swiping a song). Phones only.
 - `cast`: the `outputs` picker also lists Chromecasts, and the music can play on one (Android).
+- `eq`: the app's player has the equalizer (`audio.eq`).
 
 - **Android**: a `@JavascriptInterface` object named `TunaAndroid` with `String hello()` (that JSON)
   and `void post(String json)`.
@@ -67,6 +68,7 @@ converts anything else (the page asks for `f=mp3` or `f=opus` in the stream URL)
 | `audio.liked` | `{ id, liked }`: a song liked or unliked on the page. The app keeps it with the song (for `audio.current`) and, on Android, fills or empties the lock screen's heart | — |
 | `audio.outputs` | `{ x, y, width, height }`, the page's button: show the system's list of speakers and headphones (iPhone and Mac: the AirPlay/Bluetooth picker, pointing at the button on iPad; Android: the output switcher, with Chromecasts when there's `cast`). Only with the `outputs` feature | — |
 | `audio.sleep` | `{ minutes }` (stop that many minutes from now) or `{ endOfSong: true }` (stop when the song playing ends); `{}` turns it off. When it's time: pause (don't empty the queue) and forget the timer; with `endOfSong`, move on to the next song paused at its start, so play carries on from there (or end as usual if it was the last). A new `audio.load` keeps it; `stop` clears it. Report it in every state as `sleep`. Only with `sleep` | — |
+| `audio.eq` | `{ on: boolean, gains: number[] }`: the equalizer. `gains` are six levels in dB (−12 to +12) for 60 Hz, 150 Hz, 400 Hz, 1 kHz, 2.4 kHz and 15 kHz: a low shelf at 60 Hz, a high shelf at 15 kHz, peaks (Q ≈ 1) between, all as Web Audio's (a shelf has half its gain at its frequency), and the whole lowered by the highest boost (neighbouring boosts together can still add a few dB, which the app saturates rather than wraps). iPhone and Mac: AVPlayer leaves about a quarter of a second of silence after a song with a processing tap, so songs get taps only while it's on (off, they follow each other without a gap). Applies at once (no gap) to everything the app plays (streams, the queue kept ahead, downloads; not on a Chromecast), and the app keeps the last one given, across restarts, so music started without the page (the car, the lock screen) sounds the same. The page sends it when it loads and whenever it changes. Only with `eq` | — |
 | `app.haptic` | `{ style: 'light' \| 'success' }`: a short vibration as the page confirms something (a song swiped into the queue or liked). Only with `haptics` | — |
 | `changeServer` | — | — |
 | `keepAwake` | `{ on }` (TVs: keep the screen on) | — |
@@ -140,7 +142,7 @@ about twice a second while downloading.
 - **Offline page**: `apps/common/offline.html`, copied into each app like `loading.html` and served
   from the app's own address (iPhone and Mac: the local scheme; Android: a `WebViewAssetLoader` or
   `shouldInterceptRequest` address; Windows: a virtual host), with the same bridge and a
-  `tunaHello` whose features are `audio` and `downloads`. Each `NativeDownload` also has
+  `tunaHello` whose features are `audio`, `downloads` and, where the app has it, `eq`. Each `NativeDownload` also has
   `localCover`, an address on that origin serving its cover (sent to the server's page too, where
   it isn't used). The app opens it when the server
   doesn't answer at start (after the loading page has tried, tunnel included) and something is
@@ -156,13 +158,15 @@ about twice a second while downloading.
   media keys come with it).
 - The next song is loaded ahead so songs follow each other without a gap (gapless: no silence
   between the songs of a live album or a mix).
-- **The queue kept ahead**: the next 3 songs (1 on mobile data) are fetched in full into a cache in
-  the app's own storage, at the queue's `url` with `&dl=1` added (fetching them isn't counted as
-  playing them), and played from the file once there, so the music carries on through a dropped
+- **The queue kept ahead**: the next 5 songs (on Wi-Fi and mobile data alike: the sound quality is the
+  person's choice) are fetched in full into a cache in the app's own storage, at the queue's `url`
+  with `&dl=1` added (fetching them isn't counted as playing them), and played from the file once there, so the music carries on through a dropped
   connection, a switch between home and the tunnel, or a server restart. One at a time, after the
   song playing has loaded; at most about 500 MB, oldest first; a song that's downloaded
   (`downloads`) is never fetched again. While a song plays from a file (cache or download), report
-  `local: true`.
+  `local: true`. Copies are kept by their address without `k`, so they follow the sound quality: when
+  it changes, the page sends the queue again with new addresses, and the app fetches those songs
+  again in the new quality and deletes their copies in the old one (the song playing carries on).
 - **Casting** (`cast`, Android): pick a Chromecast in the outputs picker and the queue moves to it
   (Media3's `CastPlayer`, the Default Media Receiver), from where it is; the notification and lock
   screen control it. The Chromecast fetches the songs' `url` itself, so it works with a server

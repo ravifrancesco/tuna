@@ -14,9 +14,9 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -27,7 +27,8 @@ import java.util.concurrent.Executors;
  * The queue kept ahead (docs/native-bridge.md, "The player"): the next few songs fetched whole into
  * the app's cache, one at a time, so the music carries on through a dropped connection, a switch
  * between home and the tunnel, or a server restart. Files are named by the song's address without
- * the media key (another quality is another file); past the limit (500 MB, TVs 150 MB) the oldest go.
+ * the media key (another quality is another file, and the old one goes once the queue's address has
+ * changed); past the limit (500 MB, TVs 150 MB) the oldest go.
  */
 final class Ahead {
     /** A song that didn't come isn't asked for again for this long. */
@@ -47,6 +48,9 @@ final class Ahead {
     private List<String> wanted = new ArrayList<>();
     /** Files to keep whatever their age: the queue's. */
     private Set<File> keep = new HashSet<>();
+    /** Each queued song's file (by song id); copies in a quality the queue no longer has, still to go. */
+    private Map<String, File> copies = new HashMap<>();
+    private final Set<File> stale = new HashSet<>();
     private final Map<String, Long> missed = new HashMap<>();
     private boolean working;
     private String fetching;
@@ -74,10 +78,30 @@ final class Ahead {
         return f;
     }
 
-    /** Fetch these (and nothing else); `queue` is every song in the queue, whose files stay. */
-    synchronized void want(List<String> urls, Collection<String> queue) {
+    /**
+     * Fetch these (and nothing else); `queue` is every song in the queue (id → address), whose files
+     * stay, and so does `playing`, the file the song playing started from (if any). A song whose
+     * address changed (another sound quality) loses its old copy.
+     */
+    synchronized void want(List<String> urls, Map<String, String> queue, File playing) {
         keep = new HashSet<>();
-        for (String url : queue) keep.add(fileFor(url));
+        Map<String, File> now = new HashMap<>();
+        for (Map.Entry<String, String> song : queue.entrySet()) {
+            File f = fileFor(song.getValue());
+            File was = copies.get(song.getKey());
+            if (was != null && !was.equals(f)) stale.add(was);
+            now.put(song.getKey(), f);
+            keep.add(f);
+        }
+        copies = now;
+        if (playing != null) keep.add(playing);
+        for (Iterator<File> i = stale.iterator(); i.hasNext(); ) {
+            File f = i.next();
+            if (keep.contains(f)) continue;
+            //noinspection ResultOfMethodCallIgnored
+            f.delete();
+            i.remove();
+        }
         wanted = new ArrayList<>(urls);
         if (fetching != null && !wanted.contains(fetching)) stop = true;
         if (!working && next() != null) {

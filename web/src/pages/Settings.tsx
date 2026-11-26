@@ -11,10 +11,12 @@ import { Cover, Sheet, Switch, toast } from '../components/ui';
 import { LANGUAGES, languageSetting, locale, setLanguage, t, tn } from '../i18n';
 import { ago } from '../lib/format';
 import { QUALITIES, setQuality } from '../lib/quality';
-import { canDownload, usage, useDownloads } from '../lib/downloads';
+import { canDownload, downloadQuality, setDownloadQuality, usage, useDownloads, type DownloadQuality } from '../lib/downloads';
 import { size } from './Downloads';
 import { app, has, hello, onEvent, type UpdateStatus } from '../lib/native';
 import { artUrl, setMe, useMe } from '../lib/session';
+import { EqualizerControls } from '../components/Equalizer';
+import { hasEq } from '../lib/eq';
 
 /** Settings, laid out as in Netfish: the one place that explains how things work. */
 export function Settings() {
@@ -76,6 +78,12 @@ function Listening({ prefs }: { prefs: Prefs }) {
         </select>
         <small className="muted">{QUALITIES.find((q) => q.value === prefs.quality)?.detail()}</small>
       </label>
+      {hasEq && (
+        <div className="field">
+          <EqualizerControls />
+          <small className="muted">{t('On this device, for every song.')}</small>
+        </div>
+      )}
       <label className="field">
         <span>{t('Language')}</span>
         <select className="input" value={languageSetting()} onChange={(e) => setLanguage(e.target.value as 'auto' | 'en' | 'it')}>
@@ -296,6 +304,32 @@ function add(a: SpotifyImport | undefined, b: SpotifyImport): SpotifyImport {
   };
 }
 
+const DOWNLOAD_QUALITIES: { value: DownloadQuality; label: () => string; detail: () => string }[] = [
+  { value: 'normal', label: () => t('Normal'), detail: () => t('About 5 MB a song') },
+  { value: 'high', label: () => t('High'), detail: () => t('About 8 MB a song') },
+  { value: 'original', label: () => t('Original'), detail: () => t('The file as it is: about 30 MB a song in FLAC') },
+];
+
+/** Downloads on this device: smaller, or as they are. New downloads use it. */
+function DownloadQualityField() {
+  const [q, setQ] = useState(downloadQuality);
+  return (
+    <label className="field">
+      <span>{t('Download quality')}</span>
+      <select className="input" value={q} onChange={(e) => (setDownloadQuality(e.target.value as DownloadQuality), setQ(e.target.value as DownloadQuality))}>
+        {DOWNLOAD_QUALITIES.map((x) => (
+          <option key={x.value} value={x.value}>
+            {x.label()}
+          </option>
+        ))}
+      </select>
+      <small className="muted">
+        {DOWNLOAD_QUALITIES.find((x) => x.value === q)?.detail()} · {t('For new downloads')}
+      </small>
+    </label>
+  );
+}
+
 function AppSection() {
   const downloads = useDownloads();
   const onDevice = [...new Set(downloads.flatMap((d) => d.ready))];
@@ -340,6 +374,7 @@ function AppSection() {
           </Link>
         </div>
       )}
+      {canDownload && <DownloadQualityField />}
       {has('changeServer') && (
         <div className="account">
           <span className="account__who">{location.host}</span>

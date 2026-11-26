@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { MoreHorizontal, Pencil, Shuffle, Trash2 } from 'lucide-react';
+import { Download, MoreHorizontal, Pencil, Shuffle, Trash2 } from 'lucide-react';
 import { DownloadButton } from '../components/DownloadButton';
 import type { download } from '../lib/downloads';
-import type { Track } from '@tuna/shared';
+import type { Track, WaitingSong } from '@tuna/shared';
 import { api } from '../api';
 import { Item, showMenu } from '../components/Menu';
 import { PlayButton } from '../components/PlayButton';
@@ -27,6 +27,33 @@ function Header({ kind, title, meta, cover, tint }: { kind: string; title: strin
         <div className="hero__meta">{meta}</div>
       </div>
     </header>
+  );
+}
+
+/** The albums of a playlist's songs that aren't here yet, in its order: Lidarr gets whole albums. */
+function GetMissing({ waiting }: { waiting: WaitingSong[] }) {
+  const [asked, setAsked] = useState<number>();
+  const seen = new Set<string>();
+  const albums = waiting.flatMap((w) => {
+    const key = `${w.artist}|${w.album}`.toLowerCase();
+    if (!w.album || seen.has(key)) return [];
+    seen.add(key);
+    return [{ artist: w.artist, album: w.album }];
+  });
+  if (!albums.length) return null;
+  return (
+    <button
+      className="btn btn--small"
+      disabled={asked !== undefined}
+      onClick={() =>
+        void api
+          .getMany(albums)
+          .then((r) => (setAsked(r.asked), toast(tn(r.asked, 'Asked for {n} album', 'Asked for {n} albums'))))
+          .catch((err: Error) => toast(err.message))
+      }
+    >
+      <Download size={16} /> {asked !== undefined ? tn(asked, 'Asked for {n} album', 'Asked for {n} albums') : t('Get the missing songs')}
+    </button>
   );
 }
 
@@ -105,6 +132,11 @@ export function Playlist() {
           )
         }
       />
+      {p.mine && p.waiting && p.waiting.length > 0 && (
+        <div className="section section--tight">
+          <GetMissing waiting={p.waiting} />
+        </div>
+      )}
       <div className="section">
         {p.tracks.length || p.waiting?.length ? (
           <TrackList
@@ -155,13 +187,14 @@ export function Liked() {
   const me = useMe();
   if (liked.isLoading) return <Spinner />;
   const tracks = liked.data?.tracks ?? [];
+  const waiting = liked.data?.waiting ?? [];
   const source = { kind: 'liked' as const, title: t('Liked songs') };
   return (
     <div className="page--flush">
       <Header
         kind={t('Playlist')}
         title={t('Liked songs')}
-        meta={`${me?.name ?? ''} · ${songs(tracks.length)}, ${length(sum(tracks))}`}
+        meta={`${me?.name ?? ''} · ${songs(tracks.length)}, ${length(sum(tracks))}${waiting.length ? ` · ${tn(waiting.length, '{n} not here yet', '{n} not here yet')}` : ''}`}
         cover={
           <div style={{ width: 220, flex: 'none' }}>
             <LikedCover />
@@ -169,7 +202,12 @@ export function Liked() {
         }
       />
       <PlayActions tracks={tracks} source={source} want={{ id: 'liked', kind: 'liked', title: t('Liked songs'), tracks }} />
-      <div className="section">{tracks.length ? <TrackList tracks={tracks} source={source} /> : <Empty>{t('No liked songs yet')}</Empty>}</div>
+      {waiting.length > 0 && (
+        <div className="section section--tight">
+          <GetMissing waiting={waiting} />
+        </div>
+      )}
+      <div className="section">{tracks.length || waiting.length ? <TrackList tracks={tracks} waiting={waiting} source={source} /> : <Empty>{t('No liked songs yet')}</Empty>}</div>
     </div>
   );
 }

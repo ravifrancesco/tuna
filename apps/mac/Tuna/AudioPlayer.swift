@@ -388,7 +388,7 @@ final class AudioPlayer: NSObject {
             if i < tracks.count { return tracks[i] }
             return repeatMode == "all" && i - tracks.count < index ? tracks[i - tracks.count] : nil
         }
-        cache.keep(upcoming.compactMap { t in t.url.map { (t.id, $0) } }, playing: tracks[index].url)
+        cache.keep(upcoming.compactMap { t in t.url.map { (t.id, $0) } }, playing: tracks[index].url.map { (tracks[index].id, $0) })
     }
 
     private func makeItem(_ track: Track) -> AVPlayerItem {
@@ -411,6 +411,7 @@ final class AudioPlayer: NSObject {
             asset = AVURLAsset(url: track.url ?? URL(string: "tuna-missing://song")!)
         }
         let item = AVPlayerItem(asset: asset)
+        Equalizer.shared.attach(to: item)
         let key = ObjectIdentifier(item)
         loaders[key] = itemLoader
         itemObservations[key] = item.observe(\.status) { [weak self] item, _ in

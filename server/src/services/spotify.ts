@@ -5,9 +5,9 @@ import { log } from '../lib/log';
 import { HttpError } from '../lib/upstream';
 import { unzip } from '../lib/zip';
 import { findAlbum, findArtist, libraryIndex, norm, playlists, toTrack } from './library';
-import { keepImported } from './imported';
+import { keepImported, LIKED } from './imported';
 import { addListens } from './listens';
-import { matcher, songIndex, type Song } from './matching';
+import { cleanAlbum, matcher, songIndex, type Song } from './matching';
 
 /**
  * Bringing someone's music over from Spotify: the ZIP from Spotify's "Download your data"
@@ -100,11 +100,15 @@ function readCsv(file: string, text: string, into: Found) {
   const titleAt = head.indexOf('track name');
   const artistAt = head.findIndex((h) => h.startsWith('artist name'));
   const albumAt = head.indexOf('album name');
+  const addedAt = head.indexOf('added at');
   if (titleAt < 0 || artistAt < 0) return;
-  const songs = rows.flatMap((r) => (r[titleAt]?.trim() && r[artistAt]?.trim() ? [{ title: r[titleAt].trim(), artist: r[artistAt].trim(), album: r[albumAt]?.trim() || undefined }] : []));
+  const songs = rows.flatMap((r) =>
+    r[titleAt]?.trim() && r[artistAt]?.trim() ? [{ title: r[titleAt].trim(), artist: r[artistAt].trim(), album: r[albumAt]?.trim() || undefined, added: Date.parse(r[addedAt] ?? '') || 0 }] : [],
+  );
   const name = file.replace(/\.csv$/i, '').replace(/_/g, ' ').trim();
-  if (/^liked songs$/i.test(name)) into.liked.push(...songs);
-  else if (songs.length) into.playlists.push({ name: name.charAt(0).toUpperCase() + name.slice(1), songs });
+  // Liked songs newest first, as Spotify shows them; a playlist in its own order.
+  if (/^liked songs$/i.test(name)) into.liked.push(...[...songs].sort((a, b) => b.added - a.added).map(({ added: _, ...s }) => s));
+  else if (songs.length) into.playlists.push({ name: name.charAt(0).toUpperCase() + name.slice(1), songs: songs.map(({ added: _, ...s }) => s) });
 }
 
 function parseCsv(text: string): string[][] {
@@ -156,8 +160,9 @@ export async function importSpotify(auth: SubsonicAuth, username: string, name: 
     const key = `${norm(s.artist)}|${norm(s.title)}`;
     seen.set(key, Boolean(c) || Boolean(seen.get(key)));
     if (!c && s.album) {
-      const k = `${norm(s.artist)}|${norm(s.album)}`;
-      const m = missing.get(k) ?? { artist: s.artist, album: s.album, songs: new Set<string>(), plays: 0 };
+      // "Currents" and "Currents (Deluxe)" are one album to get.
+      const k = `${norm(s.artist)}|${norm(cleanAlbum(s.album))}`;
+      const m = missing.get(k) ?? { artist: s.artist, album: cleanAlbum(s.album), songs: new Set<string>(), plays: 0 };
       m.songs.add(norm(s.title));
       m.plays++;
       missing.set(k, m);
@@ -181,8 +186,12 @@ export async function importSpotify(auth: SubsonicAuth, username: string, name: 
     made++;
   }
 
-  const liked = [...new Set(into.liked.map(look).flatMap((c) => (c ? [c.id] : [])))];
+  // Liked songs: the ones here are liked now; all of them are kept, in Spotify's order, so the rest
+  // show where they belong and are liked as they arrive.
+  const likedFound = into.liked.map(look);
+  const liked = [...new Set(likedFound.flatMap((c) => (c ? [c.id] : [])))];
   for (const ids of chunks(liked)) await subsonic(auth, 'star', { id: ids });
+  if (into.liked.length) keepImported(username, LIKED, 'Liked songs', into.liked, likedFound.map((c) => c?.id));
 
   const lib = await libraryIndex(auth);
   const albums = [...new Set(into.albums.flatMap((a) => findAlbum(lib, undefined, a.artist, a.album) ?? []))];
@@ -207,7 +216,7 @@ export async function importSpotify(auth: SubsonicAuth, username: string, name: 
     missing: [...seen.values()].filter((found) => !found).length,
     missingAlbums: [...missing.values()]
       .sort((a, b) => b.plays - a.plays || b.songs.size - a.songs.size)
-      .slice(0, 50)
+      .slice(0, 2000)
       .map((m) => ({ artist: m.artist, album: m.album, songs: m.songs.size, plays: m.plays })),
   };
   log.info(

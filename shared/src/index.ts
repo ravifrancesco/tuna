@@ -164,6 +164,15 @@ export interface ListeningStats {
   since?: string;
 }
 
+/** An album asked for by its names (Get all, a playlist's missing songs) that couldn't be found. */
+export interface MissedAlbum {
+  artist: string;
+  album: string;
+  by: string;
+  /** When (ms since 1970). */
+  at: number;
+}
+
 /** Someone's year in music, from the plays Tuna counted. */
 export interface YearInReview {
   year: number;

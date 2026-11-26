@@ -18,7 +18,7 @@ export interface Hello {
   version: string;
   /** File formats the app's player plays as they are ("mp3", "aac", "m4a", "flac", "alac", "wav", "opus", "ogg"). */
   formats: string[];
-  /** What else the app can do: audio, outputs, tunnel, update, keepAwake, mobileData, changeServer, downloads, sleep, haptics, cast. */
+  /** What else the app can do: audio, outputs, tunnel, update, keepAwake, mobileData, changeServer, downloads, sleep, haptics, cast, eq. */
   features: string[];
 }
 
@@ -156,6 +156,8 @@ export const nativeAudio = has('audio')
       outputs: has('outputs')
         ? (at?: DOMRect) => send('audio.outputs', at && { x: at.x, y: at.y, width: at.width, height: at.height })
         : undefined,
+      /** The equalizer, in the app's player (it keeps the last one, for music started without the page). */
+      eq: has('eq') ? (e: { on: boolean; gains: number[] }) => send('audio.eq', e) : undefined,
       /** The app keeps the sleep timer (so it stops with the screen off): minutes, end of the song, or off. */
       sleep: has('sleep') ? (t: { minutes?: number; endOfSong?: boolean }) => send('audio.sleep', t) : undefined,
       /** What the app is playing (after the page reloads while music plays on). */

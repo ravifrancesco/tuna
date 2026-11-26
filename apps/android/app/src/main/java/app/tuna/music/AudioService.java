@@ -9,7 +9,6 @@ import android.app.PendingIntent;
 import android.content.Intent;
 import android.net.ConnectivityManager;
 import android.net.Network;
-import android.net.NetworkCapabilities;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
@@ -33,11 +32,14 @@ import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
+import androidx.media3.common.audio.AudioProcessor;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DefaultDataSource;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.audio.AudioSink;
+import androidx.media3.exoplayer.audio.DefaultAudioSink;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy;
 import androidx.media3.extractor.DefaultExtractorsFactory;
@@ -66,7 +68,9 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The player: the queue the page hands over (docs/native-bridge.md), played by ExoPlayer in a
@@ -88,8 +92,8 @@ public final class AudioService extends MediaLibraryService {
     private static final SessionCommand LIKE = new SessionCommand("app.tuna.music.LIKE", Bundle.EMPTY);
     /** A song from the car's lists, as the page would have handed it over. */
     private static final String TRACK = "app.tuna.music.TRACK";
-    /** Songs kept ahead, on Wi-Fi and on mobile data. */
-    private static final int AHEAD = 3, AHEAD_MOBILE = 1;
+    /** Songs kept ahead (on mobile data too: the sound quality is the person's choice). */
+    private static final int AHEAD = 5;
     /** A long queue goes to the Chromecast this many songs at a time, and more as it gets there. */
     private static final int CAST_WINDOW = 50, CAST_MORE = 10;
     /** The player is there (downloads leave the tunnel to it when they finish). */
@@ -116,6 +120,8 @@ public final class AudioService extends MediaLibraryService {
     private final Handler handler = new Handler(Looper.getMainLooper());
     /** The phone's own player; the Chromecast's (phones with Google Play services); the one playing now. */
     private ExoPlayer exo;
+    /** In the phone's own player (a Chromecast plays as it is), as the page last set it. */
+    private final Equalizer equalizer = new Equalizer();
     private CastPlayer cast;
     private Player player;
     private CastContext castContext;
@@ -256,10 +262,23 @@ public final class AudioService extends MediaLibraryService {
         DefaultMediaSourceFactory sources = new DefaultMediaSourceFactory(new DefaultDataSource.Factory(this, http), extractors)
                 // A dropped connection gets a few more tries (time for the tunnel to come up).
                 .setLoadErrorHandlingPolicy(new DefaultLoadErrorHandlingPolicy(8));
-        // The device's own decoders first; FFmpeg (inside the app) for what it can't decode (ALAC…).
-        DefaultRenderersFactory renderers = new DefaultRenderersFactory(this)
+        // The device's own decoders first; FFmpeg (inside the app) for what it can't decode (ALAC…);
+        // the equalizer after either. (16-bit output, as by default: with float output ExoPlayer
+        // leaves its processors out for high-resolution files.)
+        DefaultRenderersFactory renderers = new DefaultRenderersFactory(this) {
+            @Override
+            protected AudioSink buildAudioSink(@NonNull Context context, boolean floatOutput, boolean playbackParams) {
+                return new DefaultAudioSink.Builder(context).setAudioProcessors(new AudioProcessor[] {equalizer}).build();
+            }
+        }
                 .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
                 .setEnableDecoderFallback(true);
+        // As the page last set it, so music started without it (the car, the lock screen) sounds the same.
+        try {
+            equalize(new JSONObject(Server.prefs(this).getString("eq", "{}")));
+        } catch (JSONException ignored) {
+            // nothing kept
+        }
         AudioAttributes music = new AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build();
         // (A playlist: the next song is loaded ahead and follows without a gap.)
         exo = new ExoPlayer.Builder(this, renderers)
@@ -438,7 +457,7 @@ public final class AudioService extends MediaLibraryService {
         exo = null;
         player = null;
         page = null;
-        ahead.want(new ArrayList<>(), new ArrayList<>());
+        ahead.want(new ArrayList<>(), new HashMap<>(), null);
         // A paused song's notification would stay behind, its buttons dead.
         NotificationManager notices = getSystemService(NotificationManager.class);
         if (notices != null) notices.cancel(DefaultMediaNotificationProvider.DEFAULT_NOTIFICATION_ID);
@@ -623,6 +642,31 @@ public final class AudioService extends MediaLibraryService {
         push();
     }
 
+    /** audio.eq: the equalizer, kept for next time. On a Chromecast it waits for the music to come back. */
+    void eq(JSONObject args) {
+        String kept = equalize(args);
+        if (kept != null && !kept.equals(Server.prefs(this).getString("eq", null))) Server.prefs(this).edit().putString("eq", kept).apply();
+    }
+
+    /** {on, gains} into the equalizer, gains within ±12 dB; what it's set to, as the same JSON. */
+    private String equalize(JSONObject args) {
+        boolean on = args.optBoolean("on");
+        JSONArray given = args.optJSONArray("gains");
+        double[] gains = new double[Equalizer.BANDS];
+        JSONArray kept = new JSONArray();
+        try {
+            for (int b = 0; b < gains.length; b++) {
+                double g = given == null ? 0 : given.optDouble(b, 0);
+                gains[b] = Double.isNaN(g) ? 0 : Math.max(-12, Math.min(12, g));
+                kept.put(gains[b]);
+            }
+            equalizer.set(on, gains);
+            return new JSONObject().put("on", on).put("gains", kept).toString();
+        } catch (JSONException e) {
+            return null;
+        }
+    }
+
     /** audio.liked from the page, or the heart here: every copy of the song in the queue, and the heart. */
     void liked(String id, boolean on) {
         for (JSONObject t : queue) {
@@ -728,7 +772,10 @@ public final class AudioService extends MediaLibraryService {
 
     // ---------- The queue kept ahead ----------
 
-    /** The next few songs fetched whole, once the one playing has loaded (not while it's on a Chromecast). */
+    /**
+     * The next few songs fetched whole, once the one playing has loaded (not while it's on a
+     * Chromecast). Songs whose address changed (another sound quality) lose their old copies.
+     */
     private void ahead() {
         if (editing) return;
         boolean ready = player == exo && exo.getPlaybackState() == Player.STATE_READY && !queue.isEmpty();
@@ -736,18 +783,19 @@ public final class AudioService extends MediaLibraryService {
         if (!ready && player == exo && exo.getPlaybackState() == Player.STATE_BUFFERING && aheadOf == index()) return;
         aheadOf = ready ? index() : -1;
         List<String> next = new ArrayList<>();
-        List<String> all = new ArrayList<>();
-        for (JSONObject t : queue) all.add(t.optString("url"));
+        Map<String, String> all = new HashMap<>();
+        for (JSONObject t : queue) all.put(t.optString("id"), t.optString("url"));
         if (ready) {
             int now = index();
             boolean around = exo.getRepeatMode() == Player.REPEAT_MODE_ALL;
-            int n = onMobileData() ? AHEAD_MOBILE : AHEAD;
-            for (int k = 1; k <= n && (around ? k < queue.size() : now + k < queue.size()); k++) {
+            for (int k = 1; k <= AHEAD && (around ? k < queue.size() : now + k < queue.size()); k++) {
                 JSONObject t = queue.get((now + k) % queue.size());
                 if (downloads.song(t.optString("id")) == null) next.add(t.optString("url"));
             }
         }
-        ahead.want(next, all);
+        // (The song playing carries on from the file it started with, whatever its address is now.)
+        MediaItem current = player == exo ? exo.getCurrentMediaItem() : null;
+        ahead.want(next, all, local(current) ? new File(current.localConfiguration.uri.getPath()) : null);
     }
 
     /** A song fetched ahead is here: it plays from the file wherever it's still to come in the queue. */
@@ -765,12 +813,6 @@ public final class AudioService extends MediaLibraryService {
 
     private static boolean local(@Nullable MediaItem item) {
         return item != null && item.localConfiguration != null && "file".equals(item.localConfiguration.uri.getScheme());
-    }
-
-    private boolean onMobileData() {
-        ConnectivityManager networks = getSystemService(ConnectivityManager.class);
-        NetworkCapabilities now = networks == null ? null : networks.getNetworkCapabilities(networks.getActiveNetwork());
-        return now != null && now.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR);
     }
 
     // ---------- On a Chromecast ----------
@@ -875,8 +917,6 @@ public final class AudioService extends MediaLibraryService {
             handler.post(() -> {
                 if (player == null) return;
                 if (page != null) page.rerouted();
-                // (Mobile data or Wi-Fi now: fewer or more songs ahead.)
-                ahead();
                 if (waitingForNetwork) {
                     handler.removeCallbacks(retry);
                     handler.postDelayed(retry, 500);

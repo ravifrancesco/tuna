@@ -1,4 +1,4 @@
-import type { Album, AlbumDetail, Artist, ArtistDetail, Connections, GetItem, GetState, Home, Listen, ListeningStats, Lyrics, Me, Mix, Person, Playlist, PlaylistDetail, Prefs, SearchResult, ServerInfo, SpotifyImport, StatsPeriod, Stocking, TogetherControl, TogetherRoom, TogetherSummary, Track, WorldAlbum, WorldAlbumDetail, WorldArtistDetail, YearInReview } from '@tuna/shared';
+import type { Album, AlbumDetail, Artist, ArtistDetail, Connections, GetItem, GetState, Home, Listen, ListeningStats, Lyrics, Me, MissedAlbum, Mix, Person, Playlist, PlaylistDetail, Prefs, SearchResult, ServerInfo, SpotifyImport, StatsPeriod, Stocking, TogetherControl, TogetherRoom, TogetherSummary, Track, WaitingSong, WorldAlbum, WorldAlbumDetail, WorldArtistDetail, YearInReview } from '@tuna/shared';
 import { language } from './i18n';
 import { app } from './lib/native';
 
@@ -111,7 +111,7 @@ export const api = {
   updatePlaylist: (id: string, change: { name?: string; add?: string[]; remove?: number[]; order?: string[] }) =>
     call<PlaylistDetail>('PUT', `/playlist/${encodeURIComponent(id)}`, change),
   deletePlaylist: (id: string) => call('DELETE', `/playlist/${encodeURIComponent(id)}`),
-  liked: () => call<{ tracks: Track[]; albums: Album[]; artists: Artist[] }>('GET', '/liked'),
+  liked: () => call<{ tracks: Track[]; albums: Album[]; artists: Artist[]; waiting?: WaitingSong[] }>('GET', '/liked'),
   like: (kind: 'track' | 'album' | 'artist', id: string, on: boolean) => call('POST', '/like', { kind, id, on }),
   search: (query: string) => call<Omit<SearchResult, 'world'>>('GET', `/search${q({ q: query })}`),
   searchWorld: (query: string) => call<SearchResult['world']>('GET', `/search/world${q({ q: query })}`),
@@ -132,6 +132,7 @@ export const api = {
   stocking: () => call<Stocking>('GET', '/stocking'),
   saveStocking: (perWeek: number) => call<Stocking>('PUT', '/stocking', { perWeek }),
   getMany: (albums: Array<{ artist: string; album: string }>) => call<{ asked: number }>('POST', '/get/many', { albums }),
+  missed: () => call<MissedAlbum[]>('GET', '/get/missed'),
   together: {
     list: () => call<TogetherSummary[]>('GET', '/together'),
     start: (body: { queue: Track[]; index: number; position: number; playing: boolean; title?: string }) => call<TogetherRoom>('POST', '/together', body),

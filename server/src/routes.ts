@@ -7,12 +7,12 @@ import { HttpError } from './lib/upstream';
 import { authOf, mediaSessionOf, requireAdmin, requireUser, setCookie, signIn, signOut, sessionOf, COOKIE, type Session } from './sessions';
 import * as getting from './services/getting';
 import { home } from './services/home';
-import { waitingIn } from './services/imported';
+import { LIKED, orderLiked, waitingIn } from './services/imported';
 import { addPerson, changePerson, people, removePerson } from './services/household';
 import * as library from './services/library';
 import { listeningHistory, listeningStats, yearInReview } from './services/listens';
 import { importSpotify } from './services/spotify';
-import { getMany, saveStocking, stocking } from './services/stocking';
+import { getMany, missedAlbums, saveStocking, stocking } from './services/stocking';
 import * as together from './services/together';
 import { openLine } from './lib/sse';
 import { lyrics } from './services/lyrics';
@@ -131,7 +131,12 @@ export async function apiRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.get('/liked', async (req) => library.liked(authOf(requireUser(req))));
+  app.get('/liked', async (req) => {
+    const s = requireUser(req);
+    const l = await library.liked(authOf(s));
+    const tracks = orderLiked(s.username, l.tracks);
+    return { ...l, tracks, waiting: waitingIn(s.username, LIKED, tracks) };
+  });
   app.post<{ Body: { kind: 'track' | 'album' | 'artist'; id: string; on: boolean } }>('/like', async (req) => {
     const { kind, id, on } = req.body ?? ({} as never);
     if (!['track', 'album', 'artist'].includes(kind) || !id) throw new HttpError(400, 'kind and id');
@@ -181,6 +186,7 @@ export async function apiRoutes(app: FastifyInstance) {
     return getting.list();
   });
   app.post<{ Body: { albums?: Array<{ artist: string; album: string }> } }>('/get/many', async (req) => ({ asked: getMany(requireUser(req), req.body?.albums ?? []) }));
+  app.get('/get/missed', async (req) => (requireUser(req), missedAlbums()));
 
   // ---- Play together -----------------------------------------------------------------------------
   app.get('/together', async (req) => {

@@ -10,9 +10,17 @@ export interface Song {
   album?: string;
 }
 
+/** "Currents (Deluxe Edition)", "Abbey Road (Remastered 2019)", "Song - Single" are "Currents", "Abbey Road", "Song". */
+export const cleanAlbum = (s: string) =>
+  s
+    .replace(/\s*[([][^)\]]*\b(deluxe|remaster(ed)?|edition|expanded|anniversary|bonus|version|mono|stereo|explicit|reissue)\b[^)\]]*[)\]]/gi, '')
+    .replace(/\s+-\s+(single|ep)$/i, '')
+    .replace(/\s+-\s+.*\b(remaster(ed)?|edition|version)\b.*$/i, '')
+    .trim() || s;
+
 /** "Song - Remastered 2011" is "Song"; "A, B & C" is any of them. */
 const titles = (s: string) => [...new Set([norm(s), norm(s.replace(/\s+-\s+.*$/, ''))])].filter(Boolean);
-const artistsOf = (s: string) =>
+export const artistsOf = (s: string) =>
   [...new Set([norm(s), ...s.split(/\s*(?:,|;|\/|&|\bfeat\.?|\bft\.?|\bfeaturing)\s*/i).map(norm)])].filter(Boolean);
 
 export interface SongIndex {

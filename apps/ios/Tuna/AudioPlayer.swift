@@ -221,7 +221,7 @@ final class AudioPlayer: NSObject {
         guard tracks.indices.contains(i) else { return }
         index = i
         wantsPlay = play
-        let next = AVPlayerItem(url: source(tracks[i]))
+        let next = makeItem(tracks[i])
         item = next
         ahead = nil
         seekTarget = nil
@@ -313,10 +313,17 @@ final class AudioPlayer: NSObject {
         for queued in player.items() where queued !== current { player.remove(queued) }
         ahead = nil
         guard let n else { return }
-        let next = AVPlayerItem(url: source(tracks[n]))
+        let next = makeItem(tracks[n])
         guard player.canInsert(next, after: current) else { return }
         player.insert(next, after: current)
         ahead = (next, n)
+    }
+
+    /// A song to play, with the equalizer.
+    private func makeItem(_ track: Track) -> AVPlayerItem {
+        let item = AVPlayerItem(url: source(track))
+        Equalizer.shared.attach(to: item)
+        return item
     }
 
     /// The song's file when it's downloaded or kept ahead (no server needed, and no data used), else
@@ -333,7 +340,7 @@ final class AudioPlayer: NSObject {
             if i < tracks.count { return tracks[i] }
             return repeatMode == "all" && i - tracks.count < index ? tracks[i - tracks.count] : nil
         }
-        cache.keep(upcoming.map { ($0.id, $0.url) }, playing: tracks[index].url)
+        cache.keep(upcoming.map { ($0.id, $0.url) }, playing: (tracks[index].id, tracks[index].url))
     }
 
     private func activate() {

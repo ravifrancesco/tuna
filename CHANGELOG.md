@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.3.0 (2026-11-26)
+
+**New**
+- **Equalizer**: six bands and presets (bass boost, vocals, rock, small speakers…), in the player's
+  menu and in Settings. It's kept on each device, for every song, in the iPhone, Mac and Android
+  apps and in a browser. Not on Windows yet, and not while casting. On iPhone and Mac, songs have
+  a short pause between them while it's on.
+- **Download quality**: Normal, High or Original for the songs you download on a device, in
+  Settings. High is the default (about 8 MB a song instead of 30 MB in FLAC).
+- **Get the missing songs**: on your playlists from Spotify and on Liked songs, one button asks for
+  every album that's missing, in the playlist's order.
+- **Couldn't find**: On its way lists the albums Tuna couldn't find when asked for them by name.
+
+**Changed**
+- **Liked songs from Spotify** are all there, in Spotify's order: songs not in the library yet show
+  greyed where they belong and are liked by themselves as they arrive. Likes made in Tuna come first.
+- **Get all** asks for every missing album (it stopped at 100), most played first, a few seconds
+  apart so Lidarr and the indexers aren't flooded.
+- Albums are found through Lidarr first, and without Spotify's extras: "Currents (Deluxe Edition)"
+  or "Currents - Single" is looked for as "Currents".
+- **The apps play ahead** five songs, on Wi-Fi and mobile data alike, in the sound quality you
+  chose: when it changes, the songs kept ahead are fetched again.
+
+**Fixed**
+- Liked songs from Spotify showed only the songs already in the library.
+- Some songs from Spotify playlists were never asked for (album names like "… (Deluxe Edition)").
+
+To update: the server (pull the new image) and the apps.
+
 ## 0.2.0 (2026-11-26)
 
 The first release on GitHub, with everything in 0.1.0 below.

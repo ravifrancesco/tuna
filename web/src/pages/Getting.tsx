@@ -7,6 +7,27 @@ import { ago } from '../lib/format';
 import { artUrl } from '../lib/session';
 
 /** What's been asked for, and where each one is. */
+/** Albums asked for by name (Get all, a playlist's missing songs) that couldn't be found. */
+function Missed() {
+  const missed = useQuery({ queryKey: ['missed'], queryFn: api.missed, refetchInterval: 30_000 });
+  if (!missed.data?.length) return null;
+  return (
+    <section className="section">
+      <h2>{t("Couldn't find")}</h2>
+      {missed.data.slice(0, 100).map((m) => (
+        <div className="list-item list-item--quiet" key={`${m.artist}|${m.album}`}>
+          <div className="list-item__text">
+            <b>{m.album}</b>
+            <small>
+              {m.artist} · {t('{name}, {when}', { name: m.by, when: ago(new Date(m.at).toISOString()) })}
+            </small>
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 export function Getting() {
   const list = useQuery({
     queryKey: ['getting'],
@@ -30,6 +51,7 @@ export function Getting() {
           <GetButton album={{ mbid: x.mbid, title: x.title, artist: x.artist, get: x.get }} />
         </div>
       ))}
+      <Missed />
     </div>
   );
 }

@@ -10,6 +10,7 @@
 		03A8FE1795C81D6920B3CED2 /* OfflineStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F2C3A2C6AA37B85D9E502DB /* OfflineStore.swift */; };
 		24B0283711A7DB4E5CE1B696 /* loading.html in Resources */ = {isa = PBXBuildFile; fileRef = 44F68CFD74D9DB203FC2B6F0 /* loading.html */; };
 		44736A89D992271A780D3786 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E68EDBBB328ED70B2547B966 /* Assets.xcassets */; };
+		54720FEBADC91CAD00520629 /* Equalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6985CB48AFEBCCF303B1C745 /* Equalizer.swift */; };
 		58822EC3BE05421BDF80D4B8 /* AudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFE18F516D43238D4F89F9EF /* AudioPlayer.swift */; };
 		64688A2F9E4A5530948721B3 /* setup.html in Resources */ = {isa = PBXBuildFile; fileRef = 50E2148438E7C0D69A8EEB96 /* setup.html */; };
 		69E838349EE6EDE666A0140C /* Bridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C519BA89C7725E894F0574E9 /* Bridge.swift */; };
@@ -32,6 +33,7 @@
 		44F68CFD74D9DB203FC2B6F0 /* loading.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = loading.html; sourceTree = "<group>"; };
 		50E2148438E7C0D69A8EEB96 /* setup.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = setup.html; sourceTree = "<group>"; };
 		5D3C68D1DCA1DFE621245FD7 /* WebViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebViewController.swift; sourceTree = "<group>"; };
+		6985CB48AFEBCCF303B1C745 /* Equalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Equalizer.swift; sourceTree = "<group>"; };
 		80498EAF62597E3C5F1DF0CE /* offline.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = offline.html; sourceTree = "<group>"; };
 		82BD0E593186494829F25973 /* Server.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Server.swift; sourceTree = "<group>"; };
 		8A7A8DD6A53695FCC4816075 /* LocalScheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalScheme.swift; sourceTree = "<group>"; };
@@ -76,6 +78,7 @@
 				E68EDBBB328ED70B2547B966 /* Assets.xcassets */,
 				BFE18F516D43238D4F89F9EF /* AudioPlayer.swift */,
 				C519BA89C7725E894F0574E9 /* Bridge.swift */,
+				6985CB48AFEBCCF303B1C745 /* Equalizer.swift */,
 				1318E6D975E6A35ACFC2149D /* Info.plist */,
 				8A7A8DD6A53695FCC4816075 /* LocalScheme.swift */,
 				3F2C3A2C6AA37B85D9E502DB /* OfflineStore.swift */,
@@ -177,6 +180,7 @@
 			files = (
 				58822EC3BE05421BDF80D4B8 /* AudioPlayer.swift in Sources */,
 				69E838349EE6EDE666A0140C /* Bridge.swift in Sources */,
+				54720FEBADC91CAD00520629 /* Equalizer.swift in Sources */,
 				FB3B745A1CF01663748385A3 /* LocalScheme.swift in Sources */,
 				03A8FE1795C81D6920B3CED2 /* OfflineStore.swift in Sources */,
 				875E3F064EBE354747AC791E /* QueueCache.swift in Sources */,
@@ -249,7 +253,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				MARKETING_VERSION = 0.2.0;
+				MARKETING_VERSION = 0.3.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -355,7 +359,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				MARKETING_VERSION = 0.2.0;
+				MARKETING_VERSION = 0.3.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

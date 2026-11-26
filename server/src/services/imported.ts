@@ -6,7 +6,7 @@ import { config } from '../config';
 import { log } from '../lib/log';
 import { UpstreamError } from '../lib/upstream';
 import { authFor } from '../sessions';
-import { playlist } from './library';
+import { liked, playlist } from './library';
 import { matcher, songIndex, type Song } from './matching';
 
 /**
@@ -45,12 +45,29 @@ function save(username: string, list: Imported[]) {
   fs.renameSync(tmp, fileOf(username));
 }
 
+/** Liked songs from Spotify are kept the same way, under this id. */
+export const LIKED = 'liked';
+
 /** An imported playlist, as Spotify had it; `here` are the songs that went in. */
 export function keepImported(username: string, playlistId: string, name: string, songs: Song[], here: (string | undefined)[]) {
   const list = load(username).filter((x) => x.playlistId !== playlistId);
   const added = [...new Set(here.filter((id): id is string => Boolean(id)))];
   list.push({ playlistId, name, songs: songs.map((s, i) => ({ ...s, id: here[i] })), added, removed: [] });
   save(username, list);
+}
+
+/**
+ * Liked songs in Spotify's order: likes made here since come first (newest first, as they are), then
+ * the imported ones as Spotify listed them.
+ */
+export function orderLiked(username: string, tracks: Track[]): Track[] {
+  const kept = load(username).find((x) => x.playlistId === LIKED);
+  if (!kept) return tracks;
+  const at = new Map<string, number>();
+  kept.songs.forEach((s, i) => s.id && !at.has(s.id) && at.set(s.id, i));
+  const ours = tracks.filter((tr) => !at.has(tr.id));
+  const theirs = tracks.filter((tr) => at.has(tr.id)).sort((a, b) => at.get(a.id)! - at.get(b.id)!);
+  return [...ours, ...theirs];
 }
 
 /** The songs of an imported playlist that aren't in it yet, each after the song it follows. */
@@ -61,7 +78,9 @@ export function waitingIn(username: string, playlistId: string, tracks: Track[])
   tracks.forEach((tr, i) => at.has(tr.id) || at.set(tr.id, i));
   const removed = new Set(kept.removed);
   const out: WaitingSong[] = [];
-  let after = -1;
+  // Songs before the first one here go just above it (in Liked songs, below the likes made in Tuna).
+  const first = kept.songs.find((s) => s.id && at.has(s.id));
+  let after = first ? at.get(first.id!)! - 1 : playlistId === LIKED ? tracks.length - 1 : -1;
   for (const s of kept.songs) {
     if (s.id && at.has(s.id)) after = at.get(s.id)!;
     else if (!(s.id && removed.has(s.id))) out.push({ title: s.title, artist: s.artist, album: s.album, after });
@@ -85,7 +104,7 @@ async function fill(auth: SubsonicAuth, username: string) {
   for (const kept of list) {
     let current: string[];
     try {
-      current = (await playlist(auth, kept.playlistId)).tracks.map((tr) => tr.id);
+      current = (kept.playlistId === LIKED ? await liked(auth) : await playlist(auth, kept.playlistId)).tracks.map((tr) => tr.id);
     } catch (err) {
       // Deleted since: nothing more to fill.
       if (err instanceof UpstreamError && err.status === 404) continue;
@@ -116,9 +135,11 @@ async function fill(auth: SubsonicAuth, username: string) {
       arrived.push(s.id);
     });
     if (!arrived.length) continue;
-    await write(auth, kept.playlistId, order);
+    // Liked songs are liked (their order is Spotify's, kept above); a playlist is written again.
+    if (kept.playlistId === LIKED) for (let i = 0; i < arrived.length; i += CHUNK) await subsonic(auth, 'star', { id: arrived.slice(i, i + CHUNK) });
+    else await write(auth, kept.playlistId, order);
     kept.added.push(...arrived);
-    log.info('spotify', `${arrived.length} songs from Spotify went into "${kept.name}" for ${username}`);
+    log.info('spotify', `${arrived.length} song${arrived.length === 1 ? '' : 's'} from Spotify went into "${kept.name}" for ${username}`);
   }
   save(username, keep);
 }

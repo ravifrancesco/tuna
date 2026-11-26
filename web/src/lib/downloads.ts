@@ -65,8 +65,26 @@ export const useDownloads = () => useSyncExternalStore(subscribe, () => list);
 export const useDownload = (id: string) => useSyncExternalStore(subscribe, () => list.find((d) => d.id === id));
 export const useOnDevice = (trackId: string) => useSyncExternalStore(subscribe, () => ready.has(trackId));
 
-/** Downloads are High (or Original for who chose Original), whatever's playing now. */
-const level = () => (getMe()?.prefs.quality === 'original' ? 'original' : 'high');
+/** How good (and how big) downloads on this device are: kept here, as a phone may want smaller files. */
+export type DownloadQuality = 'normal' | 'high' | 'original';
+const QUALITY_KEY = 'tuna.download.quality';
+export function downloadQuality(): DownloadQuality {
+  try {
+    const kept = localStorage.getItem(QUALITY_KEY);
+    if (kept === 'normal' || kept === 'high' || kept === 'original') return kept;
+  } catch {
+    /* private browsing */
+  }
+  return getMe()?.prefs.quality === 'original' ? 'original' : 'high';
+}
+export function setDownloadQuality(q: DownloadQuality) {
+  try {
+    localStorage.setItem(QUALITY_KEY, q);
+  } catch {
+    /* not kept */
+  }
+}
+const level = downloadQuality;
 
 export function download(d: { id: string; kind: NativeDownload['kind']; title: string; subtitle?: string; cover?: string; tracks: Track[] }) {
   // dl=1: fetching a song to keep isn't playing it.

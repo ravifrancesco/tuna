@@ -108,4 +108,9 @@ export default {
   '{n} so far this week': '{n} finora questa settimana',
   '{n} song isn\'t in the library, from:': '{n} brano non è nella libreria, da:',
   '{n} songs aren\'t in the library, from:': '{n} brani non sono nella libreria, da:',
+  'Download quality': 'Qualità dei download',
+  'About 5 MB a song': 'Circa 5 MB a brano',
+  'About 8 MB a song': 'Circa 8 MB a brano',
+  'The file as it is: about 30 MB a song in FLAC': 'Il file così com’è: circa 30 MB a brano in FLAC',
+  'For new downloads': 'Per i nuovi download',
 } as Record<string, string>;

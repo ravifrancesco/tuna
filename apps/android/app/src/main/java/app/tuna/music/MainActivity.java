@@ -654,6 +654,7 @@ public class MainActivity extends Activity {
                 if (!offline) features.put("sleep");
                 if (!tv && !offline) features.put("haptics");
                 if (router != null && !offline) features.put("cast");
+                features.put("eq");
                 return new JSONObject()
                         .put("platform", tv ? "androidtv" : "android")
                         .put("version", BuildConfig.TUNA_VERSION)
@@ -732,6 +733,9 @@ public class MainActivity extends Activity {
                     runOnUiThread(() -> withAudio(a -> a.sleep(Double.isNaN(minutes) ? 0 : minutes, endOfSong)));
                     break;
                 }
+                case "audio.eq":
+                    runOnUiThread(() -> withAudio(a -> a.eq(args)));
+                    break;
                 case "app.haptic": {
                     if (tv) break;
                     boolean success = "success".equals(args.optString("style"));

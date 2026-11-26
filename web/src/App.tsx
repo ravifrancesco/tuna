@@ -12,6 +12,7 @@ import { MiniPlayer } from "./components/PlayerBar";
 import { shouldShowSplash, Splash } from "./components/Splash";
 import { JoinRoom, TogetherSheetHost } from "./components/Together";
 import { SleepSheetHost } from "./components/Sleep";
+import { EqualizerSheetHost } from "./components/Equalizer";
 import { Empty, Toasts } from "./components/ui";
 import { t } from "./i18n";
 import {
@@ -175,6 +176,7 @@ export function App() {
         <PlaylistPickerHost />
         <TogetherSheetHost />
         <SleepSheetHost />
+        <EqualizerSheetHost />
         <Toasts />
       </BrowserRouter>
     );

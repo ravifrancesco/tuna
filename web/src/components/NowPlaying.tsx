@@ -12,7 +12,9 @@ import { QUALITIES, setQuality } from '../lib/quality';
 import { useMe } from '../lib/session';
 import { useTints } from '../lib/tint';
 import { Item, showMenu, TrackMenu } from './Menu';
+import { EqualizerItem } from './Equalizer';
 import { SleepChip, SleepItem } from './Sleep';
+import { hasEq } from '../lib/eq';
 import { TogetherChip, TogetherItem } from './Together';
 import { Controls, LikeNow } from './PlayerBar';
 import { WaveProgress } from './Waveform';
@@ -148,6 +150,7 @@ export function NowPlaying({ tab: firstTab, onClose }: { tab?: 'lyrics' | 'queue
                 <hr />
                 <TogetherItem />
                 <SleepItem />
+                {hasEq && <EqualizerItem />}
               </>,
             )
           }

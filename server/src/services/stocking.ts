@@ -15,7 +15,8 @@ import { adminAuth, type Session } from '../sessions';
 import { asked, getAs } from './getting';
 import { artists as allArtists, findAlbum, libraryIndex, norm } from './library';
 import { listeners, listensSince } from './listens';
-import { matcher, songIndex } from './matching';
+import * as lidarr from '../clients/lidarr';
+import { artistsOf, cleanAlbum, matcher, songIndex } from './matching';
 import { everyone } from './prefs';
 
 /**
@@ -35,9 +36,17 @@ interface Pick {
   why: StockingWhy;
   at: number;
 }
+/** An album asked for by its names that couldn't be found (newest first). */
+interface Missed {
+  artist: string;
+  album: string;
+  by: string;
+  at: number;
+}
 interface Saved {
   perWeek: number;
   picks: Pick[];
+  missed?: Missed[];
 }
 
 const FILE = () => path.join(config.dataDir, 'stocking.json');
@@ -66,12 +75,34 @@ let working = false;
 
 const quote = (s: string) => `"${s.replace(/(["\\])/g, '\\$1')}"`;
 
-/** An album known only by its names, found on MusicBrainz. */
-async function resolve(artist: string, title: string) {
-  const groups = await settle(mbSearchAlbums(`releasegroup:${quote(title)} AND artist:${quote(artist)}`), []);
-  const byArtist = (g: (typeof groups)[number]) => (g['artist-credit'] ?? []).some((c) => norm(c.name) === norm(artist) || norm(c.artist.name) === norm(artist));
-  return groups.find((g) => norm(g.title) === norm(title) && byArtist(g)) ?? groups.find((g) => (g.score ?? 0) >= 95 && byArtist(g));
+/**
+ * An album known only by its names (as Spotify writes them): through Lidarr's own search first (what
+ * Get can fetch), then MusicBrainz; "Currents (Deluxe Edition)" is looked for as "Currents".
+ */
+async function resolve(artist: string, title: string): Promise<{ mbid: string; artistMbid?: string; title: string; artist: string } | undefined> {
+  const name = cleanAlbum(title);
+  const credited = (n: string | undefined) => Boolean(n) && artistsOf(artist).some((a) => artistsOf(n!).includes(a));
+  const same = (t: string) => norm(t) === norm(name) || norm(cleanAlbum(t)) === norm(name);
+  if (has.lidarr()) {
+    const found = (await settle(lidarr.findAlbums(`${artist} ${name}`), [])).filter((a) => credited(a.artist?.artistName));
+    const hit = found.find((a) => same(a.title));
+    if (hit) return { mbid: hit.foreignAlbumId, artistMbid: hit.artist?.foreignArtistId, title: hit.title, artist: hit.artist?.artistName ?? artist };
+  }
+  const groups = await settle(mbSearchAlbums(`releasegroup:${quote(name)} AND artist:${quote(artist)}`), []);
+  const byArtist = (g: (typeof groups)[number]) => (g['artist-credit'] ?? []).some((c) => credited(c.name) || credited(c.artist.name));
+  const g = groups.find((x) => same(x.title) && byArtist(x)) ?? groups.find((x) => (x.score ?? 0) >= 95 && byArtist(x));
+  return g && { mbid: g.id, artistMbid: g['artist-credit']?.[0]?.artist.id, title: g.title, artist: g['artist-credit']?.[0]?.name ?? artist };
 }
+
+function missed(w: Wanted, found: boolean) {
+  const others = (saved.missed ?? []).filter((m) => !(norm(m.artist) === norm(w.artist) && norm(m.album) === norm(w.title)));
+  saved = { ...saved, missed: found ? others : [{ artist: w.artist, album: w.title, by: w.by, at: Date.now() }, ...others].slice(0, 300) };
+  save();
+  if (!found) log.info('get', `Couldn't find "${w.title}" by ${w.artist}`);
+}
+
+/** What couldn't be found when asked for by name (Get all, a playlist's missing songs). */
+export const missedAlbums = () => saved.missed ?? [];
 
 function enqueue(items: Wanted[]) {
   queue.push(...items);
@@ -86,33 +117,38 @@ async function work() {
       let { mbid, artistMbid, title, artist } = w;
       if (!mbid) {
         const g = await resolve(artist, title);
-        if (!g) continue;
-        mbid = g.id;
-        artistMbid = g['artist-credit']?.[0]?.artist.id;
-        title = g.title;
-        artist = g['artist-credit']?.[0]?.name ?? artist;
+        if (!g) {
+          missed(w, false);
+          continue;
+        }
+        ({ mbid, artistMbid, title, artist } = g);
       }
+      if (!w.why) missed(w, true);
       if (asked(mbid)) continue;
       const auth = adminAuth();
       if (auth && findAlbum(await libraryIndex(auth), mbid, artist, title)) continue;
       await getAs(w.by, { mbid, artistMbid, title, artist });
+      // A few seconds between albums, so Lidarr and the indexers aren't flooded by a big Get all.
+      await new Promise((r) => setTimeout(r, 3000));
       if (w.why) {
         saved = { ...saved, picks: [...saved.picks, { mbid, title, artist, why: w.why, at: Date.now() }].slice(-500) };
         save();
       }
     } catch (err) {
       log.debug('stocking', `"${w.title}" by ${w.artist}: ${String(err)}`);
+      if (!w.why && !w.mbid) missed(w, false);
     }
   }
   working = false;
 }
 
-/** "Get all": the albums a Spotify import found missing, most played first. */
+/** "Get all" and a playlist's missing songs: albums by their names, in the order given (most wanted first). */
 export function getMany(session: Session, albums: Array<{ artist: string; album: string }>): number {
   if (!has.lidarr()) throw new HttpError(409, t('Getting music needs Lidarr: an admin can add it in Settings → Connections'));
-  const list = albums.filter((a) => a.artist && a.album).slice(0, 100);
+  const waiting = new Set(queue.map((w) => `${norm(w.artist)}|${norm(cleanAlbum(w.title))}`));
+  const list = albums.filter((a) => a.artist && a.album && !waiting.has(`${norm(a.artist)}|${norm(cleanAlbum(a.album))}`)).slice(0, 2000);
   enqueue(list.map((a) => ({ by: session.name, artist: a.artist, title: a.album })));
-  log.info('get', `${session.name} asked for ${list.length} albums at once`);
+  log.info('get', `${session.name} asked for ${list.length} album${list.length === 1 ? '' : 's'} at once`);
   return list.length;
 }
 

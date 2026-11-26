@@ -14,15 +14,15 @@ enum Bridge {
             // What AVPlayer plays as it is; the server converts anything else.
             "formats": ["mp3", "aac", "m4a", "alac", "flac", "wav"],
             // Haptics: iPhones only (iPads don't vibrate).
-            "features": ["audio", "changeServer", "downloads", "mobileData", "outputs", "sleep"]
+            "features": ["audio", "changeServer", "downloads", "eq", "mobileData", "outputs", "sleep"]
                 + (UIDevice.current.userInterfaceIdiom == .phone ? ["haptics"] : []),
         ]
     }
 
-    /// The app's own pages (the offline page): only the player and the downloads.
+    /// The app's own pages (the offline page): only the player (with its equalizer) and the downloads.
     static var script: String {
         var offline = hello
-        offline["features"] = ["audio", "downloads"]
+        offline["features"] = ["audio", "downloads", "eq"]
         return "window.tunaHello = location.protocol === '\(LocalScheme.scheme):' ? \(json(offline)) : \(json(hello));"
     }
 
@@ -84,6 +84,8 @@ final class BridgeHandler: NSObject, WKScriptMessageHandler {
             controller.showOutputs(at: CGRect(x: n("x"), y: n("y"), width: n("width"), height: n("height")))
         case "audio.sleep":
             player.sleep(minutes: (args["minutes"] as? NSNumber)?.doubleValue, endOfSong: args["endOfSong"] as? Bool ?? false)
+        case "audio.eq":
+            Equalizer.shared.set(args)
         case "app.haptic":
             if args["style"] as? String == "success" {
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
