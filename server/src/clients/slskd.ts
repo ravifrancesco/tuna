@@ -39,6 +39,8 @@ export interface STransfer {
   /** "Queued, Remotely", "InProgress", "Completed, Succeeded", "Completed, Errored"… */
   state: string;
   percentComplete?: number;
+  /** Why it failed, as the other person or slskd put it ("Overwhelmed with requests; try again later"). */
+  exception?: string;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.9 (2026-11-26)
+
+**Fixed**
+- **Songs got stuck.** When Lidarr couldn't look up a few songs ("Invalid response received from
+  LidarrAPI"), Tuna tried those same songs every 10 seconds and never got to the rest of the list.
+  Now such a song is looked up through MusicBrainz instead; if that fails too, it's tried again in 1,
+  5 and 30 minutes and then shown as not found, and the songs behind it carry on.
+- **Soulseek:** copies Tuna gave up on no longer stay in slskd's list as "Completed, Cancelled" (and
+  ones earlier versions left there are cleared).
+
+**Changed**
+- **Soulseek:** someone who refuses to send a song isn't asked again for an hour, for any song, and
+  Tuna asks each person for one song at a time when someone else has it too. Refusals no longer use
+  up a song's tries, and the log says why each one came.
+
+To update: the server (pull the new image); the apps don't need updating.
+
 ## 0.4.8 (2026-11-26)
 
 **Changed**

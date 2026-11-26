@@ -78,7 +78,9 @@ Notes for anyone (person or AI assistant) working on Tuna's code.
   `MOCK_GET_SECONDS` (40); `MOCK_EMPTY_LIBRARY=1` starts with nothing in the library, as a new install.
   The fake slskd: `MOCK_SLSKD_EMPTY=1` (every search finds nothing), `MOCK_SLSKD_FAIL=<peer>` (that
   peer's downloads fail), `MOCK_SLSKD_MOVE_SECONDS` (2: how long a finished download takes to reach
-  slskd's downloads folder, as in slskd). `MOCK_COVER_MS` makes each cover that slow, as Navidrome
+  slskd's downloads folder, as in slskd), `MOCK_SLSKD_REFUSE=<peer,…>` (they refuse to send),
+  `MOCK_SLSKD_STUCK=<peer,…>` (their queues never move). `MOCK_LIDARR_LOOKUP_FAIL=<word,…>` makes Lidarr's
+  search fail for names with those words, as its metadata server does for some. `MOCK_COVER_MS` makes each cover that slow, as Navidrome
   on a Raspberry Pi. ListenBrainz token for Settings: `mock-lb`.
 - `npm run typecheck` checks server and web; `npm run check:i18n` the Italian.
 - **Develop against the mock**, never against a real household's server.

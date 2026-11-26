@@ -41,6 +41,11 @@ interface Song {
   /** The copy being downloaded (and when slskd said it had it all), and those tried before it. */
   from?: { username: string; filename: string; size: number; since: number; done?: number };
   tried?: string[];
+  /** How many of those were refused. */
+  refused?: number;
+  /** Looking it up failed this many times (Lidarr or MusicBrainz not answering); not again before `after`. */
+  failures?: number;
+  after?: number;
   progress?: number;
   ready?: string;
   /** Discoveries (Tuna's, for these people, that week; from a song's radio): kept only if someone keeps them. */
@@ -64,6 +69,13 @@ const AT_ONCE = 4;
 /** Waiting in someone's upload queue this long: another copy. */
 const QUEUED_TOO_LONG = 20 * 60_000;
 const TRIES = 3;
+/** Refused copies don't count as tries, up to this many copies in all. */
+const COPIES = 8;
+/** Someone who refused isn't asked again, for any song, for this long. */
+const REFUSED_FOR = 60 * 60_000;
+const refused = new Map<string, number>();
+/** Looking a song up failed: again after these waits, then it's given up. */
+const AGAIN = [60_000, 5 * 60_000, 30 * 60_000];
 /** Downloaded but not in slskd's downloads folder after this long: it isn't coming. */
 const LANDING = 5 * 60_000;
 
@@ -161,7 +173,8 @@ export async function letGo(id: string) {
 /** Its album (as Lidarr knows it) and its track there; Lidarr adds the artist, watching nothing. */
 async function place(s: Song): Promise<boolean> {
   const first = s.artist.split(/\s*;\s*/)[0] || s.artist;
-  let album = s.album ? await resolve(s.artist, s.album) : undefined;
+  // Lidarr's search fails for some names (its metadata server): then the song's own way, below.
+  let album = s.album ? await resolve(s.artist, s.album).catch(() => undefined) : undefined;
   if (!album) {
     // No album (or not one Lidarr knows): the release the song first came out on, an album if there's one.
     const recs = await mbSearchRecordings(`recording:"${cleanTitle(s.title).replace(/"/g, '')}" AND artist:"${first.replace(/"/g, '')}"`);
@@ -197,15 +210,18 @@ const UNWANTED = ['live', 'remix', 'instrumental', 'karaoke', 'cover', 'acapella
 /**
  * The best copy: the right song (title and artist in its path, its length), of the kind the household
  * chose (Settings → Connections: lossless up to CD quality, any lossless, or MP3 320; another kind only
- * when nobody has that), from someone who can send it now.
+ * when nobody has that), from someone who can send it now: not someone who refused lately, and not
+ * someone sending Tuna another song when someone else has it too.
  */
-function best(s: Song, responses: slskd.SResponse[]) {
+function best(s: Song, responses: slskd.SResponse[], anyone = false) {
   const title = words(cleanTitle(s.title));
   const artist = artistsOf(s.artist).map(words);
   const unwanted = UNWANTED.filter((u) => !norm(s.title).includes(u));
   const files = soulseekFiles();
-  const out: Array<{ username: string; filename: string; size: number; rank: number; score: number }> = [];
+  const sending = new Set(songs.filter((x) => x !== s && x.state === 'downloading').map((x) => x.from!.username));
+  const out: Array<{ username: string; filename: string; size: number; rank: number; busy: boolean; score: number }> = [];
   for (const r of responses) {
+    if (!anyone && (refused.get(r.username) ?? 0) > Date.now()) continue;
     for (const f of r.files) {
       if (f.isLocked || !AUDIO.test(f.filename) || s.tried?.includes(`${r.username}|${f.filename}`)) continue;
       const file = norm(f.filename.split(/[\\/]/).pop() ?? '');
@@ -227,10 +243,10 @@ function best(s: Song, responses: slskd.SResponse[]) {
       const quality = files === 'mp3' ? (lossless ? 6 : lossy) : lossless ? (hires && files === 'lossless' ? 34 : 30) : lossy;
       const peer = (r.hasFreeUploadSlot ? 15 : 0) - Math.min(r.queueLength, 15) + Math.min(10, Math.log2(1 + r.uploadSpeed / 100_000) * 2);
       const exact = s.length && f.length ? 6 - Math.abs(f.length - s.length) : 0;
-      out.push({ username: r.username, filename: f.filename, size: f.size, rank, score: quality + peer + exact });
+      out.push({ username: r.username, filename: f.filename, size: f.size, rank, busy: sending.has(r.username), score: quality + peer + exact });
     }
   }
-  return out.sort((a, b) => b.rank - a.rank || b.score - a.score)[0];
+  return out.sort((a, b) => b.rank - a.rank || Number(a.busy) - Number(b.busy) || b.score - a.score)[0];
 }
 
 async function start(s: Song) {
@@ -242,8 +258,12 @@ async function start(s: Song) {
     if ((s.state as Song['state']) === 'ready') return void scanNavidrome();
     await fetchCopy(s);
   } catch (err) {
-    log.warn('get', `Couldn't look for "${s.title}" by ${s.artist}`, err);
-    s.state = 'waiting';
+    // Again in a while (the songs behind it carry on meanwhile), a few times.
+    const wait = AGAIN[s.failures ?? 0];
+    s.failures = (s.failures ?? 0) + 1;
+    log.warn('get', `Couldn't look for "${s.title}" by ${s.artist}${wait ? ` (again in ${wait / 60_000} min)` : ''}`, err);
+    if (!wait) return notFound(s, 'looking it up kept failing');
+    Object.assign(s, { state: 'waiting', after: Date.now() + wait });
     save();
   }
 }
@@ -251,8 +271,15 @@ async function start(s: Song) {
 /** Searches Soulseek and asks slskd for the best copy not tried yet. */
 async function fetchCopy(s: Song) {
   const first = s.artist.split(/\s*;\s*/)[0] || s.artist;
-  const pick = best(s, await slskd.search(`${first} ${cleanTitle(s.title)}`.replace(/[^\p{L}\p{N}' ]+/gu, ' ')));
-  if (!pick) return notFound(s, 'nobody on Soulseek has it');
+  const found = await slskd.search(`${first} ${cleanTitle(s.title)}`.replace(/[^\p{L}\p{N}' ]+/gu, ' '));
+  const pick = best(s, found);
+  if (!pick) {
+    // Only people who refused lately have it: again once they may send.
+    const later = best(s, found, true);
+    if (!later) return notFound(s, s.refused ? 'nobody on Soulseek would send it' : 'nobody on Soulseek has it');
+    Object.assign(s, { state: 'waiting', after: refused.get(later.username) });
+    return void save();
+  }
   await slskd.download(pick.username, [{ filename: pick.filename, size: pick.size }]);
   Object.assign(s, { state: 'downloading', from: { username: pick.username, filename: pick.filename, size: pick.size, since: Date.now() }, progress: 0 });
   save();
@@ -311,41 +338,66 @@ async function file(s: Song): Promise<boolean> {
   return true;
 }
 
+/**
+ * Tuna's copies that came to nothing (refused, failed, cancelled) off slskd's list. slskd only takes
+ * off a download that has ended, and one cancelled while queued ends a moment later: true while any
+ * is still ending. Also clears what earlier versions left there.
+ */
+async function clear(transfers: slskd.STransfer[]): Promise<boolean> {
+  const ours = new Set(songs.flatMap((s) => [...(s.tried ?? []), ...(s.from && s.state !== 'downloading' ? [`${s.from.username}|${s.from.filename}`] : [])]));
+  let ending = false;
+  for (const t of transfers.filter((x) => ours.has(`${x.username}|${x.filename}`))) {
+    await slskd.cancel(t.username, t.id).catch(() => undefined);
+    if (!t.state.startsWith('Completed')) ending = true;
+  }
+  return ending;
+}
+
 let ticking = false;
 let timer: NodeJS.Timeout | undefined;
+let leftovers = true;
 
 async function tick() {
   if (ticking || !has.slskd() || !has.lidarr()) return;
   ticking = true;
   try {
     const downloading = songs.filter((s) => s.state === 'downloading');
-    if (downloading.length) {
+    if (downloading.length || leftovers) {
       const transfers = await slskd.transfers();
+      leftovers = await clear(transfers);
+      const of = (s: Song) => transfers.find((x) => x.username === s.from!.username && x.filename === s.from!.filename);
+      // Everyone who refused, before another copy is picked for any song.
+      for (const s of downloading) if (of(s)?.state.includes('Rejected')) refused.set(s.from!.username, Date.now() + REFUSED_FOR);
       for (const s of downloading) {
-        const t = transfers.find((x) => x.username === s.from!.username && x.filename === s.from!.filename);
+        const t = of(s);
         const state = t?.state ?? '';
         if (state.includes('Succeeded') || (!t && s.from!.done)) {
           // Off slskd's list only once filed: taken off before the file is in its downloads folder,
           // slskd stops and leaves it behind.
           if ((await file(s)) && t) await slskd.cancel(t.username, t.id).catch(() => undefined);
         } else if (!t || state.startsWith('Completed') || (state.includes('Queued') && Date.now() - s.from!.since > QUEUED_TOO_LONG)) {
-          // Failed, refused, or stuck in a queue: off slskd's list, and another copy, a couple of times.
+          // Failed, refused, or stuck in a queue: off slskd's list (once it has ended), and another copy.
           if (t) await slskd.cancel(t.username, t.id).catch(() => undefined);
+          if (t && !state.startsWith('Completed')) leftovers = true;
+          const no = state.includes('Rejected');
+          if (no) log.info('get', `${s.from!.username} wouldn't send "${s.title}" by ${s.artist}${t?.exception ? `: ${t.exception}` : ''}`);
           s.tried = [...(s.tried ?? []), `${s.from!.username}|${s.from!.filename}`];
-          if (s.tried.length >= TRIES) notFound(s, 'no copy came through');
+          s.refused = (s.refused ?? 0) + (no ? 1 : 0);
+          if (s.tried.length - s.refused >= TRIES || s.tried.length >= COPIES) notFound(s, 'no copy came through');
           else await fetchCopy(s).catch(() => ((s.state = 'waiting'), save()));
         } else if (t?.percentComplete !== undefined && t.percentComplete / 100 !== s.progress) {
           s.progress = t.percentComplete / 100;
         }
       }
     }
-    for (const s of songs.filter((x) => x.state === 'waiting').slice(0, Math.max(0, AT_ONCE - busy().length))) await start(s);
+    const due = songs.filter((x) => x.state === 'waiting' && (x.after ?? 0) <= Date.now());
+    for (const s of due.slice(0, Math.max(0, AT_ONCE - busy().length))) await start(s);
   } catch (err) {
     log.warn('get', "Couldn't check on slskd", err);
   } finally {
     ticking = false;
   }
-  const active = songs.some((s) => s.state === 'waiting' || s.state === 'looking' || s.state === 'downloading');
+  const active = leftovers || songs.some((s) => s.state === 'waiting' || s.state === 'looking' || s.state === 'downloading');
   if (active && !timer) timer = setInterval(() => void tick(), 10_000);
   if (!active && timer) (clearInterval(timer), (timer = undefined));
 }

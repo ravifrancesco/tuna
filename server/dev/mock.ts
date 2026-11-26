@@ -9,8 +9,11 @@
  *   MOCK_GET_SECONDS (default 40): how long a Get takes to "download" (a song from slskd: 8).
  *   MOCK_EMPTY_LIBRARY=1: nothing in the library yet, as a new install.
  *   MOCK_SLSKD_EMPTY=1: Soulseek finds nothing. MOCK_SLSKD_FAIL=<user>: that peer's downloads fail.
+ *   MOCK_SLSKD_REFUSE=<user,…>: those peers refuse to send. MOCK_SLSKD_STUCK=<user,…>: their queues never move.
  *   MOCK_SLSKD_MOVE_SECONDS (default 2): how long after a download succeeds its file is in slskd's
  *   downloads folder (taken off slskd's list before then, it never gets there, as in slskd).
+ *   MOCK_LIDARR_LOOKUP_FAIL=<word,…>: Lidarr's search fails for names with those words ("Invalid response
+ *   received from LidarrAPI", as its metadata server does for some), and so does looking up those artists.
  *   MOCK_COVER_MS (default 0): how long each cover takes, as Navidrome resizing pictures on a Raspberry Pi.
  *   ListenBrainz token for Settings: mock-lb.
  */
@@ -24,8 +27,12 @@ const EMPTY_LIBRARY = process.env.MOCK_EMPTY_LIBRARY === '1';
 const SONG_SECONDS = Number(process.env.MOCK_GET_SECONDS ?? 8);
 const SLSKD_EMPTY = process.env.MOCK_SLSKD_EMPTY === '1';
 const SLSKD_FAIL = process.env.MOCK_SLSKD_FAIL;
+const SLSKD_REFUSE = (process.env.MOCK_SLSKD_REFUSE ?? '').split(',').filter(Boolean);
+const SLSKD_STUCK = (process.env.MOCK_SLSKD_STUCK ?? '').split(',').filter(Boolean);
 const SLSKD_MOVE_SECONDS = Number(process.env.MOCK_SLSKD_MOVE_SECONDS ?? 2);
 const COVER_MS = Number(process.env.MOCK_COVER_MS ?? 0);
+const LOOKUP_FAIL = (process.env.MOCK_LIDARR_LOOKUP_FAIL ?? '').toLowerCase().split(',').filter(Boolean);
+const lookupFails = (name: string) => LOOKUP_FAIL.some((w) => name.toLowerCase().includes(w));
 
 // ---- A made-up world, the same every time ------------------------------------------------------
 
@@ -727,18 +734,34 @@ function searchView(s: Search, withResponses = false) {
   };
 }
 
-/** When a download stops: queued by the other side for 2 seconds, then SONG_SECONDS of downloading (a failing peer gives up halfway). */
-const ends = (x: Transfer) => x.requested + 2000 + (x.username === SLSKD_FAIL ? 500 : 1000) * SONG_SECONDS;
+/**
+ * When a download stops: queued by the other side for 2 seconds, then SONG_SECONDS of downloading (a
+ * failing peer gives up halfway; one that refuses says so after a second; a stuck queue never moves).
+ */
+const ends = (x: Transfer) =>
+  SLSKD_STUCK.includes(x.username) ? Infinity : SLSKD_REFUSE.includes(x.username) ? x.requested + 1000 : x.requested + 2000 + (x.username === SLSKD_FAIL ? 500 : 1000) * SONG_SECONDS;
 
 function transferView(x: Transfer) {
   const whole = SONG_SECONDS * 1000;
   const start = x.requested + 2000;
   const end = ends(x);
-  const stopped = x.cancelled !== undefined && x.cancelled < end;
+  const refuses = SLSKD_REFUSE.includes(x.username);
+  const waits = refuses || SLSKD_STUCK.includes(x.username);
+  const stopped = x.cancelled !== undefined && x.cancelled < end && Date.now() >= x.cancelled;
   const now = stopped ? x.cancelled! : Date.now();
-  const done = Math.max(0, Math.min(now, end) - start) / whole;
+  const done = waits ? 0 : Math.max(0, Math.min(now, end) - start) / whole;
   const bytes = Math.round(x.size * done);
-  const state = stopped ? 'Completed, Cancelled' : now < start ? 'Queued, Remotely' : now < end ? 'InProgress' : x.username === SLSKD_FAIL ? 'Completed, Errored' : 'Completed, Succeeded';
+  const state = stopped
+    ? 'Completed, Cancelled'
+    : refuses && now >= end
+      ? 'Completed, Rejected'
+      : now < start || waits
+        ? 'Queued, Remotely'
+        : now < end
+          ? 'InProgress'
+          : x.username === SLSKD_FAIL
+            ? 'Completed, Errored'
+            : 'Completed, Succeeded';
   return {
     id: x.id,
     username: x.username,
@@ -748,13 +771,14 @@ function transferView(x: Transfer) {
     state,
     requestedAt: new Date(x.requested).toISOString(),
     enqueuedAt: new Date(x.requested + 200).toISOString(),
-    startedAt: now >= start ? new Date(start).toISOString() : undefined,
+    startedAt: now >= start && !waits ? new Date(start).toISOString() : undefined,
     endedAt: state.startsWith('Completed') ? new Date(Math.min(now, end)).toISOString() : undefined,
     bytesTransferred: bytes,
     averageSpeed: now >= start ? x.size / SONG_SECONDS : 0,
     bytesRemaining: x.size - bytes,
     percentComplete: 100 * done,
     ...(state === 'Completed, Errored' ? { exception: 'Remote connection closed' } : {}),
+    ...(state === 'Completed, Rejected' ? { exception: 'Overwhelmed with requests; try again later' } : {}),
   };
 }
 
@@ -1091,18 +1115,22 @@ async function lidarr(path: string, q: URLSearchParams, req: http.IncomingMessag
   if (p === '/qualityprofile') return json(res, 200, [{ id: 1, name: 'Any' }, { id: 2, name: 'Lossless' }]);
   if (p === '/metadataprofile') return json(res, 200, [{ id: 1, name: 'Standard' }]);
   if (p === '/artist' && req.method === 'GET') return json(res, 200, artists.filter((a) => a.lidarrId).map(lidarrArtist));
+  const lookupFailed = (term: string) => json(res, 500, { message: `Search for '${term}' failed. Invalid response received from LidarrAPI.` });
   if (p === '/artist/lookup') {
     const term = q.get('term') ?? '';
     if (term.startsWith('lidarr:')) {
       const a = artists.find((x) => x.mbid === term.slice(7));
+      if (a && lookupFails(a.name)) return lookupFailed(term);
       return json(res, 200, a ? [{ ...lidarrArtist(a), id: undefined }] : []);
     }
     // A name, as Lidarr's "Add new" search.
+    if (lookupFails(term)) return lookupFailed(term);
     const query = cleanQuery(term);
     const found = artists.filter((a) => score(a.name, query) > 0).sort((x, y) => score(y.name, query) - score(x.name, query));
     return json(res, 200, found.slice(0, 10).map((a) => ({ ...lidarrArtist(a), id: undefined })));
   }
   if (p === '/album/lookup') {
+    if (lookupFails(q.get('term') ?? '')) return lookupFailed(q.get('term') ?? '');
     const query = cleanQuery(q.get('term') ?? '');
     const rank = (a: MAlbum) => Math.max(score(a.name, query), score(a.artist, query));
     const found = [...albums.values()].filter((a) => rank(a) > 0).sort((x, y) => rank(y) - rank(x) || y.year - x.year);
@@ -1269,8 +1297,10 @@ async function slskd(path: string, q: URLSearchParams, req: http.IncomingMessage
   if (one && req.method === 'DELETE') {
     const x = transfers.find((t) => t.removed === undefined && t.id === one[2] && t.username === decodeURIComponent(one[1]));
     if (!x) return json(res, 404, {});
-    if (!transferView(x).state.startsWith('Completed')) x.cancelled = Date.now();
-    if (q.get('remove') === 'true') x.removed = Date.now();
+    // As slskd: a download is cancelled a moment after it's asked, and only one that has ended can be taken off the list.
+    const ended = transferView(x).state.startsWith('Completed');
+    if (!ended) x.cancelled = Date.now() + 500;
+    if (q.get('remove') === 'true' && ended) x.removed = Date.now();
     return none();
   }
   return json(res, 404, { message: `Not in the mock: ${p}` });
