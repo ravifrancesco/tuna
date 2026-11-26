@@ -34,7 +34,7 @@ In Portainer: **Stacks → Add stack**, paste [`docker-compose.yml`](docker-comp
 `http://<your-server>:7778`: Tuna asks for Navidrome's address (and Lidarr's), with the setup code
 from its log. Then sign in with your Navidrome account. More in [docs/install/server.md](docs/install/server.md).
 
-Image: `ghcr.io/ravifrancesco/tuna:0.4.4` (amd64 and arm64).
+Image: `ghcr.io/ravifrancesco/tuna:0.4.5` (amd64 and arm64).
 
 ## The apps
 

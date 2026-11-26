@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.5 (2026-11-26)
+
+**New**
+- **Away from home on iPhone and iPad**, as in the Android, Mac and Windows apps: Tuna reaches your
+  server through WireGuard, built in and used only by Tuna, with no VPN to switch on. Set it up in
+  Settings → **Away from home** with the device's WireGuard `.conf` file. Needs iOS 17 or later.
+  - Pages, songs, the songs kept ahead and downloads all go through it. Away from home, downloads
+    carry on while Tuna is running (playing music keeps it running).
+  - Installing with Xcode now also needs Go (`brew install go`).
+
+**Fixed**
+- **Away from home:** the WireGuard `.conf` file couldn't be chosen on iPhone and iPad (it was
+  greyed out). Any file can be chosen now, and Tuna says if it isn't a WireGuard file.
+
+To update: the server (pull the new image) and the iPhone app.
+
 ## 0.4.4 (2026-11-26)
 
 **Fixed**

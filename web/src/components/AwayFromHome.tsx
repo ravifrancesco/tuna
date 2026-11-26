@@ -39,7 +39,7 @@ function summary(): Summary | undefined {
 }
 
 /**
- * Settings → Away from home (the Android, Mac and Windows apps), as in Netfish: WireGuard inside
+ * Settings → Away from home (the Android, Mac, Windows and iPhone apps), as in Netfish: WireGuard inside
  * Tuna, so the server can be reached from anywhere without a VPN on the whole device. A configuration
  * chosen (the .conf file) or pasted is checked here and by the app, then kept by the app.
  */
@@ -173,7 +173,8 @@ export function AwayFromHome() {
             <strong>{t('Choose the WireGuard file')}</strong>
             <span className="muted small">{t('The .conf file your router or WireGuard server made for this device.')}</span>
           </button>
-          <input ref={picker} type="file" accept=".conf,.txt,text/plain" hidden onChange={(e) => void take(e.target.files?.[0])} />
+          {/* Any file: iPhones grey out .conf files when the type is limited. */}
+          <input ref={picker} type="file" hidden onChange={(e) => void take(e.target.files?.[0])} />
           {problem && <p className="error small">{problem}</p>}
           {pasting && (
             <label className="field away-paste">

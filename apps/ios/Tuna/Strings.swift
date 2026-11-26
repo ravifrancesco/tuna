@@ -21,7 +21,11 @@ enum Strings {
         "Enter the address of your Tuna server": "Inserisci l'indirizzo del tuo server Tuna",
         "That doesn't look like an address": "Questo non sembra un indirizzo",
         "Can't reach {address} ({error})": "Impossibile raggiungere {address} ({error})",
+        "Can't reach {address}": "Impossibile raggiungere {address}",
         "{address} doesn't look like a Tuna server": "{address} non sembra un server Tuna",
+
+        // Away from home
+        "the tunnel didn't start": "il tunnel non è partito",
 
         // Requests from the pages
         "Bad request": "Richiesta non valida",

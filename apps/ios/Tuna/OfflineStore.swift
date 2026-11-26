@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import UniformTypeIdentifiers
 
 /// Downloads (docs/native-bridge.md, "Downloads"): albums, playlists, Liked songs and songs kept on
@@ -102,29 +103,26 @@ final class OfflineStore: NSObject, URLSessionDownloadDelegate {
         return URLSession(configuration: config, delegate: self, delegateQueue: .main)
     }()
 
-    #if os(macOS)
     /// Away from home: the tunnel's proxy port while it's on (the window keeps it up to date).
-    /// What's coming starts again the new way.
+    /// What's coming starts again the new way. (On the iPhone, downloads then carry on only while
+    /// Tuna is running: the background downloader is outside the app, the tunnel inside it.)
     var tunnelPort: Int? {
         didSet { if tunnelPort != oldValue { task?.cancel() } }
     }
     private var proxied: (port: Int, session: URLSession)?
-    #endif
 
-    /// Through the tunnel while it's on (Mac), else in the background.
+    /// Through the tunnel while it's on, else in the background.
     private var transfers: URLSession {
-        #if os(macOS)
         if let port = tunnelPort {
             if let proxied, proxied.port == port { return proxied.session }
             proxied?.session.finishTasksAndInvalidate()
             let config = URLSessionConfiguration.default
             config.httpShouldSetCookies = false
-            config.connectionProxyDictionary = Tunnel.proxy(port)
+            config.throughTunnel(port)
             let through = URLSession(configuration: config, delegate: self, delegateQueue: .main)
             proxied = (port, through)
             return through
         }
-        #endif
         return session
     }
 
@@ -418,5 +416,17 @@ final class OfflineStore: NSObject, URLSessionDownloadDelegate {
             self.backgroundCompletion?()
             self.backgroundCompletion = nil
         }
+    }
+}
+
+extension URLSessionConfiguration {
+    /// Away from home: through the tunnel's proxy on 127.0.0.1 (downloads, the songs kept ahead).
+    func throughTunnel(_ port: Int) {
+        #if os(macOS)
+        connectionProxyDictionary = Tunnel.proxy(port)
+        #else
+        guard #available(iOS 17, *), let endpoint = NWEndpoint.Port(rawValue: UInt16(port)) else { return }
+        proxyConfigurations = [ProxyConfiguration(httpCONNECTProxy: .hostPort(host: "127.0.0.1", port: endpoint))]
+        #endif
     }
 }

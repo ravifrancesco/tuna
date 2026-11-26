@@ -88,6 +88,16 @@ final class WebViewController: UIViewController, WKNavigationDelegate, WKUIDeleg
             guard let self, self.player.current != nil else { return }
             self.send(["type": "audio", "state": self.player.state])
         }
+        // Away from home: the player and the downloads through the tunnel too, while it's on.
+        Tunnel.shared.onChange = { [weak self] in
+            self?.player.tunnelPort = Tunnel.shared.port
+            OfflineStore.shared.tunnelPort = Tunnel.shared.port
+            self?.send(["type": "event", "name": "tunnel", "value": Tunnel.shared.status])
+        }
+        Tunnel.shared.watchNetwork()
+        NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
+            Task { @MainActor in await Tunnel.shared.wake() }
+        }
         if Server.url != nil { showServer() } else { showSetup(error: nil) }
     }
 
@@ -100,19 +110,29 @@ final class WebViewController: UIViewController, WKNavigationDelegate, WKUIDeleg
         web.load(URLRequest(url: LocalScheme.url("setup.html", query: error.map { ["error": $0] } ?? [:])))
     }
 
-    /// The fish swims while the server is checked (a few seconds at most), then Tuna opens
-    /// from the server's own address. A server that doesn't answer gets the downloads, or the
-    /// address page when there are none.
+    /// The fish swims while the server is checked (a few seconds at most), through the tunnel away
+    /// from home when there is one, then Tuna opens from the server's own address. A server that
+    /// doesn't answer gets the downloads, or the address page when there are none.
     func showServer() {
         guard let server = Server.url else { return showSetup(error: nil) }
         web.load(URLRequest(url: LocalScheme.url("loading.html")))
         Task { @MainActor in
-            do {
-                try await Server.probe(server)
+            // Away from home, as in Netfish: a ring ahead of the mark on the loading page, then the
+            // mark swims in and Tuna (#tunnel) takes it over.
+            let says = { (state: String) in self.web.evaluateJavaScript("window.tunaTunnel && window.tunaTunnel('\(state)')") }
+            switch await Tunnel.shared.route(server, connecting: { says("connecting") }) {
+            case .home:
                 web.load(URLRequest(url: server, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 10))
                 OfflineStore.shared.resume()
-            } catch {
-                if OfflineStore.shared.hasSongs { showOffline() } else { showSetup(error: error.localizedDescription) }
+            case .away:
+                _ = try? await web.evaluateJavaScript("window.tunaTunnel && window.tunaTunnel('connected')")
+                try? await Task.sleep(nanoseconds: 900_000_000)
+                var through = URLComponents(url: server, resolvingAgainstBaseURL: false)
+                through?.fragment = "tunnel"
+                web.load(URLRequest(url: through?.url ?? server, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 10))
+                OfflineStore.shared.resume()
+            case .none:
+                if OfflineStore.shared.hasSongs { showOffline() } else { showSetup(error: L("Can't reach {address}", ["address": server.absoluteString])) }
             }
         }
     }

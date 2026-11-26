@@ -13,9 +13,10 @@ enum Bridge {
             "version": version,
             // What AVPlayer plays as it is; the server converts anything else.
             "formats": ["mp3", "aac", "m4a", "alac", "flac", "wav"],
-            // Haptics: iPhones only (iPads don't vibrate).
+            // Haptics: iPhones only (iPads don't vibrate). Away from home: iOS 17 and later.
             "features": ["audio", "changeServer", "downloads", "eq", "mobileData", "outputs", "sleep"]
-                + (UIDevice.current.userInterfaceIdiom == .phone ? ["haptics"] : []),
+                + (UIDevice.current.userInterfaceIdiom == .phone ? ["haptics"] : [])
+                + (Tunnel.available ? ["tunnel"] : []),
         ]
     }
 
@@ -104,10 +105,10 @@ final class BridgeHandler: NSObject, WKScriptMessageHandler {
             return OfflineStore.shared.list()
         case "downloads.offline":
             controller.showOffline()
-        // The offline page: is the server back, and back to it.
+        // The offline page: is the server back (through the tunnel away from home), and back to it.
         case "server.reachable":
             guard let server = Server.url else { return false }
-            return await Server.reachable(server)
+            return await Tunnel.shared.route(server) != .none
         case "server.open":
             controller.showServer()
         case "changeServer":
@@ -121,10 +122,24 @@ final class BridgeHandler: NSObject, WKScriptMessageHandler {
         case "connect":
             guard local else { throw Problem(L("Not allowed here")) }
             let url = try Server.normalize(args["address"] as? String ?? "")
-            try await Server.probe(url)
+            do {
+                try await Server.probe(url)
+            } catch {
+                // Away from home, the saved server may still answer through the tunnel.
+                guard url == Server.url, Tunnel.shared.configured, await Tunnel.shared.route(url) == .away else { throw error }
+            }
             Server.url = url
             controller.showServer()
             return url.absoluteString
+        // Away from home (Settings, the server's pages only): never the configuration itself back.
+        case "tunnel.status":
+            return Tunnel.shared.status
+        case "tunnel.save":
+            guard !local else { throw Problem(L("Not allowed here")) }
+            return await Tunnel.shared.save(args["config"] as? String ?? "") ?? ""
+        case "tunnel.remove":
+            guard !local else { throw Problem(L("Not allowed here")) }
+            Tunnel.shared.remove()
         default:
             throw Problem(L("Unknown request"))
         }

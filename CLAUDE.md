@@ -28,7 +28,7 @@ Notes for anyone (person or AI assistant) working on Tuna's code.
 | `server/` | Fastify + TypeScript. Routes in `server/src/routes.ts`, logic in `server/src/services/`, clients in `server/src/clients/` (`navidrome.ts`, `lidarr.ts`, `public.ts` for the public services), sign-in in `server/src/sessions.ts`, the readable log in `server/src/lib/log.ts` |
 | `web/` | The React web UI, used by the browser and inside every app. The player is `web/src/lib/player.ts`, the bridge to the apps `web/src/lib/native.ts` |
 | `shared/` | Types shared by server, web and (as JSON) the apps (`shared/src/index.ts`) |
-| `apps/{mac,windows,ios,android,tizen,common}` | The native shells. `apps/common` has the loading page, the mark, the icons (`npm run art`) and netfish-tunnel's code (built as `tuna-tunnel`) |
+| `apps/{mac,windows,ios,android,tizen,common}` | The native shells. `apps/common` has the loading page, the mark, the icons (`npm run art`) and netfish-tunnel's code (built as `tuna-tunnel`; built into the iPhone app by `apps/ios/tunnel/build.sh`, iOS 17+) |
 | `server/dev/mock.ts` | Fake Navidrome, Lidarr, slskd, MusicBrainz, Cover Art Archive, LRCLIB, ListenBrainz and Last.fm on port 7701 |
 | `scripts/` | Builds, icons, the translation check and the release script |
 | `release/` | Build output only (not committed) |
@@ -67,6 +67,7 @@ Notes for anyone (person or AI assistant) working on Tuna's code.
 ## Developing
 
 - Node 22 or later. `npm install` at the root (npm workspaces).
+- Go (`brew install go`) for the Android, Mac, Windows and iPhone builds: each builds the tunnel for itself.
 - `npm run dev:mock` runs the mock services (:7701), the server against them (:7778) and the web
   dev server (:5174). Mock users: demo/demo, sam/sam, admin/admin. Lidarr's fake downloads take
   `MOCK_GET_SECONDS` (40); `MOCK_EMPTY_LIBRARY=1` starts with nothing in the library, as a new install.

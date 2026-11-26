@@ -202,6 +202,11 @@ car started (`audio.current`, and the states it sends).
 - Server address handling, the setup and loading pages, updates from GitHub releases
   (`ravifrancesco/tuna`), and the WireGuard tunnel (`apps/common/tunnel`, built as `tuna-tunnel`),
   all work as in Netfish (`../Netfish/apps/*`).
+  - iPhone and iPad (iOS 17 and later): the tunnel is built into the app as a library
+    (`apps/ios/tunnel/build.sh`). The page, downloads and the queue kept ahead go through its proxy;
+    AVPlayer can't use a proxy, so songs and the lock screen's artwork go through its forwarding
+    address, `http://127.0.0.1:<port>/through/<host:port>/<path>`. Away from home, downloads carry on
+    only while Tuna is running (playing music keeps it running).
 - App ids: Android `app.tuna.music` (debug build `app.tuna.music.debug`), Apple `app.tuna.music`,
   Windows "Tuna". Icons: `apps/common/icon.png` (rounded, with margin), `icon-ios.png` (full
   square), `tv-icon.png` and `banner.png` (TVs), all from `npm run art`.

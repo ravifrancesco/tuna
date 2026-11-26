@@ -33,6 +33,18 @@ final class AudioPlayer: NSObject {
     /// Every change, and about once a second while playing: `NativeAudioState`.
     var onState: (([String: Any]) -> Void)?
 
+    /// Away from home: the tunnel's port while it's on. Songs from the server and their artwork
+    /// come through its forwarding address (AVPlayer can't use a proxy), the songs kept ahead
+    /// through its proxy.
+    var tunnelPort: Int? {
+        didSet {
+            guard tunnelPort != oldValue else { return }
+            cache.proxyPort = tunnelPort
+            // A song from the server carries on from where it was, the new way; one from a file just carries on.
+            if let item, (item.asset as? AVURLAsset)?.url.isFileURL != true { begin(index, at: time, play: wantsPlay) } else { prepareAhead() }
+        }
+    }
+
     private let player = AVQueuePlayer()
     private var tracks: [Track] = []
     private var index = -1
@@ -327,9 +339,14 @@ final class AudioPlayer: NSObject {
     }
 
     /// The song's file when it's downloaded or kept ahead (no server needed, and no data used), else
-    /// the server's address.
+    /// the server's address (through the tunnel away from home).
     private func source(_ track: Track) -> URL {
-        OfflineStore.shared.file(for: track.id) ?? cache.file(for: track.url) ?? track.url
+        OfflineStore.shared.file(for: track.id) ?? cache.file(for: track.url) ?? reachable(track.url)
+    }
+
+    /// A server address as the player reaches it: through the tunnel while it's on.
+    private func reachable(_ url: URL) -> URL {
+        tunnelPort.map { Tunnel.through(url, port: $0) } ?? url
     }
 
     /// Once the song playing has loaded: the next few fetched whole, to play from the phone.
@@ -574,9 +591,9 @@ final class AudioPlayer: NSObject {
     }
 
     private func loadArtwork(_ track: Track) {
-        guard let url = artworkURL(track), artwork?.url != url, artworkTask?.originalRequest?.url != url else { return }
+        guard let url = artworkURL(track), artwork?.url != url, artworkTask?.originalRequest?.url != reachable(url) else { return }
         artworkTask?.cancel()
-        artworkTask = URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+        artworkTask = URLSession.shared.dataTask(with: reachable(url)) { [weak self] data, _, _ in
             guard let data, let image = UIImage(data: data) else { return }
             DispatchQueue.main.async {
                 guard let self else { return }

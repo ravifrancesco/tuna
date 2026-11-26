@@ -12,7 +12,6 @@ final class QueueCache: NSObject, URLSessionDownloadDelegate {
     /// How many songs to keep ahead, on mobile data too (the sound quality is the person's choice).
     let ahead = 5
 
-    #if os(macOS)
     /// Away from home: through the tunnel's proxy while it's on. What's coming starts again the new way.
     var proxyPort: Int? {
         didSet {
@@ -22,7 +21,6 @@ final class QueueCache: NSObject, URLSessionDownloadDelegate {
             old?.invalidateAndCancel()
         }
     }
-    #endif
 
     private static let limit: Int64 = 500 * 1024 * 1024
     private let folder = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -119,9 +117,7 @@ final class QueueCache: NSObject, URLSessionDownloadDelegate {
         config.httpShouldSetCookies = false
         config.urlCache = nil
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
-        #if os(macOS)
-        if let proxyPort { config.connectionProxyDictionary = Tunnel.proxy(proxyPort) }
-        #endif
+        if let proxyPort { config.throughTunnel(proxyPort) }
         return URLSession(configuration: config, delegate: self, delegateQueue: .main)
     }
 
