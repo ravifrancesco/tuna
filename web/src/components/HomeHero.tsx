@@ -4,7 +4,7 @@ import type { Home } from '@tuna/shared';
 import { t } from '../i18n';
 import { useTint } from '../lib/tint';
 import { playAlbum, playMix } from './Cards';
-import { Cover, Covers } from './ui';
+import { Cover, MixArt } from './ui';
 
 /**
  * The feature at the top of Home: today's first mix, else the album played last, else the newest one.
@@ -25,7 +25,7 @@ export function HomeHero({ home }: { home: Home }) {
   return (
     <section className="hero-feature" style={{ '--tint': tint } as React.CSSProperties}>
       <Link to={to} className="hero-feature__art" aria-label={title}>
-        {mix ? <Covers covers={mix.covers} size={600} /> : <Cover cover={album!.cover} size={600} />}
+        {mix ? <MixArt mix={mix} size={600} /> : <Cover cover={album!.cover} size={600} />}
       </Link>
       <div className="hero-feature__text">
         <div className="hero-feature__label">{label}</div>

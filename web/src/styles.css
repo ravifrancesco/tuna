@@ -2806,6 +2806,122 @@ button.song-get:hover {
   }
 }
 
+/* Fresh catch's cover: deep space, a school of fish swimming into a glowing nebula. */
+.space-art {
+  position: relative;
+  overflow: hidden;
+  background: #06030f;
+}
+.space-art svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.space-art__star {
+  animation: space-twinkle 3s ease-in-out infinite alternate;
+}
+.space-art__nebula {
+  animation: space-drift 18s ease-in-out infinite alternate;
+}
+.space-art__core {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: space-pulse 5s ease-in-out infinite;
+}
+/* Each fish heads for the nebula, smaller as it goes deeper, and fades into it; then comes again. */
+.space-art__fish {
+  opacity: 0;
+  animation: space-swim 10s linear infinite;
+}
+.space-art__tail {
+  transform-box: fill-box;
+  transform-origin: 100% 50%;
+  animation: space-wag 0.6s ease-in-out infinite alternate;
+}
+.space-art__comet {
+  opacity: 0;
+  animation: space-comet 9s linear 2s infinite;
+}
+.space-art__title {
+  fill: #fff;
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+@keyframes space-twinkle {
+  from {
+    opacity: 0.2;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes space-drift {
+  from {
+    transform: translate(-5px, -3px);
+  }
+  to {
+    transform: translate(6px, 5px);
+  }
+}
+@keyframes space-pulse {
+  50% {
+    transform: scale(1.35);
+    opacity: 0.8;
+  }
+}
+@keyframes space-swim {
+  0% {
+    opacity: 0;
+    transform: translate(var(--x0), var(--y0)) rotate(var(--a)) scale(var(--s));
+  }
+  12% {
+    opacity: 1;
+  }
+  78% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--x1), var(--y1)) rotate(var(--a)) scale(calc(var(--s) * 0.2));
+  }
+}
+@keyframes space-wag {
+  from {
+    transform: rotate(-14deg);
+  }
+  to {
+    transform: rotate(14deg);
+  }
+}
+@keyframes space-comet {
+  0% {
+    opacity: 0;
+    transform: translate(150px, 10px) rotate(155deg);
+  }
+  3% {
+    opacity: 1;
+  }
+  10%,
+  100% {
+    opacity: 0;
+    transform: translate(60px, 52px) rotate(155deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .space-art * {
+    animation: none !important;
+  }
+  .space-art__comet {
+    display: none;
+  }
+  /* Still: the school on its way, part-way there. */
+  .space-art__fish {
+    opacity: 1;
+    transform: translate(calc(var(--x0) + (var(--x1) - var(--x0)) * 0.45), calc(var(--y0) + (var(--y1) - var(--y0)) * 0.45)) rotate(var(--a)) scale(calc(var(--s) * 0.7));
+  }
+}
+
 /* ---- Sign-in and splash ------------------------------------------------------------------------------ */
 
 .center-page {

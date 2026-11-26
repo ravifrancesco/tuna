@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.3 (2026-11-26)
+
+**New**
+- **Fresh catch has its own cover**: a school of fish swimming through space into a glowing nebula,
+  on Home and on its page.
+
+To update: the server (pull the new image); the apps don't need updating.
+
 ## 0.4.2 (2026-11-26)
 
 **New**

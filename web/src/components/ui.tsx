@@ -3,6 +3,7 @@ import { Heart, Music } from 'lucide-react';
 import { t } from '../i18n';
 import { coverUrl } from '../lib/session';
 import { Mark } from './Logo';
+import { FreshCatchArt } from './FreshCatchArt';
 import { HookFish } from './Splash';
 
 export function Cover({ cover, src, size = 300, round, className = '', alt = '' }: { cover?: string; src?: string; size?: number; round?: boolean; className?: string; alt?: string }) {
@@ -17,6 +18,11 @@ export function Cover({ cover, src, size = 300, round, className = '', alt = '' 
 }
 
 /** Up to four covers in one square (mixes). */
+/** A mix's cover: Fresh catch's own, the others from their songs' covers. */
+export function MixArt({ mix, size = 300 }: { mix: { id: string; covers: string[] }; size?: number }) {
+  return mix.id === 'fresh' ? <FreshCatchArt /> : <Covers covers={mix.covers} size={size} />;
+}
+
 export function Covers({ covers, size = 300 }: { covers: string[]; size?: number }) {
   if (covers.length < 4) return <Cover cover={covers[0]} size={size} />;
   return (
@@ -36,7 +42,7 @@ export function LikedCover() {
   );
 }
 
-/** Loading: the swimming note-fish, fading in after a moment so quick loads never show it. */
+/** Loading: the fish nibbling at the hook, fading in after a moment so quick loads never show it. */
 export const Spinner = () => (
   <div className="spinner" role="status" aria-label={t('Loading')}>
     <HookFish size={56} />

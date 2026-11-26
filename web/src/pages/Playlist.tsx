@@ -9,6 +9,7 @@ import { api } from '../api';
 import { Item, showMenu } from '../components/Menu';
 import { PlayButton } from '../components/PlayButton';
 import { DateScroller } from '../components/DateScroller';
+import { FreshCatchArt } from '../components/FreshCatchArt';
 import { TrackList } from '../components/TrackList';
 import { Cover, Empty, LikedCover, Sheet, Spinner, toast } from '../components/ui';
 import { t, tn } from '../i18n';
@@ -224,7 +225,7 @@ export function Mix() {
   const source = { kind: 'mix' as const, id, title };
   return (
     <div className="page--flush">
-      <Header kind={t('Mix')} title={title} meta={info?.subtitle ?? songs(tracks.length)} cover={<Cover cover={tracks[0]?.cover} size={600} />} />
+      <Header kind={t('Mix')} title={title} meta={info?.subtitle ?? songs(tracks.length)} cover={id === 'fresh' ? <FreshCatchArt /> : <Cover cover={tracks[0]?.cover} size={600} />} />
       <PlayActions tracks={tracks} source={source} />
       <div className="section">{tracks.length ? <TrackList tracks={tracks} source={source} /> : <Empty>{t('Nothing here yet')}</Empty>}</div>
     </div>

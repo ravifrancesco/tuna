@@ -7,7 +7,7 @@ import { t, tn } from '../i18n';
 import { playTracks, type Source } from '../lib/player';
 import { artUrl } from '../lib/session';
 import { GetButton } from './GetButton';
-import { Cover, Covers } from './ui';
+import { Cover, MixArt } from './ui';
 
 /** Plays something that has to be fetched first (an album, a playlist, a mix). */
 export async function playThing(load: () => Promise<Track[]>, source: Source, opts: { shuffle?: boolean } = {}) {
@@ -79,7 +79,7 @@ export const PlaylistCard = ({ playlist }: { playlist: Playlist }) => (
 );
 
 export const MixCard = ({ mix }: { mix: Mix }) => (
-  <Card to={`/mix/${encodeURIComponent(mix.id)}`} art={<Covers covers={mix.covers} />} title={mix.title} sub={mix.subtitle} onPlay={() => void playMix(mix)} />
+  <Card to={`/mix/${encodeURIComponent(mix.id)}`} art={<MixArt mix={mix} />} title={mix.title} sub={mix.subtitle} onPlay={() => void playMix(mix)} />
 );
 
 export function WorldAlbumCard({ album }: { album: WorldAlbum }) {
