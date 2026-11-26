@@ -80,7 +80,9 @@ Notes for anyone (person or AI assistant) working on Tuna's code.
   peer's downloads fail), `MOCK_SLSKD_MOVE_SECONDS` (2: how long a finished download takes to reach
   slskd's downloads folder, as in slskd), `MOCK_SLSKD_REFUSE=<peer,…>` (they refuse to send),
   `MOCK_SLSKD_STUCK=<peer,…>` (their queues never move). `MOCK_LIDARR_LOOKUP_FAIL=<word,…>` makes Lidarr's
-  search fail for names with those words, as its metadata server does for some. `MOCK_COVER_MS` makes each cover that slow, as Navidrome
+  search fail for names with those words, as its metadata server does for some. `MOCK_MB_CROWDED=<word,…>`
+  makes songs with those words famous in MusicBrainz (150 compilation and live recordings before the
+  album's, and a greatest hits Lidarr doesn't keep). `MOCK_COVER_MS` makes each cover that slow, as Navidrome
   on a Raspberry Pi. ListenBrainz token for Settings: `mock-lb`.
 - `npm run typecheck` checks server and web; `npm run check:i18n` the Italian.
 - **Develop against the mock**, never against a real household's server.

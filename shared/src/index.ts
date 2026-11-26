@@ -333,6 +333,8 @@ export interface Person {
 export interface NativeTrack {
   id: string;
   url: string;
+  /** Automatic: the address on mobile data, when it isn't `url` (the app follows the network while the page sleeps). */
+  mobileUrl?: string;
   title: string;
   artist: string;
   album: string;

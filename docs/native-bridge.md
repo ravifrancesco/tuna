@@ -76,8 +76,12 @@ converts anything else (the page asks for `f=mp3` or `f=opus` in the stream URL)
 | `tunnel.status` / `tunnel.save` `{config}` / `tunnel.remove` | | as in Netfish: `{configured, active, problem}` / `""` or what's wrong / — |
 | `update.check` / `update.install` | | `{current, latest, available, canInstall, page}` / — |
 
-A `NativeTrack` is `{ id, url, title, artist, album, artwork?, duration, liked? }`. `url` and `artwork` are
-absolute and carry `?k=<media key>`: fetch them directly, no cookie needed. Streams answer range
+A `NativeTrack` is `{ id, url, mobileUrl?, title, artist, album, artwork?, duration, liked? }`. `url` and `artwork` are
+absolute and carry `?k=<media key>`: fetch them directly, no cookie needed. `mobileUrl` (sound quality
+Automatic): the song on mobile data, when that isn't `url`. The page sleeps with the screen off, so an app
+that reports `mobileData` uses `mobileUrl` while it's on mobile data (unless the song at `url` is on the
+phone already), for the songs it loads and keeps ahead, and sends `{type: 'event', name: 'mobileData',
+value}` when the network changes. Streams answer range
 requests. Covers are PNG/JPEG.
 
 ## App → page

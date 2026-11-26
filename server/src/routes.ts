@@ -14,7 +14,7 @@ import * as library from './services/library';
 import { listeningHistory, listeningStats, yearInReview } from './services/listens';
 import { importSpotify } from './services/spotify';
 import { getMany, missedAlbums, saveStocking, stillToAsk, stocking, stopAsking } from './services/stocking';
-import { songItems, songsWaiting, stopSongs, wantSongs, withTracks } from './services/songs';
+import { lookAgain, songItems, songsNotFound, songsWaiting, stopSongs, wantSongs, withTracks } from './services/songs';
 import { arrived, discoverySettings, saveDiscovery, topUpRadio } from './services/discovery';
 import * as together from './services/together';
 import * as devices from './services/devices';
@@ -207,6 +207,13 @@ export async function apiRoutes(app: FastifyInstance) {
   });
   app.post<{ Body: { albums?: Array<{ artist: string; album: string }> } }>('/get/many', async (req) => ({ asked: getMany(requireUser(req), req.body?.albums ?? []) }));
   app.get('/get/missed', async (req) => (requireUser(req), missedAlbums()));
+  // Everything people asked for that couldn't be found, looked for again (Settings).
+  app.get('/get/again', async (req) => (requireAdmin(req), { songs: songsNotFound().length, albums: missedAlbums().length }));
+  app.post('/get/again', async (req) => {
+    const s = requireAdmin(req);
+    const missed = missedAlbums().map((m) => ({ artist: m.artist, album: m.album }));
+    return { songs: has.slskd() && has.lidarr() ? lookAgain(s.name) : 0, albums: missed.length && has.lidarr() ? getMany(s, missed) : 0 };
+  });
   // New songs: the weekly ones for each person (an admin sets how many), and a radio's.
   app.get('/discovery', async (req) => (requireUser(req), discoverySettings()));
   app.put<{ Body: { perWeek?: number } }>('/discovery', async (req) => saveDiscovery(requireAdmin(req), Number(req.body?.perWeek) || 0));

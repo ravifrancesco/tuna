@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.10 (2026-11-26)
+
+**Fixed**
+- **Famous songs weren't found.** Tuna read only MusicBrainz's first 10 matches for a song, and for a
+  famous one those are mostly compilations, live albums and DJ mixes, so it said "not in
+  MusicBrainz". It now reads up to 300, until it finds the song on an album. A song a playlist lists
+  on a greatest hits now comes from the album it's on (Lidarr doesn't keep greatest hits).
+- **Automatic played Original on mobile data** on the iPhone, after the app came back from the
+  background or when you left Wi-Fi with the screen off. The iPhone app now follows the network
+  itself, and the page asks again as soon as it's opened.
+- **Lyrics:** going back to a song showed its lyrics from where the other song had been; they now
+  start at the top. They also keep time between the apps' once-a-second updates, and the next song's
+  lyrics are ready before you skip.
+- The sound quality badge in Now Playing stays on one line.
+
+**New**
+- **Settings → Couldn't find** (admins): how many songs and albums people asked for weren't found,
+  and Look again, which looks for all of them once more.
+
+To update: the server (pull the new image) and the iPhone app; the other apps don't need updating.
+
 ## 0.4.9 (2026-11-26)
 
 **Fixed**

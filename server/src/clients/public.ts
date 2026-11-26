@@ -73,8 +73,9 @@ export interface MbRecording {
 /** Songs by name (title, artist and album at once, as typed in a search box). */
 export const mbFindSongs = (q: string) =>
   cached(`songs:${q.toLowerCase()}`, () => mb<{ recordings?: MbRecording[] }>('/recording', { query: q, limit: 25, dismax: 'true' }).then((r) => r.recordings ?? []));
-export const mbSearchRecordings = (q: string) =>
-  cached(`rec:${q.toLowerCase()}`, () => mb<{ recordings?: MbRecording[] }>('/recording', { query: q, limit: 10 }).then((r) => r.recordings ?? []));
+/** A hundred at a time, from `offset`. */
+export const mbSearchRecordings = (q: string, offset = 0) =>
+  cached(`rec:${offset}:${q.toLowerCase()}`, () => mb<{ recordings?: MbRecording[] }>('/recording', { query: q, limit: 100, offset }).then((r) => r.recordings ?? []));
 
 export const mbArtist = (mbid: string) => cached(`a:${mbid}`, () => mb<MbArtist>(`/artist/${mbid}`, {}));
 

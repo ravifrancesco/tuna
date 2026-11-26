@@ -9,7 +9,7 @@ import { config } from '../config';
 import { has, slskd as slskdConnection, soulseekFiles } from '../connections';
 import { log } from '../lib/log';
 import { writeJson } from '../lib/storage';
-import { ensureArtist, findAlbum, scanNavidrome } from './getting';
+import { ensureArtist, scanNavidrome } from './getting';
 import type { SubsonicAuth } from '../clients/navidrome';
 import { norm, toTrack } from './library';
 import { artistsOf, matcher, songIndex } from './matching';
@@ -135,6 +135,19 @@ export function stopSongs(by: string | undefined): number {
 }
 export const songsWaiting = (by?: string) => songs.filter((s) => s.state === 'waiting' && (!by || s.by === by)).length;
 
+/** Songs people asked for that couldn't be found (not Tuna's own picks). */
+export const songsNotFound = () => songs.filter((s) => s.state === 'notFound' && !s.for?.length);
+
+/** Looks for all of those again, from the start. */
+export function lookAgain(by: string): number {
+  const again = songsNotFound();
+  for (const s of again) Object.assign(s, { state: 'waiting', tried: undefined, refused: undefined, failures: undefined, after: undefined, from: undefined, progress: undefined });
+  save();
+  if (again.length) log.info('get', `${by} asked to look again for ${again.length} song${again.length === 1 ? '' : 's'}, to get ${AT_ONCE} at a time`);
+  void tick();
+  return again.length;
+}
+
 /** Where a song asked for on its own is at, if it was. */
 export function songState(s: { artist: string; title: string }): GetState | undefined {
   const found = songs.find((x) => key(x) === key(s));
@@ -170,36 +183,79 @@ export async function letGo(id: string) {
 
 // ---- Finding its place in Lidarr ---------------------------------------------------------------------
 
-/** Its album (as Lidarr knows it) and its track there; Lidarr adds the artist, watching nothing. */
-async function place(s: Song): Promise<boolean> {
-  const first = s.artist.split(/\s*;\s*/)[0] || s.artist;
+type Album = { mbid: string; artistMbid?: string; title: string; artist: string };
+
+/**
+ * Its album (as Lidarr knows it) and its track there; Lidarr adds the artist, watching nothing. The
+ * album the playlist names, else one the song came out on: a greatest hits isn't one Lidarr keeps.
+ * Why not, when it can't be placed.
+ */
+async function place(s: Song): Promise<string | undefined> {
   // Lidarr's search fails for some names (its metadata server): then the song's own way, below.
-  let album = s.album ? await resolve(s.artist, s.album).catch(() => undefined) : undefined;
-  if (!album) {
-    // No album (or not one Lidarr knows): the release the song first came out on, an album if there's one.
-    const recs = await mbSearchRecordings(`recording:"${cleanTitle(s.title).replace(/"/g, '')}" AND artist:"${first.replace(/"/g, '')}"`);
-    const rank = (t?: string) => (t === 'Album' ? 0 : t === 'Single' ? 1 : t === 'EP' ? 2 : 3);
-    const groups = recs
-      .filter((r) => norm(cleanTitle(r.title)) === norm(cleanTitle(s.title)))
-      .flatMap((r) => (r.releases ?? []).map((rel) => ({ group: rel['release-group'], artist: r['artist-credit']?.[0] })))
-      .filter((x) => x.group && !x.group['secondary-types']?.length)
-      .sort((a, b) => rank(a.group?.['primary-type']) - rank(b.group?.['primary-type']));
-    const g = groups[0];
-    if (g?.group && g.artist) album = { mbid: g.group.id, artistMbid: g.artist.artist.id, title: g.group.title, artist: g.artist.name };
-  }
-  if (!album?.artistMbid) return false;
-  const artistId = await ensureArtist(album.artistMbid, album.artist);
-  const found = await findAlbum(artistId, album.mbid);
-  if (!found) return false;
-  const full = found.releases ? found : await lidarr.album(found.id);
-  const release = full.releases?.find((r) => r.monitored) ?? full.releases?.[0];
-  const tracks = (await lidarr.tracks(found.id)).filter((t) => !release || !t.albumReleaseId || t.albumReleaseId === release.id);
+  const named = s.album ? await resolve(s.artist, s.album).catch(() => undefined) : undefined;
+  if (named && (await placeOn(s, [named]))) return;
+  const own = (await releasesOf(s)).filter((a) => a.mbid !== named?.mbid);
+  if (!named && !own.length) return 'not in MusicBrainz';
+  if (!(await placeOn(s, own))) return 'not on an album Lidarr has';
+}
+
+/** The albums, singles and EPs the song came out on (no compilations, live albums or mixes), albums first. */
+async function releasesOf(s: Song): Promise<Album[]> {
+  const first = s.artist.split(/\s*;\s*/)[0] || s.artist;
+  const query = `recording:"${cleanTitle(s.title).replace(/"/g, '')}" AND artist:"${first.replace(/"/g, '')}"`;
   const want = norm(cleanTitle(s.title));
-  const track = tracks.find((t) => norm(cleanTitle(t.title)) === want) ?? tracks.find((t) => norm(t.title).includes(want) || want.includes(norm(cleanTitle(t.title))));
-  if (!track || !release) return false;
-  Object.assign(s, { albumMbid: album.mbid, artistId, albumId: found.id, releaseId: release.id, trackId: track.id, length: track.duration ? Math.round(track.duration / 1000) : undefined });
-  if (track.hasFile) Object.assign(s, { state: 'ready', ready: new Date().toISOString() });
-  return true;
+  const rank = (t?: string) => (t === 'Album' ? 0 : t === 'Single' ? 1 : t === 'EP' ? 2 : 3);
+  const found = new Map<string, Album & { rank: number }>();
+  // A famous song has dozens of recordings, most of them on compilations: a few pages, until one is on an album.
+  for (let page = 0; page < 3 && ![...found.values()].some((a) => a.rank === 0); page++) {
+    const recs = await mbSearchRecordings(query, page * 100);
+    for (const r of recs) {
+      const artist = r['artist-credit']?.[0];
+      if (!artist || norm(cleanTitle(r.title)) !== want) continue;
+      for (const { 'release-group': g } of r.releases ?? []) {
+        if (g && !g['secondary-types']?.length && !found.has(g.id)) found.set(g.id, { mbid: g.id, artistMbid: artist.artist.id, title: g.title, artist: artist.name, rank: rank(g['primary-type']) });
+      }
+    }
+    if (recs.length < 100) break;
+  }
+  return [...found.values()].sort((a, b) => a.rank - b.rank);
+}
+
+/** The song's track on the first of these albums that Lidarr has. */
+async function placeOn(s: Song, albums: Album[]): Promise<boolean> {
+  const artists = new Map<string, { id: number; albums: lidarr.LAlbum[] }>();
+  const want = norm(cleanTitle(s.title));
+  for (const album of albums) {
+    if (!album.artistMbid) continue;
+    let artist = artists.get(album.artistMbid);
+    if (!artist) {
+      const id = await ensureArtist(album.artistMbid, album.artist);
+      artists.set(album.artistMbid, (artist = { id, albums: await albumsOf(id) }));
+    }
+    const found = artist.albums.find((a) => a.foreignAlbumId === album.mbid);
+    if (!found) continue;
+    const full = found.releases ? found : await lidarr.album(found.id);
+    const release = full.releases?.find((r) => r.monitored) ?? full.releases?.[0];
+    const tracks = (await lidarr.tracks(found.id)).filter((t) => !release || !t.albumReleaseId || t.albumReleaseId === release.id);
+    const track = tracks.find((t) => norm(cleanTitle(t.title)) === want) ?? tracks.find((t) => norm(t.title).includes(want) || want.includes(norm(cleanTitle(t.title))));
+    if (!track || !release) continue;
+    Object.assign(s, { albumMbid: album.mbid, artistId: artist.id, albumId: found.id, releaseId: release.id, trackId: track.id, length: track.duration ? Math.round(track.duration / 1000) : undefined });
+    if (track.hasFile) Object.assign(s, { state: 'ready', ready: new Date().toISOString() });
+    return true;
+  }
+  return false;
+}
+
+/** An artist's albums in Lidarr; a newly added artist's arrive over a few seconds. */
+async function albumsOf(artistId: number): Promise<lidarr.LAlbum[]> {
+  let last = await lidarr.albums(artistId);
+  for (let i = 0; i < 15; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    const now = await lidarr.albums(artistId);
+    if (now.length && now.length === last.length) return now;
+    last = now;
+  }
+  return last;
 }
 
 // ---- Finding a copy on Soulseek ----------------------------------------------------------------------
@@ -253,7 +309,8 @@ async function start(s: Song) {
   s.state = 'looking';
   save();
   try {
-    if (!s.trackId && !(await place(s))) return notFound(s, 'not in MusicBrainz');
+    const why = s.trackId ? undefined : await place(s);
+    if (why) return notFound(s, why);
     // Lidarr had it already.
     if ((s.state as Song['state']) === 'ready') return void scanNavidrome();
     await fetchCopy(s);

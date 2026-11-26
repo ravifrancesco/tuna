@@ -129,4 +129,9 @@ export default {
   'About 8 MB a song': 'Circa 8 MB a brano',
   'The file as it is: about 30 MB a song in FLAC': 'Il file così com’è: circa 30 MB a brano in FLAC',
   'For new downloads': 'Per i nuovi download',
+  'Songs and albums someone asked for that Get couldn’t find. Looking again finds the ones that have turned up since, on Soulseek or in MusicBrainz.':
+    'Brani e album richiesti che Richiedi non ha trovato. Cercandoli di nuovo trovi quelli comparsi nel frattempo, su Soulseek o in MusicBrainz.',
+  'Look again': 'Cerca di nuovo',
+  Nothing: 'Niente',
+  'Looking again': 'Di nuovo in cerca',
 } as Record<string, string>;

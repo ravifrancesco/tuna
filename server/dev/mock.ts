@@ -14,6 +14,9 @@
  *   downloads folder (taken off slskd's list before then, it never gets there, as in slskd).
  *   MOCK_LIDARR_LOOKUP_FAIL=<word,…>: Lidarr's search fails for names with those words ("Invalid response
  *   received from LidarrAPI", as its metadata server does for some), and so does looking up those artists.
+ *   MOCK_MB_CROWDED=<word,…>: songs with those words are famous in MusicBrainz: 150 recordings on
+ *   compilations, live albums and DJ mixes come before the one on their album, and their artists have
+ *   a greatest hits ("The Hits") that Lidarr doesn't keep.
  *   MOCK_COVER_MS (default 0): how long each cover takes, as Navidrome resizing pictures on a Raspberry Pi.
  *   ListenBrainz token for Settings: mock-lb.
  */
@@ -32,6 +35,8 @@ const SLSKD_STUCK = (process.env.MOCK_SLSKD_STUCK ?? '').split(',').filter(Boole
 const SLSKD_MOVE_SECONDS = Number(process.env.MOCK_SLSKD_MOVE_SECONDS ?? 2);
 const COVER_MS = Number(process.env.MOCK_COVER_MS ?? 0);
 const LOOKUP_FAIL = (process.env.MOCK_LIDARR_LOOKUP_FAIL ?? '').toLowerCase().split(',').filter(Boolean);
+const CROWDED = (process.env.MOCK_MB_CROWDED ?? '').toLowerCase().split(',').filter(Boolean);
+const crowded = (title: string) => CROWDED.some((w) => title.toLowerCase().includes(w));
 const lookupFails = (name: string) => LOOKUP_FAIL.some((w) => name.toLowerCase().includes(w));
 
 // ---- A made-up world, the same every time ------------------------------------------------------
@@ -807,6 +812,9 @@ const mbGroup = (a: MAlbum, score?: number) => ({
   ...(score !== undefined ? { score } : {}),
 });
 
+/** A famous artist's greatest hits (MOCK_MB_CROWDED): in MusicBrainz, not in Lidarr. */
+const theHits = (a: MAlbum) => ({ id: uuid(`hits:${a.artist}`), title: 'The Hits', 'primary-type': 'Album', 'secondary-types': ['Compilation'] });
+
 const cleanQuery = (q: string) =>
   q
     .replace(/\\(.)/g, '$1')
@@ -1325,6 +1333,8 @@ function musicbrainz(path: string, q: URLSearchParams, res: http.ServerResponse)
   if (p === '/release-group' && exact) {
     const [title, artist] = [exact[1], exact[2]].map((x) => x.replace(/\\(.)/g, '$1').toLowerCase());
     const found = [...albums.values()].filter((a) => a.name.toLowerCase() === title && a.artist.toLowerCase() === artist);
+    const famous = [...albums.values()].find((a) => title === 'the hits' && a.artist.toLowerCase() === artist && a.tracks.some((t) => crowded(t.title)));
+    if (famous) return json(res, 200, { 'release-groups': [{ ...theHits(famous), 'artist-credit': mbGroup(famous)['artist-credit'], score: 100 }] });
     return json(res, 200, { 'release-groups': found.map((a) => mbGroup(a, 100)) });
   }
   if (p === '/release-group') {
@@ -1352,23 +1362,28 @@ function musicbrainz(path: string, q: URLSearchParams, res: http.ServerResponse)
     const same = (a: string, b = '') => words(a).join(' ') === words(b.replace(/\\(.)/g, '$1')).join(' ');
     const query = cleanQuery(q.get('query') ?? '');
     const rank = (t: MTrack) => (exact ? (same(t.title, exact[1]) && (!exact[2] || same(t.artist, exact[2])) ? 100 : 0) : score(t.title, query));
-    const found = [...tracks.values()]
-      .filter((t) => rank(t) > 0)
-      .sort((x, y) => rank(y) - rank(x))
-      .slice(0, Number(q.get('limit') ?? 10));
-    return json(res, 200, {
-      recordings: found.map((t) => {
-        const a = albums.get(t.albumId)!;
-        return {
-          id: t.mbid,
-          title: t.title,
-          length: t.duration * 1000,
-          score: rank(t),
-          'artist-credit': mbGroup(a)['artist-credit'],
-          releases: [{ id: uuid(`release:${a.mbid}`), title: a.name, status: 'Official', 'release-group': { id: a.mbid, title: a.name, 'primary-type': a.type, 'secondary-types': [] } }],
-        };
-      }),
+    const found = [...tracks.values()].filter((t) => rank(t) > 0).sort((x, y) => rank(y) - rank(x));
+    const recording = (t: MTrack, group: { id: string; title: string; 'primary-type': string; 'secondary-types': string[] }, id = t.mbid) => ({
+      id,
+      title: t.title,
+      length: t.duration * 1000,
+      score: rank(t),
+      'artist-credit': mbGroup(albums.get(t.albumId)!)['artist-credit'],
+      releases: [{ id: uuid(`release:${group.id}`), title: group.title, status: 'Official', 'release-group': group }],
     });
+    const all = found.flatMap((t) => {
+      const a = albums.get(t.albumId)!;
+      const own = recording(t, { id: a.mbid, title: a.name, 'primary-type': a.type, 'secondary-types': [] });
+      if (!exact || !crowded(t.title)) return [own];
+      // Famous: its other recordings first (MusicBrainz gives equal matches in no particular order).
+      const kinds = [['Compilation'], ['Live'], ['DJ-mix'], ['Compilation', 'Live']];
+      const others = Array.from({ length: 150 }, (_, i) =>
+        recording(t, i % 4 ? { id: uuid(`crowd:${t.mbid}:${i}`), title: `${a.artist} ${kinds[i % 4].join(' ')} ${i}`, 'primary-type': 'Album', 'secondary-types': kinds[i % 4] } : theHits(a), uuid(`crowdrec:${t.mbid}:${i}`)),
+      );
+      return [...others, own];
+    });
+    const offset = Number(q.get('offset') ?? 0);
+    return json(res, 200, { count: all.length, offset, recordings: all.slice(offset, offset + Number(q.get('limit') ?? 10)) });
   }
   const artist = p.match(/^\/artist\/([\w-]+)$/);
   if (artist) {

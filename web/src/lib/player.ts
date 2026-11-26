@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import type { NativeAudioState, NativeOutput, NativeTrack, Quality, Track } from '@tuna/shared';
-import { app, nativeAudio } from './native';
+import { app, nativeAudio, onEvent } from './native';
 import { coverUrl, getMe, streamUrl } from './session';
 import { BANDS, onBrowserEq, type Eq } from './eq';
 
@@ -35,6 +35,8 @@ export interface PlayerState {
   output?: NativeOutput;
   /** The sleep timer: stops at `at` (ms since 1970) or at the end of the song. */
   sleep?: { at?: number; endOfSong?: boolean };
+  /** On mobile data, as the app says (Automatic plays Normal then). */
+  mobileData?: boolean;
 }
 
 let state: PlayerState = { queue: [], index: -1, playing: false, buffering: false, time: 0, duration: 0, shuffle: false, repeat: 'off', volume: 1 };
@@ -82,17 +84,20 @@ const browserFormats = (() => {
   return out;
 })();
 
-let onMobileData = false;
-const refreshMobileData = () =>
-  void app.mobileData().then((on) => {
-    if (on === onMobileData) return;
-    onMobileData = on;
-    // Automatic: what comes next follows the network (the song playing carries on), and so do the
-    // songs the app keeps ahead.
-    if ((getMe()?.prefs.quality ?? 'auto') === 'auto' && state.index >= 0) engine().update(state.queue, state.index);
-  });
+/** What the app says (no answer, as when the page wakes from sleep: as it was). */
+function mobileData(on: boolean | undefined) {
+  if (on === undefined || on === Boolean(state.mobileData)) return;
+  set({ mobileData: on });
+  // Automatic: what comes next follows the network (the song playing carries on), and so do the
+  // songs the app keeps ahead.
+  if ((getMe()?.prefs.quality ?? 'auto') === 'auto' && state.index >= 0) engine().update(state.queue, state.index);
+}
+const refreshMobileData = () => void app.mobileData().then(mobileData);
 refreshMobileData();
 setInterval(refreshMobileData, 60_000);
+// The page sleeps with the screen off: again as soon as it's back, and whenever the app says.
+document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && refreshMobileData());
+onEvent((name, value) => name === 'mobileData' && mobileData(Boolean(value)));
 
 /** Each level's bit rate: Opus where the player has it (as good at less), else MP3. */
 const TIERS = { low: { opus: 96, mp3: 128 }, normal: { opus: 160, mp3: 192 }, high: { opus: 256, mp3: 320 } } as const;
@@ -100,7 +105,7 @@ const TIERS = { low: { opus: 96, mp3: 128 }, normal: { opus: 160, mp3: 192 }, hi
 export function fileFor(t: Track, level?: Quality): { format: string; bitRate?: number } {
   const formats = nativeAudio?.formats ?? browserFormats;
   const chosen = level ?? getMe()?.prefs.quality ?? 'auto';
-  const quality = chosen === 'auto' ? (onMobileData ? 'normal' : 'original') : chosen;
+  const quality = chosen === 'auto' ? (state.mobileData ? 'normal' : 'original') : chosen;
   if (quality === 'original' && t.suffix && formats.includes(t.suffix.toLowerCase())) return { format: 'raw' };
   const tier = TIERS[quality === 'original' ? 'high' : quality];
   return formats.includes('opus') ? { format: 'opus', bitRate: tier.opus } : { format: 'mp3', bitRate: tier.mp3 };
@@ -115,7 +120,11 @@ export function playingAs(t: Track): string {
 
 export function nativeTrack(t: Track, level?: Quality): NativeTrack {
   const f = fileFor(t, level);
-  return { id: t.id, url: streamUrl(t.id, f.format, f.bitRate), title: t.title, artist: t.artist, album: t.album, artwork: coverUrl(t.cover, 600), duration: t.duration, liked: Boolean(t.liked) };
+  const url = streamUrl(t.id, f.format, f.bitRate);
+  // Automatic: mobile data's address too, so the app follows the network while the page sleeps.
+  const m = (level ?? getMe()?.prefs.quality ?? 'auto') === 'auto' ? fileFor(t, 'normal') : undefined;
+  const mobileUrl = m && streamUrl(t.id, m.format, m.bitRate);
+  return { id: t.id, url, ...(mobileUrl && mobileUrl !== url ? { mobileUrl } : {}), title: t.title, artist: t.artist, album: t.album, artwork: coverUrl(t.cover, 600), duration: t.duration, liked: Boolean(t.liked) };
 }
 
 // ---- Engines -----------------------------------------------------------------------------------------

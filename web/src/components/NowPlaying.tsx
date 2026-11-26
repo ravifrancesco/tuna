@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Airplay, AudioLines, Bluetooth, Car, Cast, Check, ChevronDown, GripVertical, Headphones, Maximize2, Minimize2, MonitorSpeaker, MoreHorizontal, Speaker, Tv, X } from 'lucide-react';
 import type { NativeOutput, Track } from '@tuna/shared';
 import { api } from '../api';
@@ -289,6 +289,7 @@ function OutputButton() {
 
 function QualityBadge() {
   const track = usePlayer((s) => s.queue[s.index]);
+  usePlayer((s) => s.mobileData);
   const me = useMe();
   if (!track || !me) return null;
   const chosen = QUALITIES.find((q) => q.value === me.prefs.quality);
@@ -319,17 +320,38 @@ function QualityBadge() {
       }
     >
       <AudioLines size={14} />
-      {playingAs(track)}
+      <span className="quality__as">{playingAs(track)}</span>
       {chosen && me.prefs.quality !== 'original' && <span className="quality__level">{chosen.label()}</span>}
     </button>
   );
 }
 
+const lyricsOf = (id: string) => ({ queryKey: ['lyrics', id], queryFn: () => api.lyrics(id), staleTime: Infinity });
+
 function LyricsView({ songId }: { songId: string }) {
-  const lyrics = useQuery({ queryKey: ['lyrics', songId], queryFn: () => api.lyrics(songId), staleTime: Infinity });
-  const time = useShown((s) => s.time);
+  const lyrics = useQuery(lyricsOf(songId));
+  const reported = useShown((s) => s.time);
+  const playing = useShown((s) => s.playing && !s.buffering);
+  const nextId = useShown((s) => s.queue[s.index + 1]?.id);
+  const qc = useQueryClient();
   const box = useRef<HTMLDivElement>(null);
   const lines = lyrics.data?.lines ?? [];
+  const synced = Boolean(lyrics.data?.synced);
+  // The next song's lyrics ahead, so skipping shows them at once.
+  useEffect(() => {
+    if (nextId) void qc.prefetchQuery(lyricsOf(nextId));
+  }, [nextId, qc]);
+  // The apps' players say where they are about once a second: in between, the lyrics move on by themselves.
+  // (Kept as it's drawn, so a new song never starts from the last one's time.)
+  const said = useRef({ time: reported, at: performance.now() });
+  if (said.current.time !== reported) said.current = { time: reported, at: performance.now() };
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!playing || !synced) return;
+    const timer = setInterval(() => tick((n) => n + 1), 200);
+    return () => clearInterval(timer);
+  }, [playing, synced]);
+  const time = said.current.time + (playing ? Math.min(1.5, (performance.now() - said.current.at) / 1000) : 0);
   // Scrolling the lyrics yourself stops them following the song, until a few quiet seconds or a tap.
   const [away, setAway] = useState(false);
   const touched = useRef(0);
@@ -352,7 +374,11 @@ function LyricsView({ songId }: { songId: string }) {
     const timer = setInterval(() => Date.now() - touched.current > 5000 && setAway(false), 1000);
     return () => clearInterval(timer);
   }, [away]);
-  const synced = Boolean(lyrics.data?.synced);
+  // Another song: from its top, following along.
+  useEffect(() => {
+    setAway(false);
+    box.current?.closest<HTMLElement>('.now__panel')?.scrollTo({ top: 0 });
+  }, [songId]);
   const at = useMemo(() => {
     if (!synced) return -1;
     let i = -1;
@@ -370,7 +396,7 @@ function LyricsView({ songId }: { songId: string }) {
     const seen = Math.min(r.bottom, window.innerHeight) - Math.max(r.top, 0);
     const view = seen > 120 ? seen : scroller.clientHeight;
     scroller.scrollTo({ top: el.offsetTop - scroller.offsetTop - view / 2 + el.clientHeight / 2, behavior: 'smooth' });
-  }, [at, away]);
+  }, [at, away, lines]);
   if (lyrics.isLoading) return <Spinner />;
   if (!lines.length) return <Empty>{t('No lyrics for this song')}</Empty>;
   return (

@@ -35,6 +35,7 @@ export function Settings() {
       {app.tunnel && <AwayFromHome />}
       {hello && <AppSection />}
       {me.admin && <WeeklyPicks />}
+      {me.admin && <LookAgain />}
       {me.admin && <ConnectionsSection />}
       {me.admin && <Waveforms />}
       {me.admin && <Household me={me} />}
@@ -523,6 +524,40 @@ function WeeklyPicks() {
           ))}
         </div>
       )}
+      {error && <p className="error small">{error}</p>}
+    </section>
+  );
+}
+
+/** Songs and albums people asked for that Get couldn't find, looked for again. */
+function LookAgain() {
+  const qc = useQueryClient();
+  const left = useQuery({ queryKey: ['not-found'], queryFn: api.notFound });
+  const [error, setError] = useState<string>();
+  const n = left.data;
+  if (!n) return null;
+  const again = async () => {
+    setError(undefined);
+    try {
+      await api.lookAgain();
+      qc.setQueryData(['not-found'], { songs: 0, albums: 0 });
+      for (const key of ['getting', 'missed', 'still-to-ask']) void qc.invalidateQueries({ queryKey: [key] });
+      toast(t('Looking again'));
+    } catch (err) {
+      setError(failed(err));
+    }
+  };
+  const what = [n.songs > 0 && tn(n.songs, '{n} song', '{n} songs'), n.albums > 0 && tn(n.albums, '{n} album', '{n} albums')].filter(Boolean).join(' · ');
+  return (
+    <section className="panel">
+      <h2>{t("Couldn't find")}</h2>
+      <p className="muted small">{t('Songs and albums someone asked for that Get couldn’t find. Looking again finds the ones that have turned up since, on Soulseek or in MusicBrainz.')}</p>
+      <div className="account">
+        <span className="account__who">{what || t('Nothing')}</span>
+        <button className="btn btn--ghost btn--small" disabled={!what} onClick={() => void again()}>
+          {t('Look again')}
+        </button>
+      </div>
       {error && <p className="error small">{error}</p>}
     </section>
   );

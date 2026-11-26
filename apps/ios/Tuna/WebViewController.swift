@@ -80,7 +80,12 @@ final class WebViewController: UIViewController, WKNavigationDelegate, WKUIDeleg
         super.viewDidLoad()
         network.pathUpdateHandler = { [weak self] path in
             let cellular = path.usesInterfaceType(.cellular)
-            DispatchQueue.main.async { self?.cellular = cellular }
+            DispatchQueue.main.async {
+                guard let self, self.cellular != cellular else { return }
+                self.cellular = cellular
+                self.player.cellular = cellular
+                self.send(["type": "event", "name": "mobileData", "value": cellular])
+            }
         }
         network.start(queue: .global(qos: .utility))
         // Back from the background: the page catches up with the music.

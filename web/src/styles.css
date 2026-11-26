@@ -3425,12 +3425,19 @@ html.tv .track:focus-within {
   font-weight: 650;
   letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  min-width: 0;
+}
+.quality__as {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .quality:hover {
   color: var(--text);
   background: rgba(255, 255, 255, 0.14);
 }
 .quality__level {
+  flex-shrink: 0;
   padding-left: 7px;
   border-left: 1px solid rgba(255, 255, 255, 0.2);
   color: var(--accent-light);

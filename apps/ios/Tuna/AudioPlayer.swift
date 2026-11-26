@@ -11,6 +11,8 @@ final class AudioPlayer: NSObject {
         var raw: [String: Any]
         let id: String
         let url: URL
+        /// Automatic: the song on mobile data, when that isn't `url`.
+        let mobileUrl: URL?
         let title: String
         let artist: String
         let album: String
@@ -22,6 +24,7 @@ final class AudioPlayer: NSObject {
             id = raw["id"] as? String ?? ""
             // A bad address still takes its place in the queue: it fails and is skipped.
             url = (raw["url"] as? String).flatMap(URL.init(string:)) ?? URL(string: "about:blank")!
+            mobileUrl = (raw["mobileUrl"] as? String).flatMap(URL.init(string:))
             title = raw["title"] as? String ?? ""
             artist = raw["artist"] as? String ?? ""
             album = raw["album"] as? String ?? ""
@@ -42,6 +45,16 @@ final class AudioPlayer: NSObject {
             cache.proxyPort = tunnelPort
             // A song from the server carries on from where it was, the new way; one from a file just carries on.
             if let item, (item.asset as? AVURLAsset)?.url.isFileURL != true { begin(index, at: time, play: wantsPlay) } else { prepareAhead() }
+        }
+    }
+
+    /// On mobile data: Automatic's songs in its mobile-data quality, even while the page sleeps (the
+    /// song playing carries on).
+    var cellular = false {
+        didSet {
+            guard cellular != oldValue else { return }
+            prepareAhead()
+            keepAhead()
         }
     }
 
@@ -341,7 +354,14 @@ final class AudioPlayer: NSObject {
     /// The song's file when it's downloaded or kept ahead (no server needed, and no data used), else
     /// the server's address (through the tunnel away from home).
     private func source(_ track: Track) -> URL {
-        OfflineStore.shared.file(for: track.id) ?? cache.file(for: track.url) ?? reachable(track.url)
+        OfflineStore.shared.file(for: track.id) ?? cache.file(for: address(track)) ?? reachable(address(track))
+    }
+
+    /// Where a song comes from: on mobile data, Automatic's mobile-data address, unless the song is
+    /// on the phone already.
+    private func address(_ track: Track) -> URL {
+        guard cellular, let mobile = track.mobileUrl, cache.file(for: track.url) == nil else { return track.url }
+        return mobile
     }
 
     /// A server address as the player reaches it: through the tunnel while it's on.
@@ -357,7 +377,7 @@ final class AudioPlayer: NSObject {
             if i < tracks.count { return tracks[i] }
             return repeatMode == "all" && i - tracks.count < index ? tracks[i - tracks.count] : nil
         }
-        cache.keep(upcoming.map { ($0.id, $0.url) }, playing: (tracks[index].id, tracks[index].url))
+        cache.keep(upcoming.map { ($0.id, address($0)) }, playing: (tracks[index].id, address(tracks[index])))
     }
 
     private func activate() {

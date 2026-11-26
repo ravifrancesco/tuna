@@ -170,7 +170,8 @@ export const app = {
   /** A short vibration (phones). */
   haptic: has('haptics') ? (style: 'light' | 'success') => send('app.haptic', { style }) : undefined,
   keepAwake: (on: boolean) => has('keepAwake') && send('keepAwake', { on }),
-  mobileData: (): Promise<boolean> => (has('mobileData') ? ask<boolean>('mobileData', undefined, 2000).catch(() => false) : Promise.resolve(false)),
+  /** Undefined when the app didn't answer. */
+  mobileData: (): Promise<boolean | undefined> => (has('mobileData') ? ask<boolean>('mobileData', undefined, 2000).catch(() => undefined) : Promise.resolve(false)),
   tunnel: has('tunnel')
     ? {
         status: () => ask<TunnelStatus>('tunnel.status'),

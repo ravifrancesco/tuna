@@ -137,6 +137,9 @@ export const api = {
   /** Single songs (through slskd, filed by Lidarr); `songs: false`: the server got their albums instead. */
   getSongs: (songs: Array<{ artist: string; title: string; album?: string }>) => call<{ asked: number; songs: boolean }>('POST', '/get/songs', { songs }),
   missed: () => call<MissedAlbum[]>('GET', '/get/missed'),
+  /** Songs and albums people asked for that couldn't be found (an admin's), and looking for them again. */
+  notFound: () => call<{ songs: number; albums: number }>('GET', '/get/again'),
+  lookAgain: () => call<{ songs: number; albums: number }>('POST', '/get/again'),
   /** New songs for each person every week (an admin sets how many; needs slskd), and a radio's. */
   discovery: () => call<{ perWeek: number; available: boolean }>('GET', '/discovery'),
   saveDiscovery: (perWeek: number) => call<{ perWeek: number; available: boolean }>('PUT', '/discovery', { perWeek }),
