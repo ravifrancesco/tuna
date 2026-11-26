@@ -23,7 +23,10 @@ const mine = (username: string) => {
   return m;
 };
 
-const shown = ({ id, name, kind, playing, track, position, at }: Kept): Device => ({ id, name, kind, playing, track, position, at });
+const shown = ({ id, name, kind, playing, track, position, at, played, queue, index, source }: Kept): Device => {
+  const from = (source as { title?: unknown } | undefined)?.title;
+  return { id, name, kind, playing, track, position, at, played, next: index >= 0 ? queue.slice(index + 1, index + 21) : [], from: typeof from === 'string' ? from : undefined };
+};
 
 function tell(d: Kept, event: Omit<DevicesEvent, 'now'>) {
   for (const line of d.lines) send(line, { now: Date.now(), ...event });
@@ -57,11 +60,14 @@ export function report(s: Session, id: string, state: { playing: boolean; index:
   const d = devices.get(id);
   if (!d) return;
   if (state.queue) d.queue = state.queue;
-  Object.assign(d, { playing: state.playing, index: state.index, position: state.position, at: Date.now(), source: state.source, track: d.queue[state.index] });
+  // Playing now, or until now: when it last played (opening Tuna somewhere isn't playing there).
+  const played = state.playing || d.playing ? Date.now() : d.played;
+  Object.assign(d, { playing: state.playing, index: state.index, position: state.position, at: Date.now(), played, source: state.source, track: d.queue[state.index] });
   if (state.playing) {
     for (const o of devices.values()) {
       if (o === d || !o.playing) continue;
       o.playing = false;
+      o.played = Date.now();
       tell(o, { command: { type: 'pause' } });
     }
   }
@@ -78,12 +84,15 @@ export function command(s: Session, to: string, cmd: DeviceCommand) {
 export function transfer(s: Session, to: string) {
   const devices = mine(s.username);
   const target = devices.get(to);
-  const from = [...devices.values()].filter((d) => d !== target && d.queue.length && d.index >= 0).sort((a, b) => Number(b.playing) - Number(a.playing) || b.at - a.at)[0];
+  const from = [...devices.values()]
+    .filter((d) => d !== target && d.queue.length && d.index >= 0)
+    .sort((a, b) => Number(b.playing) - Number(a.playing) || (b.played ?? 0) - (a.played ?? 0) || b.at - a.at)[0];
   if (!target || !from) return false;
   const position = from.position + (from.playing ? (Date.now() - from.at) / 1000 : 0);
   tell(target, { command: { type: 'take', queue: from.queue, index: from.index, position, playing: true, source: from.source } });
   if (from.playing) {
     from.playing = false;
+    from.played = Date.now();
     tell(from, { command: { type: 'pause' } });
   }
   return true;

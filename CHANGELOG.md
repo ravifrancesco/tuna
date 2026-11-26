@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.6 (2026-11-26)
+
+**New**
+- **Music on another of your devices** shows in the normal player, glowing, instead of a bar: play,
+  pause, skip, seek and the heart act on that device, and the line along the player follows the
+  song. Now Playing says where it's playing, has **Play here**, and shows what's next there.
+
+**Fixed**
+- **Single songs from Soulseek:** a song could be given up on just as it finished downloading
+  ("Lidarr can't see slskd's downloads"), because Tuna took it off slskd's list a moment before slskd
+  moved the file into its downloads folder. Tuna now waits until the file is there and Lidarr has
+  filed it. Copies that fail or are refused no longer pile up in slskd's list.
+- **Play here** after a seek on the other device carries on from where the song was, not from before
+  the seek.
+
+To update: the server (pull the new image); the apps don't need updating.
+
 ## 0.4.5 (2026-11-26)
 
 **New**

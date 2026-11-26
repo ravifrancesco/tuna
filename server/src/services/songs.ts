@@ -38,8 +38,8 @@ interface Song {
   trackId?: number;
   /** Seconds. */
   length?: number;
-  /** The copy being downloaded, and those tried before it. */
-  from?: { username: string; filename: string; size: number; since: number };
+  /** The copy being downloaded (and when slskd said it had it all), and those tried before it. */
+  from?: { username: string; filename: string; size: number; since: number; done?: number };
   tried?: string[];
   progress?: number;
   ready?: string;
@@ -64,6 +64,8 @@ const AT_ONCE = 4;
 /** Waiting in someone's upload queue this long: another copy. */
 const QUEUED_TOO_LONG = 20 * 60_000;
 const TRIES = 3;
+/** Downloaded but not in slskd's downloads folder after this long: it isn't coming. */
+const LANDING = 5 * 60_000;
 
 const busy = () => songs.filter((s) => s.state === 'looking' || s.state === 'downloading');
 export const songsOnTheWay = () => busy().length + songs.filter((s) => s.state === 'waiting').length;
@@ -262,13 +264,21 @@ async function inLidarr(remote: string): Promise<string> {
   return local;
 }
 
-async function file(s: Song) {
+/**
+ * Lidarr files a finished download. slskd says a download succeeded a moment before the file is in
+ * its downloads folder (longer for a big file): false until it's there, true once filed or given up.
+ */
+async function file(s: Song): Promise<boolean> {
   const where = await inLidarr(s.from!.filename);
-  const candidates = await lidarr.importable(path.posix.dirname(where));
+  const candidates = await lidarr.importable(path.posix.dirname(where)).catch(() => []);
   const item = candidates.find((c) => c.path === where) ?? candidates.find((c) => path.posix.basename(c.path) === path.posix.basename(where));
   if (!item) {
+    s.from!.done ??= Date.now();
+    save();
+    if (Date.now() - s.from!.done < LANDING) return false;
     log.warn('get', `Lidarr can't see "${where}": slskd's downloads folder needs to be visible to Lidarr`);
-    return notFound(s, "Lidarr can't see slskd's downloads");
+    notFound(s, "Lidarr can't see slskd's downloads");
+    return true;
   }
   const { id } = await lidarr.importSong({ path: item.path, artistId: s.artistId!, albumId: s.albumId!, albumReleaseId: s.releaseId!, trackId: s.trackId!, quality: item.quality });
   for (let i = 0; i < 60; i++) {
@@ -279,11 +289,12 @@ async function file(s: Song) {
       save();
       log.info('get', `Ready: "${s.title}" by ${s.artist} (asked for by ${s.by})`);
       void scanNavidrome();
-      return;
+      return true;
     }
     if (c.status === 'failed' || c.status === 'aborted') break;
   }
   notFound(s, "Lidarr couldn't file it");
+  return true;
 }
 
 let ticking = false;
@@ -299,12 +310,13 @@ async function tick() {
       for (const s of downloading) {
         const t = transfers.find((x) => x.username === s.from!.username && x.filename === s.from!.filename);
         const state = t?.state ?? '';
-        if (state.includes('Succeeded')) {
-          await slskd.cancel(t!.username, t!.id).catch(() => undefined);
-          await file(s);
+        if (state.includes('Succeeded') || (!t && s.from!.done)) {
+          // Off slskd's list only once filed: taken off before the file is in its downloads folder,
+          // slskd stops and leaves it behind.
+          if ((await file(s)) && t) await slskd.cancel(t.username, t.id).catch(() => undefined);
         } else if (!t || state.startsWith('Completed') || (state.includes('Queued') && Date.now() - s.from!.since > QUEUED_TOO_LONG)) {
-          // Failed, refused, or stuck in a queue: another copy, a couple of times.
-          if (t && !state.startsWith('Completed')) await slskd.cancel(t.username, t.id).catch(() => undefined);
+          // Failed, refused, or stuck in a queue: off slskd's list, and another copy, a couple of times.
+          if (t) await slskd.cancel(t.username, t.id).catch(() => undefined);
           s.tried = [...(s.tried ?? []), `${s.from!.username}|${s.from!.filename}`];
           if (s.tried.length >= TRIES) notFound(s, 'no copy came through');
           else await fetchCopy(s).catch(() => ((s.state = 'waiting'), save()));

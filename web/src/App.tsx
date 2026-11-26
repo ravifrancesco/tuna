@@ -39,7 +39,6 @@ import { Settings } from "./pages/Settings";
 import { Setup } from "./pages/Setup";
 import { WorldArtist } from "./pages/WorldArtist";
 import { WorldAlbum } from "./pages/WorldAlbum";
-import { DevicesBar } from "./components/Devices";
 import { startDevices } from "./lib/devices";
 
 function ScrollTop() {
@@ -91,7 +90,6 @@ function Shell() {
       {/* Phones: Now Playing covers the whole screen (older Android web views would draw these over it). */}
       {!now && <MiniPlayer onOpen={() => setNow({})} />}
       {!now && <Tabs />}
-      {!now && <DevicesBar />}
     </div>
   );
 }

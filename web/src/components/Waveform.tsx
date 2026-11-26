@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { t } from '../i18n';
 import { clock } from '../lib/format';
-import { getPlayer, seek, usePlayer } from '../lib/player';
+import { getShown, seekShown, useShown } from '../lib/devices';
 import { Progress } from './PlayerBar';
 
 /**
@@ -19,8 +19,8 @@ const AHEAD = 'rgba(241, 238, 252, 0.24)';
 const HOVER = 'rgba(220, 203, 255, 0.5)';
 
 export function WaveProgress() {
-  const id = usePlayer((s) => s.queue[s.index]?.id);
-  const nextId = usePlayer((s) => s.queue[s.index + 1]?.id);
+  const id = useShown((s) => s.queue[s.index]?.id);
+  const nextId = useShown((s) => s.queue[s.index + 1]?.id);
   const qc = useQueryClient();
   const wave = useQuery({ queryKey: ['wave', id], queryFn: () => api.wave(id!), enabled: Boolean(id), staleTime: Infinity, retry: false });
   // The next song's shape, ready for when it starts.
@@ -32,9 +32,9 @@ export function WaveProgress() {
 }
 
 function Waveform({ peaks }: { peaks: number[] }) {
-  const time = usePlayer((s) => s.time);
-  const playing = usePlayer((s) => s.playing);
-  const duration = usePlayer((s) => s.duration || s.queue[s.index]?.duration || 0);
+  const time = useShown((s) => s.time);
+  const playing = useShown((s) => s.playing);
+  const duration = useShown((s) => s.duration || s.queue[s.index]?.duration || 0);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [hover, setHover] = useState<number>();
   const [width, setWidth] = useState(0);
@@ -73,7 +73,7 @@ function Waveform({ peaks }: { peaks: number[] }) {
     });
     let frame = 0;
     const draw = () => {
-      const now = getPlayer();
+      const now = getShown();
       const elapsed = now.playing ? (performance.now() - said.current.at) / 1000 : 0;
       const at = duration ? Math.min(1, (said.current.time + elapsed) / duration) : 0;
       ctx.clearRect(0, 0, width, h);
@@ -116,7 +116,7 @@ function Waveform({ peaks }: { peaks: number[] }) {
           aria-label={t('Position')}
           aria-valuetext={`${clock(time)} / ${clock(duration)}`}
           style={{ '--p': `${pct}%` } as React.CSSProperties}
-          onChange={(e) => seek(Number(e.target.value))}
+          onChange={(e) => seekShown(Number(e.target.value))}
         />
         {hover !== undefined && duration > 0 && (
           <span className="wave__tip" style={{ left: `${hover * 100}%` }}>

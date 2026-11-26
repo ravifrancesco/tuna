@@ -2,19 +2,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { Airplay, AudioLines, Bluetooth, Car, Cast, Check, ChevronDown, GripVertical, Headphones, Maximize2, Minimize2, MonitorSpeaker, MoreHorizontal, Speaker, Tv, X } from 'lucide-react';
-import type { NativeOutput } from '@tuna/shared';
+import type { NativeOutput, Track } from '@tuna/shared';
 import { api } from '../api';
 import { t } from '../i18n';
 import { nativeAudio } from '../lib/native';
 import { useRowGestures } from '../lib/gestures';
-import { browserOutputs, clearQueue, jump, moveInQueue, playingAs, removeFromQueue, seek, usePlayer } from '../lib/player';
+import { browserOutputs, clearQueue, jump, moveInQueue, playingAs, removeFromQueue, usePlayer } from '../lib/player';
 import { QUALITIES, setQuality } from '../lib/quality';
 import { useMe } from '../lib/session';
 import { useTints } from '../lib/tint';
 import { Item, showMenu, TrackMenu } from './Menu';
 import { EqualizerItem } from './Equalizer';
 import { DeviceIcon } from './Devices';
-import { deviceId, others, playOn, useDevices } from '../lib/devices';
+import { deviceId, others, playOn, seekShown, useDevices, useRemote, useShown } from '../lib/devices';
 import { SleepChip, SleepItem } from './Sleep';
 import { hasEq } from '../lib/eq';
 import { TogetherChip, TogetherItem } from './Together';
@@ -22,10 +22,14 @@ import { Controls, LikeNow } from './PlayerBar';
 import { WaveProgress } from './Waveform';
 import { Cover, Empty, Spinner, toast } from './ui';
 
-/** The full-screen player: the cover, the controls, and the lyrics or the queue beside it. */
+/**
+ * The full-screen player: the cover, the controls, and the lyrics or the queue beside it. Music on
+ * another of your devices: its song, where it's playing, and Play here.
+ */
 export function NowPlaying({ tab: firstTab, onClose }: { tab?: 'lyrics' | 'queue'; onClose: () => void }) {
-  const track = usePlayer((s) => s.queue[s.index]);
-  const source = usePlayer((s) => s.source);
+  const track = useShown((s) => s.queue[s.index]);
+  const source = useShown((s) => s.source);
+  const remote = useRemote();
   // Lyrics, or the queue when the song has none. Picking the queue holds; picking the lyrics only
   // holds for that song.
   const [picked, setPicked] = useState(firstTab && { tab: firstTab, song: track?.id });
@@ -149,10 +153,15 @@ export function NowPlaying({ tab: firstTab, onClose }: { tab?: 'lyrics' | 'queue
               e,
               <>
                 <TrackMenu track={track} />
-                <hr />
-                <TogetherItem />
-                <SleepItem />
-                {hasEq && <EqualizerItem />}
+                {/* Play together, the sleep timer and the equalizer: this device's own. */}
+                {!remote && (
+                  <>
+                    <hr />
+                    <TogetherItem />
+                    <SleepItem />
+                    {hasEq && <EqualizerItem />}
+                  </>
+                )}
               </>,
             )
           }
@@ -176,10 +185,21 @@ export function NowPlaying({ tab: firstTab, onClose }: { tab?: 'lyrics' | 'queue
         <WaveProgress />
         <Controls big />
         <div className="now__extras">
-          <TogetherChip />
-          <SleepChip />
-          <OutputButton />
-          <QualityBadge />
+          {remote ? (
+            <>
+              <OutputButton />
+              <button className="btn btn--primary btn--small" onClick={() => void playOn(deviceId)}>
+                {t('Play here')}
+              </button>
+            </>
+          ) : (
+            <>
+              <TogetherChip />
+              <SleepChip />
+              <OutputButton />
+              <QualityBadge />
+            </>
+          )}
         </div>
       </div>
       <div className="now__right" ref={second}>
@@ -200,7 +220,7 @@ export function NowPlaying({ tab: firstTab, onClose }: { tab?: 'lyrics' | 'queue
             {full ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
           </button>
         </div>
-        <div className="now__panel">{tab === 'lyrics' ? <LyricsView songId={track.id} /> : <QueueView onClose={onClose} />}</div>
+        <div className="now__panel">{tab === 'lyrics' ? <LyricsView songId={track.id} /> : remote ? <RemoteQueue /> : <QueueView onClose={onClose} />}</div>
       </div>
     </div>
   );
@@ -215,10 +235,11 @@ const OUTPUT_ICONS: Record<NativeOutput['kind'], typeof Speaker> = { phone: Moni
 
 /**
  * Where it plays: your other devices with Tuna open (the music moves there), and from the apps, the
- * phone itself or AirPods, a car, a speaker, named.
+ * phone itself or AirPods, a car, a speaker, named. Music on another of your devices: that one, lit.
  */
 function OutputButton() {
   const output = usePlayer((s) => s.output);
+  const remote = useRemote();
   const rest = others(useDevices());
   const cast = browserOutputs;
   const choose = nativeAudio?.outputs ?? (cast && (() => cast()));
@@ -250,6 +271,14 @@ function OutputButton() {
       </>,
     );
   };
+  if (remote) {
+    return (
+      <button className="quality output output--remote" aria-label={t('Play on another device')} onClick={open}>
+        <DeviceIcon kind={remote.kind} size={14} />
+        <span className="output__name">{t('Playing on {name}', { name: remote.name })}</span>
+      </button>
+    );
+  }
   return (
     <button className={`quality output ${away ? 'on' : ''}`} aria-label={t('Play on another device')} onClick={open}>
       <Icon size={14} />
@@ -298,7 +327,7 @@ function QualityBadge() {
 
 function LyricsView({ songId }: { songId: string }) {
   const lyrics = useQuery({ queryKey: ['lyrics', songId], queryFn: () => api.lyrics(songId), staleTime: Infinity });
-  const time = usePlayer((s) => s.time);
+  const time = useShown((s) => s.time);
   const box = useRef<HTMLDivElement>(null);
   const lines = lyrics.data?.lines ?? [];
   // Scrolling the lyrics yourself stops them following the song, until a few quiet seconds or a tap.
@@ -347,7 +376,7 @@ function LyricsView({ songId }: { songId: string }) {
   return (
     <div className={`lyrics ${synced ? '' : 'lyrics--plain'}`} ref={box}>
       {lines.map((l, i) => (
-        <p key={i} data-i={i} className={i === at ? 'now-line' : i < at ? 'past' : ''} onClick={() => synced && l.time !== undefined && seek(l.time)}>
+        <p key={i} data-i={i} className={i === at ? 'now-line' : i < at ? 'past' : ''} onClick={() => synced && l.time !== undefined && seekShown(l.time)}>
           {l.text || '♪'}
         </p>
       ))}
@@ -423,6 +452,43 @@ function QueueView({ onClose }: { onClose: () => void }) {
           />
         ))}
       </div>
+      {!upcoming.length && <Empty>{t('Nothing else queued')}</Empty>}
+    </div>
+  );
+}
+
+/** Music on another of your devices: its song, and what comes next there. */
+function RemoteQueue() {
+  const queue = useShown((s) => s.queue);
+  const source = useShown((s) => s.source);
+  const [now, ...upcoming] = queue;
+  const row = (track: Track, key: string, isNow = false) => (
+    <div className="swipe" key={key}>
+      <div className={`track ${isNow ? 'playing' : ''}`} onContextMenu={(e) => (e.preventDefault(), showMenu(e, <TrackMenu track={track} />))}>
+        <div className="track__main">
+          <Cover cover={track.cover} size={100} />
+          <div className="track__text">
+            <span className="track__title">{track.title}</span>
+            <span className="track__artist">{track.artist}</span>
+          </div>
+        </div>
+        <span />
+        <button className="icon-btn" aria-label={t('More')} onClick={(e) => showMenu(e, <TrackMenu track={track} />)}>
+          <MoreHorizontal size={18} />
+        </button>
+      </div>
+    </div>
+  );
+  return (
+    <div className="queue">
+      <h3>{t('Now playing')}</h3>
+      {now && row(now, 'now', true)}
+      {upcoming.length > 0 && (
+        <div className="queue__head">
+          <h3>{source?.title ? t('Next from {name}', { name: source.title }) : t('Next up')}</h3>
+        </div>
+      )}
+      <div className="queue__list">{upcoming.map((track, i) => row(track, `${track.id}-${i}`))}</div>
       {!upcoming.length && <Empty>{t('Nothing else queued')}</Empty>}
     </div>
   );

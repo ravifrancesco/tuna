@@ -72,7 +72,8 @@ Notes for anyone (person or AI assistant) working on Tuna's code.
   dev server (:5174). Mock users: demo/demo, sam/sam, admin/admin. Lidarr's fake downloads take
   `MOCK_GET_SECONDS` (40); `MOCK_EMPTY_LIBRARY=1` starts with nothing in the library, as a new install.
   The fake slskd: `MOCK_SLSKD_EMPTY=1` (every search finds nothing), `MOCK_SLSKD_FAIL=<peer>` (that
-  peer's downloads fail). ListenBrainz token for Settings: `mock-lb`.
+  peer's downloads fail), `MOCK_SLSKD_MOVE_SECONDS` (2: how long a finished download takes to reach
+  slskd's downloads folder, as in slskd). ListenBrainz token for Settings: `mock-lb`.
 - `npm run typecheck` checks server and web; `npm run check:i18n` the Italian.
 - **Develop against the mock**, never against a real household's server.
 - A running server serves the web files from `web/dist` as they are: `npm run build -w web` to

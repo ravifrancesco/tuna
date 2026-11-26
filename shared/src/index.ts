@@ -460,6 +460,11 @@ export interface Device {
   /** Seconds into `track`, at `at` (server time, ms). */
   position: number;
   at: number;
+  /** When it last played (server time, ms): playing now, or until it was paused. */
+  played?: number;
+  /** The next few songs in its queue, and what it's playing from ("Road trip"). */
+  next?: Track[];
+  from?: string;
 }
 
 export type DeviceCommand =

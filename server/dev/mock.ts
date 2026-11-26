@@ -9,6 +9,8 @@
  *   MOCK_GET_SECONDS (default 40): how long a Get takes to "download" (a song from slskd: 8).
  *   MOCK_EMPTY_LIBRARY=1: nothing in the library yet, as a new install.
  *   MOCK_SLSKD_EMPTY=1: Soulseek finds nothing. MOCK_SLSKD_FAIL=<user>: that peer's downloads fail.
+ *   MOCK_SLSKD_MOVE_SECONDS (default 2): how long after a download succeeds its file is in slskd's
+ *   downloads folder (taken off slskd's list before then, it never gets there, as in slskd).
  *   ListenBrainz token for Settings: mock-lb.
  */
 import crypto from 'node:crypto';
@@ -21,6 +23,7 @@ const EMPTY_LIBRARY = process.env.MOCK_EMPTY_LIBRARY === '1';
 const SONG_SECONDS = Number(process.env.MOCK_GET_SECONDS ?? 8);
 const SLSKD_EMPTY = process.env.MOCK_SLSKD_EMPTY === '1';
 const SLSKD_FAIL = process.env.MOCK_SLSKD_FAIL;
+const SLSKD_MOVE_SECONDS = Number(process.env.MOCK_SLSKD_MOVE_SECONDS ?? 2);
 
 // ---- A made-up world, the same every time ------------------------------------------------------
 
@@ -649,7 +652,8 @@ interface Transfer {
   size: number;
   requested: number;
   cancelled?: number;
-  removed?: boolean;
+  /** When it was taken off slskd's list. */
+  removed?: number;
   imported?: boolean;
 }
 const transfers: Transfer[] = [];
@@ -718,11 +722,13 @@ function searchView(s: Search, withResponses = false) {
   };
 }
 
-/** Queued by the other side for 2 seconds, then SONG_SECONDS of downloading (a failing peer gives up halfway). */
+/** When a download stops: queued by the other side for 2 seconds, then SONG_SECONDS of downloading (a failing peer gives up halfway). */
+const ends = (x: Transfer) => x.requested + 2000 + (x.username === SLSKD_FAIL ? 500 : 1000) * SONG_SECONDS;
+
 function transferView(x: Transfer) {
   const whole = SONG_SECONDS * 1000;
   const start = x.requested + 2000;
-  const end = start + (x.username === SLSKD_FAIL ? whole / 2 : whole);
+  const end = ends(x);
   const stopped = x.cancelled !== undefined && x.cancelled < end;
   const now = stopped ? x.cancelled! : Date.now();
   const done = Math.max(0, Math.min(now, end) - start) / whole;
@@ -749,8 +755,16 @@ function transferView(x: Transfer) {
 
 /** Where slskd puts a download: its folder (the last one of the remote path) in the downloads folder. */
 const localPath = (x: Transfer) => [DOWNLOADS, ...x.filename.split(/[\\/]/).slice(-2)].join('/');
-/** Files slskd has finished and Lidarr hasn't imported yet (slskd forgetting a transfer leaves its file). */
-const onDisk = () => transfers.filter((x) => !x.imported && transferView(x).state === 'Completed, Succeeded');
+/**
+ * Files slskd has finished and Lidarr hasn't imported yet: in the downloads folder SLSKD_MOVE_SECONDS
+ * after the download succeeded (slskd forgetting a transfer after that leaves its file; before, the
+ * file stays in its incomplete folder).
+ */
+const onDisk = () =>
+  transfers.filter((x) => {
+    const lands = ends(x) + SLSKD_MOVE_SECONDS * 1000;
+    return !x.imported && transferView(x).state === 'Completed, Succeeded' && Date.now() >= lands && !(x.removed !== undefined && x.removed < lands);
+  });
 
 // ---- MusicBrainz shapes ----------------------------------------------------------------------------
 
@@ -1220,7 +1234,7 @@ async function slskd(path: string, q: URLSearchParams, req: http.IncomingMessage
   if (p === '/transfers/downloads' && req.method === 'GET') {
     // Grouped as slskd does: by person, then by remote folder.
     const groups = new Map<string, Map<string, Array<ReturnType<typeof transferView>>>>();
-    for (const x of transfers.filter((t) => !t.removed)) {
+    for (const x of transfers.filter((t) => t.removed === undefined)) {
       const dir = x.filename.split('\\').slice(0, -1).join('\\');
       const user = groups.get(x.username) ?? new Map();
       groups.set(x.username, user.set(dir, [...(user.get(dir) ?? []), transferView(x)]));
@@ -1242,10 +1256,10 @@ async function slskd(path: string, q: URLSearchParams, req: http.IncomingMessage
   }
   const one = p.match(/^\/transfers\/downloads\/([^/]+)\/([^/]+)$/);
   if (one && req.method === 'DELETE') {
-    const x = transfers.find((t) => !t.removed && t.id === one[2] && t.username === decodeURIComponent(one[1]));
+    const x = transfers.find((t) => t.removed === undefined && t.id === one[2] && t.username === decodeURIComponent(one[1]));
     if (!x) return json(res, 404, {});
     if (!transferView(x).state.startsWith('Completed')) x.cancelled = Date.now();
-    if (q.get('remove') === 'true') x.removed = true;
+    if (q.get('remove') === 'true') x.removed = Date.now();
     return none();
   }
   return json(res, 404, { message: `Not in the mock: ${p}` });
