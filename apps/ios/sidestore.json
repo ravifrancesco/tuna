@@ -17,21 +17,21 @@
       "category": "entertainment",
       "versions": [
         {
-          "version": "0.4.8",
+          "version": "0.4.9",
           "buildVersion": "1",
           "date": "2026-11-26",
-          "localizedDescription": "Changed\n- Covers show at once. Every album's cover is made ready ahead, a minute after Tuna starts and then every 6 hours for new albums, so the first time a page shows them they no longer come in one by one. Browsers and the apps now keep covers for good instead of a week.\n- Pages open at once. Each device keeps what Home, the library, playlists and the last albums and artists showed, for the person signed in, and opens on that while the server answers. Signing out removes it.\n\nTo update: the server (pull the new image); the apps don't need updating.",
-          "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.4.8/Tuna-ios.ipa",
-          "size": 4703826,
-          "sha256": "8bee191320ec39ca141979ac5ecb460c0c17658ccd810178e929a3bbe96fe6e7",
+          "localizedDescription": "Fixed\n- Songs got stuck. When Lidarr couldn't look up a few songs (\"Invalid response received from LidarrAPI\"), Tuna tried those same songs every 10 seconds and never got to the rest of the list. Now such a song is looked up through MusicBrainz instead; if that fails too, it's tried again in 1, 5 and 30 minutes and then shown as not found, and the songs behind it carry on.\n- Soulseek: copies Tuna gave up on no longer stay in slskd's list as \"Completed, Cancelled\" (and ones earlier versions left there are cleared).\n\nChanged\n- Soulseek: someone who refuses to send a song isn't asked again for an hour, for any song, and Tuna asks each person for one song at a time when someone else has it too. Refusals no longer use up a song's tries, and the log says why each one came.\n\nTo update: the server (pull the new image); the apps don't need updating.",
+          "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.4.9/Tuna-ios.ipa",
+          "size": 4703849,
+          "sha256": "44cb4750cf7e66b75931adf689207b2e5a1ef546bc7de38c457529d78e21cab3",
           "minOSVersion": "16.0"
         }
       ],
-      "version": "0.4.8",
+      "version": "0.4.9",
       "versionDate": "2026-11-26",
-      "versionDescription": "Changed\n- Covers show at once. Every album's cover is made ready ahead, a minute after Tuna starts and then every 6 hours for new albums, so the first time a page shows them they no longer come in one by one. Browsers and the apps now keep covers for good instead of a week.\n- Pages open at once. Each device keeps what Home, the library, playlists and the last albums and artists showed, for the person signed in, and opens on that while the server answers. Signing out removes it.\n\nTo update: the server (pull the new image); the apps don't need updating.",
-      "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.4.8/Tuna-ios.ipa",
-      "size": 4703826,
+      "versionDescription": "Fixed\n- Songs got stuck. When Lidarr couldn't look up a few songs (\"Invalid response received from LidarrAPI\"), Tuna tried those same songs every 10 seconds and never got to the rest of the list. Now such a song is looked up through MusicBrainz instead; if that fails too, it's tried again in 1, 5 and 30 minutes and then shown as not found, and the songs behind it carry on.\n- Soulseek: copies Tuna gave up on no longer stay in slskd's list as \"Completed, Cancelled\" (and ones earlier versions left there are cleared).\n\nChanged\n- Soulseek: someone who refuses to send a song isn't asked again for an hour, for any song, and Tuna asks each person for one song at a time when someone else has it too. Refusals no longer use up a song's tries, and the log says why each one came.\n\nTo update: the server (pull the new image); the apps don't need updating.",
+      "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.4.9/Tuna-ios.ipa",
+      "size": 4703849,
       "appPermissions": {
         "entitlements": [],
         "privacy": {
