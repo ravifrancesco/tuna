@@ -943,6 +943,16 @@ function musicbrainz(path: string, q: URLSearchParams, res: http.ServerResponse)
       .slice(0, Number(q.get('limit') ?? 10));
     return json(res, 200, { 'release-groups': found.map(({ a, s }) => mbGroup(a, s)) });
   }
+  if (p === '/release' && q.get('release-group')) {
+    const a = [...albums.values()].find((x) => x.mbid === q.get('release-group'));
+    const release = a && {
+      id: uuid(`release:${a.mbid}`),
+      status: 'Official',
+      date: `${a.year}-05-01`,
+      media: [{ tracks: a.tracks.map((tr) => ({ title: tr.title, length: tr.duration * 1000, recording: { title: tr.title } })) }],
+    };
+    return json(res, 200, { releases: release ? [release] : [] });
+  }
   const artist = p.match(/^\/artist\/([\w-]+)$/);
   if (artist) {
     const a = artists.find((x) => x.mbid === artist[1]);

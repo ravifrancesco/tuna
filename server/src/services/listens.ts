@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Listen, ListeningStats, StatsPeriod, Track } from '@tuna/shared';
+import type { Listen, ListeningStats, StatsPeriod, Track, YearInReview } from '@tuna/shared';
 import { config } from '../config';
 import { log } from '../lib/log';
 
@@ -134,6 +134,68 @@ export function listeningHistory(username: string, offset: number, size: number)
     .slice(Math.max(0, end - size), end)
     .reverse()
     .map((l) => ({ at: new Date(l.at).toISOString(), track: trackOf(l) }));
+}
+
+type Count = { last: Line; plays: number; seconds: number };
+function counts(lines: Line[], key: (l: Line) => string | undefined): Map<string, Count> {
+  const m = new Map<string, Count>();
+  for (const l of lines) {
+    const k = key(l);
+    if (!k) continue;
+    const c = m.get(k) ?? { last: l, plays: 0, seconds: 0 };
+    c.plays++;
+    c.seconds += l.sec;
+    c.last = l;
+    m.set(k, c);
+  }
+  return m;
+}
+const mostPlayed = (m: Map<string, Count>) => [...m.values()].sort((a, b) => b.plays - a.plays || b.last.at - a.last.at);
+const lately = (username: string) => linesOf(username).filter((l) => l.at >= Date.now() - 180 * 86_400_000);
+
+/** Two people's listening of the last six months together: what both play first, then one of each in turn. */
+export function blendTracks(a: string, b: string): Track[] {
+  const [mine, theirs] = [a, b].map((u) => counts(lately(u), (l) => l.id));
+  const both = mostPlayed(mine).filter((c) => theirs.has(c.last.id));
+  const one = mostPlayed(mine).filter((c) => !theirs.has(c.last.id));
+  const other = mostPlayed(theirs).filter((c) => !mine.has(c.last.id));
+  const out = both.slice(0, 15);
+  for (let i = 0; out.length < 50 && (i < one.length || i < other.length); i++) out.push(...[one[i], other[i]].filter(Boolean));
+  return out.slice(0, 50).map((c) => trackOf(c.last));
+}
+
+/** Enough plays lately to make a Blend with. */
+export const blendable = (username: string) => lately(username).length >= 10;
+
+/** The covers of what two people play most: two each. */
+export const blendCovers = (a: string, b: string) =>
+  [a, b].flatMap((u) => mostPlayed(counts(lately(u), (l) => l.albumId)).slice(0, 2).flatMap((c) => (c.last.cover ? [c.last.cover] : [])));
+
+export function yearInReview(username: string, year: number): YearInReview {
+  const all = linesOf(username);
+  const inYear = (l: Line) => new Date(l.at).getFullYear() === year;
+  const lines = all.filter(inYear);
+  const before = new Set(all.filter((l) => new Date(l.at).getFullYear() < year).map((l) => l.artistId ?? l.artist));
+  const heard = new Set(lines.map((l) => l.artistId ?? l.artist));
+  const months = mostPlayed(counts(lines, (l) => String(new Date(l.at).getMonth()))).sort((x, y) => y.seconds - x.seconds);
+  const album = mostPlayed(counts(lines, (l) => l.albumId))[0];
+  return {
+    year,
+    seconds: lines.reduce((sum, l) => sum + l.sec, 0),
+    plays: lines.length,
+    days: new Set(lines.map((l) => new Date(l.at).toDateString())).size,
+    artists: heard.size,
+    newArtists: [...heard].filter((x) => !before.has(x)).length,
+    topArtists: mostPlayed(counts(lines, (l) => l.artistId))
+      .slice(0, 5)
+      .map(({ last, plays }) => ({ id: last.artistId!, name: last.artist, cover: `ar-${last.artistId}`, plays })),
+    topSongs: mostPlayed(counts(lines, (l) => l.id))
+      .slice(0, 5)
+      .map(({ last, plays }) => ({ ...trackOf(last), plays })),
+    topAlbum: album && { id: album.last.albumId!, name: album.last.album, artist: album.last.artist, artistId: album.last.artistId, cover: album.last.cover, songCount: 0, duration: 0, plays: album.plays },
+    busiestMonth: months[0] && { month: Number(new Date(months[0].last.at).getMonth()), seconds: months[0].seconds },
+    firstSong: lines[0] && { ...trackOf(lines[0]), at: new Date(lines[0].at).toISOString() },
+  };
 }
 
 /** Everyone with plays Tuna counted. */

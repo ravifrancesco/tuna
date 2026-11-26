@@ -32,6 +32,8 @@ export interface PlayerState {
   error?: string;
   /** Where the sound comes out, when the app says (AirPods, a car, AirPlay). */
   output?: NativeOutput;
+  /** The sleep timer: stops at `at` (ms since 1970) or at the end of the song. */
+  sleep?: { at?: number; endOfSong?: boolean };
 }
 
 let state: PlayerState = { queue: [], index: -1, playing: false, buffering: false, time: 0, duration: 0, shuffle: false, repeat: 'off', volume: 1 };
@@ -124,11 +126,30 @@ interface Engine {
   stop(): void;
 }
 
+// The queue set from elsewhere (Android Auto): the page takes what the app has.
+let catchingUp = false;
+function catchUp() {
+  if (catchingUp || !na) return;
+  catchingUp = true;
+  void na
+    .current()
+    .then((now) => {
+      if (!now?.tracks.length) return;
+      const byId = new Map(state.queue.map((t) => [t.id, t]));
+      unshuffled = undefined;
+      set({ queue: now.tracks.map((n) => byId.get(n.id) ?? fromNative(n)), index: now.index, source: undefined, shuffle: false });
+      applyNative(now.state);
+    })
+    .finally(() => (catchingUp = false));
+}
+
 function applyNative(s: NativeAudioState) {
+  if (s.id && s.id !== state.queue[s.index]?.id) return catchUp();
   const patch: Partial<PlayerState> = { playing: s.playing, buffering: Boolean(s.buffering), time: s.time, duration: s.duration || current()?.duration || 0 };
   if (s.index >= 0 && s.index < state.queue.length) patch.index = s.index;
   patch.error = s.error;
   if (s.output) patch.output = s.output;
+  if (na?.sleep) patch.sleep = s.sleep;
   if (s.ended) patch.playing = false;
   set(patch);
 }
@@ -149,9 +170,15 @@ const nativeEngine: Engine | undefined = na && {
 };
 
 /** The page's own player: two <audio>s, so the next song is ready when this one ends. */
+let webAudio: (HTMLAudioElement & { webkitShowPlaybackTargetPicker?: () => void }) | undefined;
+
 function makeWebEngine(): Engine {
   const audio = new Audio();
   audio.preload = 'auto';
+  webAudio = audio;
+  // Playing on a Chromecast (Chrome) through the page's own player.
+  audio.remote?.addEventListener('connect', () => set({ output: { name: 'Chromecast', kind: 'cast' } }));
+  audio.remote?.addEventListener('disconnect', () => set({ output: undefined }));
   const ahead = new Audio();
   ahead.preload = 'auto';
   let tracks: Track[] = [];
@@ -192,6 +219,12 @@ function makeWebEngine(): Engine {
     if (nextIndex() >= 0) setTimeout(() => start(nextIndex(), 0, true), 800);
   });
   audio.addEventListener('ended', () => {
+    if (state.sleep?.endOfSong) {
+      // The sleep timer: the next song waits, paused at its start.
+      set({ sleep: undefined });
+      const n = nextIndex();
+      return n >= 0 ? start(n, 0, false) : set({ playing: false, time: 0 });
+    }
     if (repeat === 'one') return start(index, 0, true);
     const n = nextIndex();
     if (n >= 0) start(n, 0, true);
@@ -254,6 +287,16 @@ if ('mediaSession' in navigator && !nativeAudio) {
 }
 
 // ---- What people do ------------------------------------------------------------------------------------
+
+/** In a browser: the music to a Chromecast (Chrome) or an AirPlay speaker (Safari), from a button. */
+export const browserOutputs =
+  !nativeEngine && typeof HTMLMediaElement !== 'undefined' && ('remote' in HTMLMediaElement.prototype || 'webkitShowPlaybackTargetPicker' in HTMLMediaElement.prototype)
+    ? () => {
+        engine();
+        if (webAudio?.webkitShowPlaybackTargetPicker) webAudio.webkitShowPlaybackTargetPicker();
+        else void webAudio?.remote.prompt().catch(() => {});
+      }
+    : undefined;
 
 const shuffled = <T>(xs: T[]): T[] => {
   const a = [...xs];
@@ -366,6 +409,23 @@ export function removeFromQueue(i: number) {
   if (i === state.index) return;
   const q = state.queue.filter((_, j) => j !== i);
   replaceQueue(q, i < state.index ? state.index - 1 : state.index);
+}
+
+// The sleep timer: the app keeps it where it can (so it stops with the screen off), else the page.
+let sleepTimer: number | undefined;
+export function setSleep(pick: { minutes?: number; endOfSong?: boolean } | undefined) {
+  clearTimeout(sleepTimer);
+  const sleep = pick?.minutes ? { at: Date.now() + pick.minutes * 60_000 } : pick?.endOfSong ? { endOfSong: true } : undefined;
+  set({ sleep });
+  if (na?.sleep) return na.sleep(pick ?? {});
+  if (sleep?.at) sleepTimer = window.setTimeout(() => (pause(), set({ sleep: undefined })), sleep.at - Date.now());
+}
+
+/** Everything after the song playing goes. */
+export function clearQueue() {
+  if (state.index < 0) return;
+  unshuffled = undefined;
+  replaceQueue(state.queue.slice(0, state.index + 1), state.index);
 }
 
 export function moveInQueue(from: number, to: number) {

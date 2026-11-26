@@ -1,4 +1,5 @@
 import AppKit
+import AVKit
 @preconcurrency import WebKit
 
 /// The Tuna window: the Tuna interface from your server in a web view, with the app's own
@@ -8,6 +9,14 @@ final class MainWindow: NSWindowController, NSWindowDelegate, WKNavigationDelega
     private(set) var web: WKWebView!
     /// The interface's own background (--bg), so the title bar runs into it.
     private static let background = NSColor(red: 11 / 255, green: 10 / 255, blue: 16 / 255, alpha: 1)
+    /// The system's AirPlay button, out of sight: the page's own button presses it.
+    private lazy var routePicker: AVRoutePickerView = {
+        let picker = HiddenRoutePicker(frame: NSRect(x: 0, y: 0, width: 1, height: 1))
+        picker.player = audio.routedPlayer
+        picker.alphaValue = 0.01
+        web.addSubview(picker)
+        return picker
+    }()
 
     init() {
         let window = NSWindow(
@@ -136,6 +145,20 @@ final class MainWindow: NSWindowController, NSWindowDelegate, WKNavigationDelega
         web.load(URLRequest(url: url, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 10))
     }
 
+    /// The list of speakers (AirPlay), opening from `rect`, the page's button (in the page's coordinates).
+    func showOutputs(at rect: NSRect) {
+        let y = web.isFlipped ? rect.minY : web.bounds.height - rect.maxY
+        routePicker.frame = rect.width > 0 ? NSRect(x: rect.minX, y: y, width: rect.width, height: rect.height) : NSRect(x: web.bounds.midX, y: web.bounds.midY, width: 1, height: 1)
+        routePicker.layoutSubtreeIfNeeded()
+        func button(in view: NSView) -> NSButton? {
+            for sub in view.subviews {
+                if let found = sub as? NSButton ?? button(in: sub) { return found }
+            }
+            return nil
+        }
+        button(in: routePicker)?.performClick(nil)
+    }
+
     // ---------- Talking to the page ----------
 
     /// A message for the page: `window.__tuna(message)`.
@@ -239,4 +262,9 @@ final class MainWindow: NSWindowController, NSWindowDelegate, WKNavigationDelega
             try? data.write(to: dir.appendingPathComponent("eval.json"), options: .atomic)
         }
     }
+}
+
+/// Never in the way of the page's clicks: only pressed for it.
+private final class HiddenRoutePicker: AVRoutePickerView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }

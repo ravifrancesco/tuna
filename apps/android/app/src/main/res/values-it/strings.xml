@@ -16,6 +16,12 @@
     <string name="unlike">Rimuovi dai brani che ti piacciono</string>
     <string name="playing_channel">In riproduzione</string>
 
+    <!-- Android Auto's lists -->
+    <string name="auto_home">Home</string>
+    <string name="auto_playlists">Playlist</string>
+    <string name="auto_liked">Brani che ti piacciono</string>
+    <string name="auto_downloads">Download</string>
+
     <!-- Updates -->
     <string name="update_not_this_build">Questa versione di prova non può aggiornarsi da sola</string>
     <string name="update_no_file">La nuova versione non ha l\'app Android</string>

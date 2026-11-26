@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Heart, Music } from 'lucide-react';
 import { t } from '../i18n';
 import { coverUrl } from '../lib/session';
+import { Mark, SwimmingNote } from './Logo';
 
 export function Cover({ cover, src, size = 300, round, className = '', alt = '' }: { cover?: string; src?: string; size?: number; round?: boolean; className?: string; alt?: string }) {
   const [failed, setFailed] = useState(false);
@@ -34,9 +35,20 @@ export function LikedCover() {
   );
 }
 
-export const Spinner = () => <div className="spinner" role="status" aria-label={t('Loading')} />;
+/** Loading: the swimming note-fish, fading in after a moment so quick loads never show it. */
+export const Spinner = () => (
+  <div className="spinner" role="status" aria-label={t('Loading')}>
+    <SwimmingNote />
+  </div>
+);
 
-export const Empty = ({ children }: { children: ReactNode }) => <div className="empty">{children}</div>;
+/** Nothing to show: the fish, quiet and drifting, and a line of text. */
+export const Empty = ({ children }: { children: ReactNode }) => (
+  <div className="empty">
+    <Mark className="empty__fish" size={40} />
+    {children}
+  </div>
+);
 
 export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   useEffect(() => {

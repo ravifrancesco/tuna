@@ -3,7 +3,7 @@ plugins {
 }
 
 // Version shown in Settings; keep in step with the root package.json.
-def tunaVersion = '0.1.0'
+def tunaVersion = '0.2.0'
 
 android {
     namespace 'app.tuna.music'
@@ -94,6 +94,9 @@ dependencies {
     implementation "androidx.media3:media3-exoplayer:$media3"
     implementation "androidx.media3:media3-session:$media3"
     implementation "org.jellyfin.media3:media3-ffmpeg-decoder:$media3+1"
+    // Chromecast (phones with Google Play services): the queue moves to Google's Default Media Receiver.
+    implementation "androidx.media3:media3-cast:$media3"
+    implementation 'androidx.mediarouter:mediarouter:1.7.0'
     // The page's own connections through the tunnel (WebView's proxy setting).
     implementation 'androidx.webkit:webkit:1.12.1'
     compileOnly 'androidx.annotation:annotation:1.6.0'

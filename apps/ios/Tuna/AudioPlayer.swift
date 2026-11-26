@@ -53,6 +53,12 @@ final class AudioPlayer: NSObject {
     private var timeObserver: Any?
     private var artwork: (url: URL, image: UIImage)?
     private var artworkTask: URLSessionDataTask?
+    /// The next few songs fetched whole, to play from the phone.
+    private let cache = QueueCache()
+    /// The sleep timer: when the music stops, or at the end of the song playing.
+    private var sleepAt: Date?
+    private var sleepTimer: Timer?
+    private var sleepAtEnd = false
 
     override init() {
         super.init()
@@ -71,7 +77,10 @@ final class AudioPlayer: NSObject {
         center.addObserver(self, selector: #selector(interrupted(_:)), name: AVAudioSession.interruptionNotification, object: nil)
         center.addObserver(self, selector: #selector(routeChanged(_:)), name: AVAudioSession.routeChangeNotification, object: nil)
         center.addObserver(self, selector: #selector(failedToEnd(_:)), name: .AVPlayerItemFailedToPlayToEndTime, object: nil)
+        center.addObserver(self, selector: #selector(playedToEnd(_:)), name: .AVPlayerItemDidPlayToEndTime, object: nil)
         remoteCommands()
+        // A song came in: the one queued next plays from the file.
+        cache.onReady = { [weak self] in self?.prepareAhead() }
     }
 
     // ---------- From the page ----------
@@ -86,10 +95,17 @@ final class AudioPlayer: NSObject {
     /// A new queue around the song that's playing: it carries on, only what follows changes.
     func update(tracks list: [[String: Any]], index i: Int) {
         let next = list.map(Track.init)
-        guard next.indices.contains(i) else { return }
+        // It may have moved on just before: the song playing, at `i`, then just after, then anywhere.
+        var at = i
+        if tracks.indices.contains(index) {
+            let playing = tracks[index].id
+            at = [i, i + 1].first { next.indices.contains($0) && next[$0].id == playing } ?? next.firstIndex { $0.id == playing } ?? i
+        }
+        guard next.indices.contains(at) else { return }
         tracks = next
-        index = i
+        index = at
         prepareAhead()
+        keepAhead()
         nowPlaying()
         report()
     }
@@ -109,6 +125,7 @@ final class AudioPlayer: NSObject {
             guard let mode = value as? String, ["off", "all", "one"].contains(mode) else { return }
             repeatMode = mode
             prepareAhead()
+            keepAhead()
             report()
         case "volume": if let number { player.volume = Float(max(0, min(1, number))) }
         default: break
@@ -128,7 +145,40 @@ final class AudioPlayer: NSObject {
 
     var state: [String: Any] {
         let buffering = wantsPlay && item != nil && (pendingSeek != nil || player.timeControlStatus == .waitingToPlayAtSpecifiedRate)
-        return ["index": index, "playing": wantsPlay, "buffering": buffering, "time": time, "duration": duration, "repeat": repeatMode, "output": output]
+        var s: [String: Any] = ["index": index, "playing": wantsPlay, "buffering": buffering, "time": time, "duration": duration, "repeat": repeatMode, "output": output]
+        // From a file on the phone (a download, or the queue kept ahead): the page counts the play.
+        if (item?.asset as? AVURLAsset)?.url.isFileURL == true { s["local"] = true }
+        if let sleepAt { s["sleep"] = ["at": Int64(sleepAt.timeIntervalSince1970 * 1000)] } else if sleepAtEnd { s["sleep"] = ["endOfSong": true] }
+        return s
+    }
+
+    /// The sleep timer: stop in `minutes`, or when the song playing ends; neither turns it off.
+    func sleep(minutes: Double?, endOfSong: Bool) {
+        sleepOff()
+        if endOfSong {
+            sleepAtEnd = true
+            // The song ends paused, not on to the next one (playedToEnd).
+            player.actionAtItemEnd = .pause
+        } else if let minutes, minutes > 0 {
+            let at = Date().addingTimeInterval(minutes * 60)
+            sleepAt = at
+            // Fires with the screen locked too: the app runs while the music plays.
+            let timer = Timer(fire: at, interval: 0, repeats: false) { [weak self] _ in
+                self?.sleepOff()
+                self?.pause()
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            sleepTimer = timer
+        }
+        report()
+    }
+
+    private func sleepOff() {
+        sleepTimer?.invalidate()
+        sleepTimer = nil
+        sleepAt = nil
+        sleepAtEnd = false
+        player.actionAtItemEnd = .advance
     }
 
     /// Where the sound comes out: `NativeOutput` ("AirPods Pro", headphones; the phone itself).
@@ -149,6 +199,7 @@ final class AudioPlayer: NSObject {
     }
 
     func stop() {
+        sleepOff()
         wantsPlay = false
         item = nil
         ahead = nil
@@ -187,6 +238,8 @@ final class AudioPlayer: NSObject {
 
     private func play() {
         guard !tracks.isEmpty else { return }
+        // A sleep timer that came due while the app was paused and asleep is over.
+        if let sleepAt, sleepAt <= Date() { sleepOff() }
         // After the queue has ended (or a song failed for good): start the song again.
         guard item != nil else { return begin(max(0, index), at: 0, play: true) }
         wantsPlay = true
@@ -266,9 +319,21 @@ final class AudioPlayer: NSObject {
         ahead = (next, n)
     }
 
-    /// The song's file when it's downloaded (no server needed, and no data used), else the server's address.
+    /// The song's file when it's downloaded or kept ahead (no server needed, and no data used), else
+    /// the server's address.
     private func source(_ track: Track) -> URL {
-        OfflineStore.shared.file(for: track.id) ?? track.url
+        OfflineStore.shared.file(for: track.id) ?? cache.file(for: track.url) ?? track.url
+    }
+
+    /// Once the song playing has loaded: the next few fetched whole, to play from the phone.
+    private func keepAhead() {
+        guard item?.status == .readyToPlay, tracks.indices.contains(index) else { return }
+        let upcoming = (1...cache.ahead).compactMap { step -> Track? in
+            let i = index + step
+            if i < tracks.count { return tracks[i] }
+            return repeatMode == "all" && i - tracks.count < index ? tracks[i - tracks.count] : nil
+        }
+        cache.keep(upcoming.map { ($0.id, $0.url) }, playing: tracks[index].url)
     }
 
     private func activate() {
@@ -305,6 +370,7 @@ final class AudioPlayer: NSObject {
             }
             nowPlayingTime()
             report()
+            keepAhead()
         case .failed:
             failed()
         default:
@@ -327,8 +393,8 @@ final class AudioPlayer: NSObject {
             prepareAhead()
             nowPlaying()
             report()
-        } else if now == nil, item != nil {
-            // The whole queue has played.
+        } else if now == nil, let ended = item, ended.status != .failed {
+            // The whole queue has played (a song that failed is skipped instead: failed()).
             item = nil
             wantsPlay = false
             nowPlayingTime()
@@ -418,6 +484,18 @@ final class AudioPlayer: NSObject {
         DispatchQueue.main.async {
             if reason == .oldDeviceUnavailable { self.pause() }
             self.report()
+        }
+    }
+
+    /// The sleep timer at the end of a song: it stops there, the next one ready to play.
+    @objc private func playedToEnd(_ note: Notification) {
+        DispatchQueue.main.async { [self] in
+            guard sleepAtEnd, let ended = note.object as? AVPlayerItem, ended === item else { return }
+            sleepOff()
+            wantsPlay = false
+            player.pause()
+            player.advanceToNextItem()
+            currentItemChanged()
         }
     }
 

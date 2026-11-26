@@ -48,7 +48,17 @@ async function nowPlaying(session: Session, songId: string) {
 }
 
 /** A play (half a song or more): Navidrome, ListenBrainz if linked, and the person's own history. */
-export async function countPlay(session: Session, songId: string) {
+// Songs counted from their stream lately, by person: the apps' player can stream the start of the
+// next song before its copy on the device takes over, and the page then reports the same play.
+const streamed = new Map<string, Map<string, number>>();
+
+/** A play: from the stream (half of it sent) or from the device (the page says half was heard). */
+export async function countPlay(session: Session, songId: string, from: 'stream' | 'device' = 'stream') {
+  const mine = streamed.get(session.username) ?? new Map<string, number>();
+  streamed.set(session.username, mine);
+  for (const [id, at] of mine) if (Date.now() - at > 15 * 60_000) mine.delete(id);
+  if (from === 'stream') mine.set(songId, Date.now());
+  else if (mine.delete(songId)) return;
   const auth = authOf(session);
   await subsonic(auth, 'scrobble', { id: songId, submission: true, time: Date.now() }).catch((err) => log.debug('playing', String(err)));
   const tr = await song(auth, songId).catch(() => undefined);

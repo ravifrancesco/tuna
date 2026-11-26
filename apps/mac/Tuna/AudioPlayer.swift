@@ -1,5 +1,6 @@
 import AppKit
 @preconcurrency import AVFoundation
+import CoreAudio
 @preconcurrency import MediaPlayer
 
 /// One song of the queue, as the page sent it (a NativeTrack).
@@ -40,12 +41,21 @@ final class AudioPlayer: NSObject {
         didSet {
             guard proxyPort != oldValue else { return }
             artSession = Self.session(proxyPort)
+            cache.proxyPort = proxyPort
             // The song carries on from where it was, the new way.
             if current != nil, tracks.indices.contains(index) { begin(index, at: time, play: wantsPlay) }
         }
     }
 
     private let player = AVQueuePlayer()
+    /// For the AirPlay picker, which sends this player's sound where you choose.
+    var routedPlayer: AVPlayer { player }
+    /// The next few songs fetched whole, to play from the Mac.
+    private let cache = QueueCache()
+    /// The sleep timer: when the music stops, or at the end of the song playing.
+    private var sleepAt: Date?
+    private var sleepTimer: Timer?
+    private var sleepAtEnd = false
     private(set) var tracks: [Track] = []
     private(set) var index = -1
     private var repeatMode = "off"
@@ -104,6 +114,14 @@ final class AudioPlayer: NSObject {
         NotificationCenter.default.addObserver(self, selector: #selector(itemEnded(_:)), name: AVPlayerItem.didPlayToEndTimeNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(itemFailed(_:)), name: AVPlayerItem.failedToPlayToEndTimeNotification, object: nil)
         remoteCommands()
+        // A song came in: the one loaded next plays from the file.
+        cache.onReady = { [weak self] in self?.prepareNext() }
+        // Where the sound comes out changed: the page shows it.
+        observations.append(player.observe(\.isExternalPlaybackActive) { [weak self] _, _ in
+            DispatchQueue.main.async { self?.report() }
+        })
+        var device = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultOutputDevice, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &device, .main) { [weak self] _, _ in self?.report() }
     }
 
     // ---------- What the page asks ----------
@@ -117,15 +135,25 @@ final class AudioPlayer: NSObject {
 
     /// A new queue around the song that's playing: it carries on; only what comes after changes.
     func update(_ list: [[String: Any]], index i: Int) {
-        tracks = list.map(Track.init)
-        index = tracks.indices.contains(i) ? i : (tracks.isEmpty ? -1 : 0)
+        let new = list.map(Track.init)
+        // It may have moved on just before: the song playing, at `i`, then just after, then anywhere.
+        var at = i
+        if tracks.indices.contains(index) {
+            let playing = tracks[index].id
+            at = [i, i + 1].first { new.indices.contains($0) && new[$0].id == playing } ?? new.firstIndex { $0.id == playing } ?? i
+        }
+        tracks = new
+        index = tracks.indices.contains(at) ? at : (tracks.isEmpty ? -1 : 0)
         prepareNext()
+        keepAhead()
         report()
         nowPlaying()
     }
 
     func play() {
         guard tracks.indices.contains(index) else { return }
+        // A sleep timer that came due while paused is over.
+        if let sleepAt, sleepAt <= Date() { sleepOff() }
         // After the end of the queue, or a song that failed: this song again, from the start.
         if current == nil || current?.status == .failed { return begin(index, at: 0, play: true) }
         wantsPlay = true
@@ -201,7 +229,36 @@ final class AudioPlayer: NSObject {
     func setRepeat(_ mode: String) {
         repeatMode = ["off", "all", "one"].contains(mode) ? mode : "off"
         prepareNext()
+        keepAhead()
         report()
+    }
+
+    /// The sleep timer: stop in `minutes`, or when the song playing ends; neither turns it off.
+    func sleep(minutes: Double?, endOfSong: Bool) {
+        sleepOff()
+        if endOfSong {
+            sleepAtEnd = true
+            // The song ends paused, not on to the next one (itemEnded).
+            player.actionAtItemEnd = .pause
+        } else if let minutes, minutes > 0 {
+            let at = Date().addingTimeInterval(minutes * 60)
+            sleepAt = at
+            let timer = Timer(fire: at, interval: 0, repeats: false) { [weak self] _ in
+                self?.sleepOff()
+                self?.pause()
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            sleepTimer = timer
+        }
+        report()
+    }
+
+    private func sleepOff() {
+        sleepTimer?.invalidate()
+        sleepTimer = nil
+        sleepAt = nil
+        sleepAtEnd = false
+        player.actionAtItemEnd = .advance
     }
 
     func setVolume(_ volume: Double) {
@@ -211,6 +268,7 @@ final class AudioPlayer: NSObject {
 
     /// Signing out or another server: the music stops and the queue empties.
     func stop() {
+        sleepOff()
         generation += 1
         wantsPlay = false
         ended = false
@@ -271,6 +329,7 @@ final class AudioPlayer: NSObject {
         pendingStart = nil
         generation += 1
         prepareNext()
+        keepAhead()
         report()
         nowPlaying()
         if item.status == .failed { failed() }
@@ -289,10 +348,11 @@ final class AudioPlayer: NSObject {
         return repeatMode == "all" ? 0 : -1
     }
 
-    /// Loads the song after this one, unless it's already the one loaded.
+    /// Loads the song after this one, unless it's already the one loaded (from its file once there is one).
     private func prepareNext() {
         let want = followingIndex()
-        if next != nil, want == nextIndex, let had = nextTrack, tracks.indices.contains(want), had.id == tracks[want].id, had.url == tracks[want].url {
+        if next != nil, want == nextIndex, let had = nextTrack, tracks.indices.contains(want), had.id == tracks[want].id, had.url == tracks[want].url,
+           Self.isFile(next) || file(tracks[want]) == nil {
             return
         }
         if let next {
@@ -311,11 +371,31 @@ final class AudioPlayer: NSObject {
         nextIndex = want
     }
 
+    /// The song's file when it's downloaded or kept ahead.
+    private func file(_ track: Track) -> URL? {
+        OfflineStore.shared.file(for: track.id) ?? track.url.flatMap(cache.file(for:))
+    }
+
+    private static func isFile(_ item: AVPlayerItem?) -> Bool {
+        (item?.asset as? AVURLAsset)?.url.isFileURL == true
+    }
+
+    /// Once the song playing has loaded: the next few fetched whole, to play from the Mac.
+    private func keepAhead() {
+        guard current?.status == .readyToPlay, tracks.indices.contains(index) else { return }
+        let upcoming = (1...cache.ahead).compactMap { step -> Track? in
+            let i = index + step
+            if i < tracks.count { return tracks[i] }
+            return repeatMode == "all" && i - tracks.count < index ? tracks[i - tracks.count] : nil
+        }
+        cache.keep(upcoming.compactMap { t in t.url.map { (t.id, $0) } }, playing: tracks[index].url)
+    }
+
     private func makeItem(_ track: Track) -> AVPlayerItem {
         let asset: AVURLAsset
         var itemLoader: StreamLoader?
-        if let file = OfflineStore.shared.file(for: track.id) {
-            // Downloaded: no server needed, and no data used.
+        if let file = file(track) {
+            // Downloaded or kept ahead: no server needed, and no data used.
             asset = AVURLAsset(url: file)
         } else if let url = track.url, proxyPort != nil || Self.forceLoader {
             if self.loader?.proxyPort != proxyPort || self.loader == nil {
@@ -380,6 +460,7 @@ final class AudioPlayer: NSObject {
             }
             report()
             nowPlaying()
+            keepAhead()
         default:
             break
         }
@@ -389,6 +470,17 @@ final class AudioPlayer: NSObject {
         guard let item = notification.object as? AVPlayerItem else { return }
         DispatchQueue.main.async { [self] in
             guard item === current else { return }
+            if sleepAtEnd {
+                // The sleep timer: it stops here, the next song ready to play.
+                sleepOff()
+                wantsPlay = false
+                player.pause()
+                if let next, next.status != .failed {
+                    player.advanceToNextItem()
+                    currentItemChanged()
+                    return
+                }
+            }
             // The next song follows by itself (currentItemChanged).
             if let next, next.status != .failed { return }
             if next != nil {
@@ -468,7 +560,49 @@ final class AudioPlayer: NSObject {
         ]
         if ended { s["ended"] = true }
         if let error { s["error"] = error }
+        // From a file on the Mac (a download, or the queue kept ahead): the page counts the play.
+        if Self.isFile(current) { s["local"] = true }
+        if let sleepAt { s["sleep"] = ["at": Int64(sleepAt.timeIntervalSince1970 * 1000)] } else if sleepAtEnd { s["sleep"] = ["endOfSong": true] }
+        s["output"] = output
         return s
+    }
+
+    /// Where the sound comes out (`NativeOutput`): AirPlay when the picker sent it there, else the
+    /// player's output, the Mac's own unless the picker chose one ("MacBook Pro Speakers", "AirPods Pro").
+    private var output: [String: Any] {
+        if player.isExternalPlaybackActive { return ["name": "AirPlay", "kind": "airplay"] }
+        let system = AudioObjectID(kAudioObjectSystemObject)
+        guard let device: AudioObjectID = player.audioOutputDeviceUniqueID.flatMap({ Self.property(system, kAudioHardwarePropertyTranslateUIDToDevice, qualifier: $0 as CFString) })
+            ?? Self.property(system, kAudioHardwarePropertyDefaultOutputDevice), device != kAudioObjectUnknown else { return ["name": "Mac", "kind": "speaker"] }
+        let name = (Self.property(device, kAudioObjectPropertyName) as Unmanaged<CFString>?)?.takeRetainedValue() as String? ?? "Mac"
+        let transport: UInt32 = Self.property(device, kAudioDevicePropertyTransportType) ?? 0
+        // The built-in output says whether headphones are plugged in ('hdpn').
+        let source: UInt32? = Self.property(device, kAudioDevicePropertyDataSource, scope: kAudioDevicePropertyScopeOutput)
+        let headphones = source == 0x6864_706E || name.range(of: "AirPods|Beats|Buds|Headphone", options: [.regularExpression, .caseInsensitive]) != nil
+        let kind: String
+        switch transport {
+        case kAudioDeviceTransportTypeAirPlay: kind = "airplay"
+        case kAudioDeviceTransportTypeHDMI, kAudioDeviceTransportTypeDisplayPort: kind = "tv"
+        case _ where headphones: kind = "headphones"
+        case kAudioDeviceTransportTypeBluetooth, kAudioDeviceTransportTypeBluetoothLE: kind = "bluetooth"
+        default: kind = "speaker"
+        }
+        return ["name": name, "kind": kind]
+    }
+
+    private static func property<T>(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal, qualifier: CFString? = nil) -> T? {
+        var address = AudioObjectPropertyAddress(mSelector: selector, mScope: scope, mElement: kAudioObjectPropertyElementMain)
+        var size = UInt32(MemoryLayout<T>.size)
+        let value = UnsafeMutablePointer<T>.allocate(capacity: 1)
+        defer { value.deallocate() }
+        let status: OSStatus
+        if var cf = qualifier {
+            status = withUnsafePointer(to: &cf) { AudioObjectGetPropertyData(object, &address, UInt32(MemoryLayout<CFString>.size), $0, &size, value) }
+        } else {
+            status = AudioObjectGetPropertyData(object, &address, 0, nil, &size, value)
+        }
+        guard status == noErr else { return nil }
+        return value.move()
     }
 
     /// Tells the page, when something changed (or every second while playing: `force`).
@@ -575,6 +709,8 @@ final class AudioPlayer: NSObject {
             "nextIndex": nextIndex,
             "nextStatus": next.map { ["unknown", "ready", "failed"][$0.status.rawValue] } ?? "none",
             "streamLoader": current.map { loaders[ObjectIdentifier($0)] != nil } ?? false,
+            "nextLocal": Self.isFile(next),
+            "outputDevice": player.audioOutputDeviceUniqueID ?? NSNull(),
             "volume": player.volume,
             "playbackState": ["unknown", "playing", "paused", "stopped", "interrupted"][Int(MPNowPlayingInfoCenter.default().playbackState.rawValue)],
             "nowPlaying": [

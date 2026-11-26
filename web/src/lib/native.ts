@@ -18,7 +18,7 @@ export interface Hello {
   version: string;
   /** File formats the app's player plays as they are ("mp3", "aac", "m4a", "flac", "alac", "wav", "opus", "ogg"). */
   formats: string[];
-  /** What else the app can do: audio, outputs, tunnel, update, keepAwake, mobileData, changeServer. */
+  /** What else the app can do: audio, outputs, tunnel, update, keepAwake, mobileData, changeServer, downloads, sleep, haptics, cast. */
   features: string[];
 }
 
@@ -156,6 +156,8 @@ export const nativeAudio = has('audio')
       outputs: has('outputs')
         ? (at?: DOMRect) => send('audio.outputs', at && { x: at.x, y: at.y, width: at.width, height: at.height })
         : undefined,
+      /** The app keeps the sleep timer (so it stops with the screen off): minutes, end of the song, or off. */
+      sleep: has('sleep') ? (t: { minutes?: number; endOfSong?: boolean }) => send('audio.sleep', t) : undefined,
       /** What the app is playing (after the page reloads while music plays on). */
       current: () => ask<{ tracks: NativeTrack[]; index: number; state: NativeAudioState } | null>('audio.current', undefined, 3000).catch(() => null),
     }
@@ -163,6 +165,8 @@ export const nativeAudio = has('audio')
 
 export const app = {
   changeServer: () => send('changeServer'),
+  /** A short vibration (phones). */
+  haptic: has('haptics') ? (style: 'light' | 'success') => send('app.haptic', { style }) : undefined,
   keepAwake: (on: boolean) => has('keepAwake') && send('keepAwake', { on }),
   mobileData: (): Promise<boolean> => (has('mobileData') ? ask<boolean>('mobileData', undefined, 2000).catch(() => false) : Promise.resolve(false)),
   tunnel: has('tunnel')

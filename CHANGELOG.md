@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.2.0 (2026-11-26)
+
+The first release on GitHub, with everything in 0.1.0 below.
+
+**New**
+- **Swipe on a song** (phones): right to add it to the queue, left to like it; hold for its menu.
+- **The queue**: drag songs into a new order, swipe one away, or clear what's coming up.
+- **Sleep timer**: stop after 15, 30, 45 or 60 minutes, or at the end of the song. The apps keep it
+  themselves, so it works with the screen off.
+- **The apps play ahead**: the next songs of the queue are kept on the device, so music carries on
+  through a dropped connection or a switch to the tunnel; songs follow each other without a gap.
+- **Blends**: one mix of what two people in the household play, on Home.
+- **Your year in music**: on your profile, the year so far in a few cards, ending with your top songs.
+- **Search**: recent searches, and only songs, artists, albums or playlists. What's in the library
+  and what Lidarr can get show together in the same rows.
+- **Albums you don't have** open a page with their songs and Get.
+- **Playlists from Spotify** are there straight away: songs not in the library yet show greyed where
+  they belong, and go in by themselves as they arrive. What you change in them stays.
+- **Casting**: Chromecast from the Android app and from Chrome; AirPlay on iPhone and Mac.
+- **Android Auto**: your mixes, playlists, liked songs and downloads in the car. Apps not from the
+  Play Store show up there once Android Auto's developer settings allow unknown sources.
+- **On its way** shows how many albums are coming, in the sidebar and on Home (phones).
+- **Loading** shows the note-fish swimming, as Netfish's fish does.
+
+**Changed**
+- Search finds music through Lidarr (MusicBrainz only if Lidarr can't), and retries MusicBrainz when
+  it's busy.
+- New albums are in the library about a minute after Lidarr files them: Tuna asks Navidrome to scan.
+- "On its way" has its own icon (the round arrow is for downloads on the device).
+
+**Fixed**
+- Search with an empty library ("Library not found or empty" from Navidrome).
+- Search said nothing when it couldn't search beyond the library; now it says so and the log says why.
+
+To update: the server (pull the new image) and the apps.
+
 ## 0.1.0 (2026-11-24)
 
 The first version.

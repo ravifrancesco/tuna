@@ -154,6 +154,11 @@ export function adminAuth(): SubsonicAuth | undefined {
   return admin ? authOf(admin) : undefined;
 }
 
+/** Someone's name as Navidrome has it (from their latest session), else their username. */
+export function nameOf(username: string): string {
+  return [...sessions.values()].filter((x) => x.username === username).sort((a, b) => b.seen - a.seen)[0]?.name || username;
+}
+
 /** Someone's own access, for work done for them in the background (filling imported playlists). */
 export function authFor(username: string): SubsonicAuth | undefined {
   const s = [...sessions.values()].filter((x) => x.username === username).sort((a, b) => b.seen - a.seen)[0];

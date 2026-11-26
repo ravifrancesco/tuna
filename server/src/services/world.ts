@@ -1,6 +1,6 @@
-import type { ArtistDetail, Track, WorldAlbum, WorldArtist, WorldArtistDetail } from '@tuna/shared';
+import type { ArtistDetail, Track, WorldAlbum, WorldAlbumDetail, WorldArtist, WorldArtistDetail } from '@tuna/shared';
 import { subsonic, type ArtistID3, type Child, type SubsonicAuth } from '../clients/navidrome';
-import { coverArtFor, lastfmSimilar, mbArtist, mbArtistAlbums, mbSearchArtists, type MbReleaseGroup } from '../clients/public';
+import { coverArtFor, lastfmSimilar, mbArtist, mbArtistAlbums, mbReleaseGroup, mbReleases, mbSearchArtists, type MbReleaseGroup } from '../clients/public';
 import { settle } from '../lib/async';
 import { log } from '../lib/log';
 import { freshen, stateOf } from './getting';
@@ -98,3 +98,14 @@ async function mostPlayed(auth: SubsonicAuth, albumIds: string[]): Promise<Track
 
 /** The world for an artist in the library (by name), for search and Discover. */
 export const worldArtistFromName = (idx: LibraryIndex, name: string, mbid: string): WorldArtist => ({ mbid, name, artistId: findArtist(idx, mbid, name) });
+
+/** An album that isn't in the library: its songs from its earliest official release (the original). */
+export async function worldAlbum(auth: SubsonicAuth, mbid: string): Promise<WorldAlbumDetail> {
+  await freshen();
+  const [group, releases, idx] = await Promise.all([mbReleaseGroup(mbid), settle(mbReleases(mbid), []), libraryIndex(auth)]);
+  const withSongs = releases.filter((r) => r.media?.some((m) => m.tracks?.length));
+  const official = withSongs.filter((r) => !r.status || /official/i.test(r.status));
+  const release = (official.length ? official : withSongs).sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'))[0];
+  const tracks = (release?.media ?? []).flatMap((m) => (m.tracks ?? []).map((tr) => ({ title: tr.title || tr.recording?.title || '', duration: tr.length ? Math.round(tr.length / 1000) : undefined })));
+  return { ...toWorldAlbum(group, idx), tracks };
+}

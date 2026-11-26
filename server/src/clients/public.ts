@@ -73,6 +73,17 @@ export const mbArtistAlbums = (mbid: string) =>
     ),
   );
 
+export interface MbRelease {
+  id: string;
+  status?: string;
+  date?: string;
+  media?: { tracks?: { title: string; length?: number; recording?: { title: string } }[] }[];
+}
+export const mbReleases = (releaseGroupMbid: string) =>
+  cached(`r:${releaseGroupMbid}`, () =>
+    mb<{ releases?: MbRelease[] }>('/release', { 'release-group': releaseGroupMbid, inc: 'recordings', limit: 10 }).then((r) => r.releases ?? []),
+  );
+
 export const mbReleaseGroup = (mbid: string) =>
   cached(`g:${mbid}`, () => mb<MbReleaseGroup>(`/release-group/${mbid}`, { inc: 'artist-credits' }));
 

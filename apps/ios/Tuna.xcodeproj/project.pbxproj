@@ -13,6 +13,7 @@
 		58822EC3BE05421BDF80D4B8 /* AudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFE18F516D43238D4F89F9EF /* AudioPlayer.swift */; };
 		64688A2F9E4A5530948721B3 /* setup.html in Resources */ = {isa = PBXBuildFile; fileRef = 50E2148438E7C0D69A8EEB96 /* setup.html */; };
 		69E838349EE6EDE666A0140C /* Bridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C519BA89C7725E894F0574E9 /* Bridge.swift */; };
+		875E3F064EBE354747AC791E /* QueueCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD189882A347E004781A5B92 /* QueueCache.swift */; };
 		882990BCB273526049AE47A0 /* WebViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D3C68D1DCA1DFE621245FD7 /* WebViewController.swift */; };
 		935C3390C7783C405ADB29EA /* offline.html in Resources */ = {isa = PBXBuildFile; fileRef = 80498EAF62597E3C5F1DF0CE /* offline.html */; };
 		94F5FEE9CB758728BEBDF12B /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 1365242DFA05660EAD0F3617 /* InfoPlist.strings */; };
@@ -37,6 +38,7 @@
 		AD0322FC9BC694ECF116BA71 /* Tuna.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Tuna.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BFE18F516D43238D4F89F9EF /* AudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayer.swift; sourceTree = "<group>"; };
 		C519BA89C7725E894F0574E9 /* Bridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Bridge.swift; sourceTree = "<group>"; };
+		CD189882A347E004781A5B92 /* QueueCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueCache.swift; sourceTree = "<group>"; };
 		E68EDBBB328ED70B2547B966 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		EBFBEBD00391E465459D5A22 /* it */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = it; path = it.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -77,6 +79,7 @@
 				1318E6D975E6A35ACFC2149D /* Info.plist */,
 				8A7A8DD6A53695FCC4816075 /* LocalScheme.swift */,
 				3F2C3A2C6AA37B85D9E502DB /* OfflineStore.swift */,
+				CD189882A347E004781A5B92 /* QueueCache.swift */,
 				82BD0E593186494829F25973 /* Server.swift */,
 				50E2148438E7C0D69A8EEB96 /* setup.html */,
 				090CDBE8DB6579C3DF773139 /* Strings.swift */,
@@ -176,6 +179,7 @@
 				69E838349EE6EDE666A0140C /* Bridge.swift in Sources */,
 				FB3B745A1CF01663748385A3 /* LocalScheme.swift in Sources */,
 				03A8FE1795C81D6920B3CED2 /* OfflineStore.swift in Sources */,
+				875E3F064EBE354747AC791E /* QueueCache.swift in Sources */,
 				A75EAF0EAC1BD5644C25C59E /* Server.swift in Sources */,
 				A31608CBFAB10A848E4C3F46 /* Strings.swift in Sources */,
 				BC5DCDE34B5B1FB92E12C8AC /* TunaApp.swift in Sources */,
@@ -245,7 +249,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -351,7 +355,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

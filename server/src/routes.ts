@@ -10,19 +10,19 @@ import { home } from './services/home';
 import { waitingIn } from './services/imported';
 import { addPerson, changePerson, people, removePerson } from './services/household';
 import * as library from './services/library';
-import { listeningHistory, listeningStats } from './services/listens';
+import { listeningHistory, listeningStats, yearInReview } from './services/listens';
 import { importSpotify } from './services/spotify';
 import { getMany, saveStocking, stocking } from './services/stocking';
 import * as together from './services/together';
 import { openLine } from './lib/sse';
 import { lyrics } from './services/lyrics';
-import { dailyMixes, mixTracks } from './services/mixes';
+import { blends, dailyMixes, mixTracks } from './services/mixes';
 import { art, countPlay, cover, stream } from './services/playback';
 import { listenbrainzOf, prefsOf, savePrefs } from './services/prefs';
 import { searchLibrary, searchWorld } from './services/search';
 import { nightWaves, saveNightWaves } from './services/nightWaves';
 import { waveOf } from './services/waveform';
-import { artistDetail, worldArtist } from './services/world';
+import { artistDetail, worldAlbum, worldArtist } from './services/world';
 
 const me = (s: Session): Me => ({ id: s.userId, username: s.username, name: s.name, admin: s.admin, mediaKey: s.mediaKey, prefs: prefsOf(s.username) });
 
@@ -76,9 +76,10 @@ export async function apiRoutes(app: FastifyInstance) {
     return stats;
   });
   // The apps play downloaded songs from the device: the page says when one has been played.
+  app.get<{ Querystring: { year?: string } }>('/me/year', async (req) => yearInReview(requireUser(req).username, Number(req.query.year) || new Date().getFullYear()));
   app.post<{ Body: { id?: string } }>('/me/played', async (req) => {
     const s = requireUser(req);
-    if (req.body?.id) await countPlay(s, String(req.body.id));
+    if (req.body?.id) await countPlay(s, String(req.body.id), 'device');
     return { ok: true };
   });
   app.get<{ Querystring: { offset?: string; size?: string } }>('/me/history', async (req) => {
@@ -141,7 +142,10 @@ export async function apiRoutes(app: FastifyInstance) {
   app.get<{ Querystring: { q?: string } }>('/search', async (req) => searchLibrary(authOf(requireUser(req)), req.query.q ?? ''));
   app.get<{ Querystring: { q?: string } }>('/search/world', async (req) => searchWorld(authOf(requireUser(req)), req.query.q ?? ''));
 
-  app.get('/mixes', async (req) => dailyMixes(authOf(requireUser(req))));
+  app.get('/mixes', async (req) => {
+    const s = requireUser(req);
+    return [...(await dailyMixes(authOf(s))), ...blends(s.username, s.name)];
+  });
   app.get<{ Params: { id: string } }>('/mix/:id', async (req) => {
     const s = requireUser(req);
     return mixTracks(authOf(s), req.params.id, listenbrainzOf(s.username).user);
@@ -165,6 +169,7 @@ export async function apiRoutes(app: FastifyInstance) {
 
   // ---- Beyond the library ------------------------------------------------------------------------
   app.get<{ Params: { mbid: string } }>('/world/artist/:mbid', async (req) => worldArtist(authOf(requireUser(req)), req.params.mbid));
+  app.get<{ Params: { mbid: string } }>('/world/album/:mbid', async (req) => worldAlbum(authOf(requireUser(req)), req.params.mbid));
   app.post<{ Body: { mbid: string; artistMbid?: string; title?: string; artist?: string } }>('/get', async (req) => {
     const s = requireUser(req);
     const b = req.body ?? ({} as never);

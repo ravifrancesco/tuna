@@ -38,7 +38,7 @@ sealed class Bridge(MainWindow window)
             ["features"] = new JsonArray(features.Select(f => (JsonNode)f).ToArray()),
         }.ToJsonString();
         // The server's page, and the offline page (what's downloaded, played by the app).
-        var server = Hello(audio ? ["audio", "changeServer", "downloads", "tunnel", "update"] : ["changeServer", "tunnel", "update"]);
+        var server = Hello(audio ? ["audio", "changeServer", "downloads", "sleep", "tunnel", "update"] : ["changeServer", "tunnel", "update"]);
         var offline = Hello(audio ? ["audio", "downloads"] : []);
         return $"if (window.top === window) window.tunaHello = location.host === '{LocalPages.Host}' ? {offline} : {server};";
     }
@@ -105,6 +105,9 @@ sealed class Bridge(MainWindow window)
                 return null;
             case "audio.current":
                 return audio?.Current();
+            case "audio.sleep":
+                audio?.Sleep(Num(args?["minutes"]), Flag(args?["endOfSong"]));
+                return null;
 
             // Downloads, and the offline page that plays them
             case "downloads.add":

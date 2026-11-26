@@ -420,14 +420,96 @@ body.resizing .right {
 .dim {
   color: var(--dim);
 }
+/* Loading: the note-fish swims on the spot, as Netfish's fish does; quick loads never show it. */
 .spinner {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 3px solid rgba(255, 255, 255, 0.12);
-  border-top-color: var(--accent);
-  animation: spin 0.8s linear infinite;
+  display: grid;
+  place-items: center;
   margin: 60px auto;
+  animation: fish-appear 0.4s ease-out 0.25s both;
+}
+.swim {
+  overflow: visible;
+}
+.swim__body {
+  animation: fish-bob 2.4s ease-in-out infinite;
+}
+.swim__tail {
+  transform-box: fill-box;
+  transform-origin: 100% 50%;
+  animation: fish-wag 0.7s ease-in-out infinite alternate;
+}
+.swim__bubble {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.4;
+  opacity: 0;
+  animation: fish-bubble 2.4s ease-out infinite;
+}
+.swim__bubble:nth-of-type(2) {
+  animation-delay: 0.8s;
+}
+.swim__bubble:nth-of-type(3) {
+  animation-delay: 1.6s;
+}
+/* Empty screens: the fish in one quiet colour, drifting. */
+.empty__fish {
+  display: block;
+  margin: 0 auto 10px;
+  opacity: 0.3;
+  filter: grayscale(1);
+  animation: fish-drift 6s ease-in-out infinite;
+}
+@keyframes fish-appear {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes fish-bob {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(2px, -3px);
+  }
+}
+@keyframes fish-wag {
+  from {
+    transform: rotate(-9deg);
+  }
+  to {
+    transform: rotate(9deg);
+  }
+}
+@keyframes fish-bubble {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.6);
+  }
+  20% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(6px, -22px) scale(1.1);
+  }
+}
+@keyframes fish-drift {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .swim__body,
+  .swim__tail,
+  .swim__bubble,
+  .empty__fish {
+    animation: none;
+  }
 }
 @keyframes spin {
   to {
@@ -980,6 +1062,222 @@ html.tv .mobile-only {
 .track:focus-within {
   background: rgba(255, 255, 255, 0.06);
 }
+/* Search: what was searched lately, and only songs, artists, albums or playlists. */
+.search__filters {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin: 4px 0 14px;
+  scrollbar-width: none;
+}
+.recent__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.recent__item > button:first-child {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 6px;
+  border-radius: 8px;
+  color: var(--text);
+  text-align: left;
+}
+.recent__item > button:first-child:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.recent__item svg {
+  color: var(--muted);
+  flex: none;
+}
+
+/* The year in review: a card on the profile, then full-screen cards to tap through. */
+.year-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  margin: 4px 0 18px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  text-align: left;
+  color: #fff;
+  background: linear-gradient(120deg, var(--accent-2), #c2185b 70%, #ff8a3d);
+}
+.year-card b {
+  display: block;
+  font-size: 17px;
+}
+.year-card small {
+  opacity: 0.85;
+}
+.year {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 56px 24px 32px;
+  color: #fff;
+  text-align: center;
+  background: linear-gradient(160deg, #3b1f8f, #0b0a10 75%);
+  cursor: pointer;
+  user-select: none;
+}
+.year--1 {
+  background: linear-gradient(160deg, #8f1f5c, #0b0a10 75%);
+}
+.year--2 {
+  background: linear-gradient(160deg, #1f6b8f, #0b0a10 75%);
+}
+.year--3 {
+  background: linear-gradient(160deg, #8f5a1f, #0b0a10 75%);
+}
+.year__bars {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  right: 64px;
+  display: flex;
+  gap: 4px;
+}
+.year__bars span {
+  flex: 1;
+  height: 3px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.3);
+}
+.year__bars span.on {
+  background: #fff;
+}
+.year__close {
+  position: absolute;
+  top: 4px;
+  right: 10px;
+  color: #fff;
+}
+.year__card {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  max-width: 420px;
+  animation: year-in 0.35s ease;
+}
+.year__card .cover {
+  width: min(240px, 60vw);
+  height: auto;
+  aspect-ratio: 1;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+}
+.year__card h2 {
+  margin: 4px 0 0;
+  font-size: clamp(24px, 6vw, 34px);
+}
+.year__card p {
+  margin: 0;
+  opacity: 0.85;
+}
+.year__kicker {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.year__big {
+  font-size: clamp(40px, 12vw, 72px) !important;
+  letter-spacing: -0.02em;
+}
+.year__list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: n 1;
+  display: grid;
+  gap: 4px;
+  opacity: 0.9;
+}
+.year__list li {
+  counter-increment: n;
+}
+.year__list li::before {
+  content: counter(n) '. ';
+  opacity: 0.6;
+}
+.year__list li span {
+  opacity: 0.6;
+}
+.year .btn {
+  margin-top: 14px;
+}
+@keyframes year-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+/* A sheet of choices (the sleep timer). */
+.choices {
+  display: grid;
+  gap: 6px;
+}
+.choice {
+  padding: 13px 14px;
+  border-radius: 10px;
+  text-align: left;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.06);
+}
+.choice:hover,
+.choice.on {
+  background: rgba(255, 255, 255, 0.12);
+}
+.choice--off {
+  color: var(--muted);
+}
+
+/* Swiping a song (phones): what it does shows underneath as it moves. */
+.swipe {
+  position: relative;
+  touch-action: pan-y;
+}
+.swipe__back {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 22px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+}
+.swipe--right .swipe__back {
+  background: var(--accent-2);
+  color: #fff;
+}
+.swipe--left .swipe__back {
+  background: #e0457b;
+  color: #fff;
+}
+.swipe--left .swipe__back--remove {
+  background: #c94a4a;
+}
+.swipe > .track {
+  transition: transform 0.18s ease;
+}
+.swipe > .track.moving {
+  transition: none;
+  background: #16131e;
+}
+@media (hover: none) {
+  .track {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+}
 /* Imported from Spotify, not in the library yet. */
 .track--waiting {
   opacity: 0.4;
@@ -1289,12 +1587,53 @@ html.tv .mobile-only {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 48px;
   padding: max(68px, env(safe-area-inset-top)) 48px calc(28px + var(--safe-bottom));
+  /* Opening, it rises out of the player at the bottom; closing, it sinks back into it. Gently. */
+  transform-origin: 50% 100%;
   animation: rise 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.now--leaving {
+  animation: sink 0.2s ease-in forwards;
+  pointer-events: none;
 }
 @keyframes rise {
   from {
-    transform: translateY(40px);
+    transform: translateY(40px) scale(0.98);
     opacity: 0;
+  }
+}
+@keyframes sink {
+  to {
+    transform: translateY(40px) scale(0.98);
+    opacity: 0;
+  }
+}
+/* The player comes back as Now Playing goes. */
+.capsule,
+.mini {
+  animation: player-back 0.24s ease-out;
+}
+@keyframes player-back {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+}
+.lyrics__follow {
+  position: sticky;
+  bottom: 12px;
+  display: block;
+  margin: 8px auto 0;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .now,
+  .now--leaving,
+  .capsule,
+  .mini {
+    animation: none;
   }
 }
 .now__left {
@@ -1731,6 +2070,25 @@ html.tv .mobile-only {
 }
 .queue .track {
   grid-template-columns: minmax(0, 1fr) 36px 36px;
+}
+.queue__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.queue__grip {
+  cursor: grab;
+  touch-action: none;
+}
+.queue__list .swipe.lifted {
+  z-index: 2;
+  border-radius: 6px;
+  background: #1d1927;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.queue__list.dragging .queue__grip {
+  cursor: grabbing;
 }
 
 /* ---- Menus and sheets ----------------------------------------------------------------------------- */

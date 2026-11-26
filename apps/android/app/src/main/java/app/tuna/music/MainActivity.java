@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.UiModeManager;
 import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
@@ -19,6 +20,7 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.os.SystemClock;
 import android.provider.Settings;
+import android.view.HapticFeedbackConstants;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -38,6 +40,10 @@ import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 
 import androidx.annotation.RequiresApi;
+import androidx.mediarouter.media.MediaRouteSelector;
+import androidx.mediarouter.media.MediaRouter;
+
+import com.google.android.gms.cast.CastMediaControlIntent;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -70,6 +76,13 @@ public class MainActivity extends Activity {
     /** Phones and tablets only (TVs don't keep downloads). */
     private Downloads downloads;
     private boolean tv;
+    /** Chromecasts (phones with Google Play services): looked for while the window is open, harder just after the outputs list opens. */
+    private MediaRouter router;
+    private MediaRouteSelector chromecasts;
+    private final MediaRouter.Callback found = new MediaRouter.Callback() {};
+    private final Runnable lookLess = () -> {
+        if (router != null && MainActivity.this.visible) router.addCallback(chromecasts, found, MediaRouter.CALLBACK_FLAG_REQUEST_DISCOVERY);
+    };
     private volatile String currentUrl = "";
     private boolean forgetHistory;
     private View splash;
@@ -139,9 +152,13 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         open++;
         tunnel = Tunnel.get(this);
-        UiModeManager modes = (UiModeManager) getSystemService(UI_MODE_SERVICE);
-        tv = modes.getCurrentModeType() == Configuration.UI_MODE_TYPE_TELEVISION
-                || getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
+        tv = isTv(this);
+        if (AudioService.castable(this)) {
+            router = MediaRouter.getInstance(this);
+            chromecasts = new MediaRouteSelector.Builder()
+                    .addControlCategory(CastMediaControlIntent.categoryForCast(CastMediaControlIntent.DEFAULT_MEDIA_RECEIVER_APPLICATION_ID))
+                    .build();
+        }
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
         if (tv) {
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
@@ -353,6 +370,13 @@ public class MainActivity extends Activity {
         return Server.address(this);
     }
 
+    /** Fire TV, Android TV (no downloads, no Chromecasts, no vibration). */
+    static boolean isTv(Context context) {
+        UiModeManager modes = (UiModeManager) context.getSystemService(UI_MODE_SERVICE);
+        return modes.getCurrentModeType() == Configuration.UI_MODE_TYPE_TELEVISION
+                || context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
+    }
+
     private void showSetup(String error) {
         web.loadUrl(SETUP + (error != null ? "?error=" + Uri.encode(error) : ""));
     }
@@ -472,6 +496,7 @@ public class MainActivity extends Activity {
         visible = true;
         web.onResume();
         web.resumeTimers();
+        lookLess.run();
         // The page catches up with what played while it was away.
         if (audio != null) {
             JSONObject now = audio.current();
@@ -486,6 +511,10 @@ public class MainActivity extends Activity {
     protected void onStop() {
         super.onStop();
         visible = false;
+        if (router != null) {
+            web.removeCallbacks(lookLess);
+            router.removeCallback(found);
+        }
         // Nothing to draw or count while it's out of sight; the music is AudioService's.
         web.onPause();
         web.pauseTimers();
@@ -548,6 +577,11 @@ public class MainActivity extends Activity {
 
     /** The system's own list of speakers and headphones (the same one the lock screen's player opens). */
     private void showOutputs() {
+        if (router != null) {
+            router.addCallback(chromecasts, found, MediaRouter.CALLBACK_FLAG_REQUEST_DISCOVERY | MediaRouter.CALLBACK_FLAG_PERFORM_ACTIVE_SCAN);
+            web.removeCallbacks(lookLess);
+            web.postDelayed(lookLess, 30_000);
+        }
         if (Build.VERSION.SDK_INT >= 34 && MediaRouter2.getInstance(this).showSystemOutputSwitcher()) return;
         if (Build.VERSION.SDK_INT >= 31) {
             sendBroadcast(new Intent("com.android.systemui.action.LAUNCH_MEDIA_OUTPUT_DIALOG")
@@ -611,12 +645,15 @@ public class MainActivity extends Activity {
             try {
                 boolean offline = currentUrl.startsWith(Downloads.ORIGIN + "/");
                 JSONArray formats = new JSONArray();
-                for (String f : new String[] {"mp3", "aac", "m4a", "flac", "alac", "wav", "opus", "ogg"}) formats.put(f);
+                for (String f : AudioService.FORMATS) formats.put(f);
                 JSONArray features = new JSONArray();
                 String[] can = offline ? new String[] {"audio"} : new String[] {"audio", "changeServer", "keepAwake", "mobileData", "tunnel", "update"};
                 for (String f : can) features.put(f);
                 if (!tv && !offline) features.put("outputs");
                 if (downloads != null) features.put("downloads");
+                if (!offline) features.put("sleep");
+                if (!tv && !offline) features.put("haptics");
+                if (router != null && !offline) features.put("cast");
                 return new JSONObject()
                         .put("platform", tv ? "androidtv" : "android")
                         .put("version", BuildConfig.TUNA_VERSION)
@@ -689,6 +726,21 @@ public class MainActivity extends Activity {
                 case "audio.outputs":
                     runOnUiThread(MainActivity.this::showOutputs);
                     break;
+                case "audio.sleep": {
+                    double minutes = args.optDouble("minutes", 0);
+                    boolean endOfSong = args.optBoolean("endOfSong");
+                    runOnUiThread(() -> withAudio(a -> a.sleep(Double.isNaN(minutes) ? 0 : minutes, endOfSong)));
+                    break;
+                }
+                case "app.haptic": {
+                    if (tv) break;
+                    boolean success = "success".equals(args.optString("style"));
+                    // (A phone's own touch feedback: off when the person has turned it off.)
+                    int feel = success ? (Build.VERSION.SDK_INT >= 30 ? HapticFeedbackConstants.CONFIRM : HapticFeedbackConstants.VIRTUAL_KEY)
+                            : HapticFeedbackConstants.KEYBOARD_TAP;
+                    runOnUiThread(() -> web.performHapticFeedback(feel));
+                    break;
+                }
                 case "changeServer":
                     runOnUiThread(() -> showSetup(null));
                     break;

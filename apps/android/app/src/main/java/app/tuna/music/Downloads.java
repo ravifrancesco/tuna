@@ -189,7 +189,7 @@ final class Downloads {
         return f;
     }
 
-    private static String hash(String s) {
+    static String hash(String s) {
         try {
             StringBuilder hex = new StringBuilder();
             for (byte b : MessageDigest.getInstance("SHA-1").digest(s.getBytes(StandardCharsets.UTF_8))) hex.append(String.format("%02x", b));

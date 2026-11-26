@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android Auto: Tuna is a media app (AudioService's lists and player). -->
+<automotiveApp>
+    <uses name="media" />
+</automotiveApp>

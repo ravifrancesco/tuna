@@ -37,10 +37,11 @@ export const rekey = (url: string | undefined) => {
   return url && key ? url.replace(/([?&]k=)[^&]*/, `$1${key}`) : url;
 };
 
-// Songs played from the device never reach the server: once half of one has played, say so.
-let playing: { id: string; furthest: number; duration: number } | undefined;
+// Songs played from the device (a download, or the queue the app keeps ahead) never reach the
+// server: once half of one has played, say so.
+let playing: { id: string; furthest: number; duration: number; local: boolean } | undefined;
 const counted = () => {
-  if (playing && ready.has(playing.id) && playing.duration > 0 && playing.furthest >= playing.duration / 2) void api.played(playing.id).catch(() => {});
+  if (playing && (playing.local || ready.has(playing.id)) && playing.duration > 0 && playing.furthest >= playing.duration / 2) void api.played(playing.id).catch(() => {});
   playing = undefined;
 };
 nativeAudio?.onState((s) => {
@@ -48,8 +49,9 @@ nativeAudio?.onState((s) => {
   if (!t) return;
   if (playing?.id !== t.id) {
     counted();
-    playing = { id: t.id, furthest: 0, duration: s.duration || t.duration };
+    playing = { id: t.id, furthest: 0, duration: s.duration || t.duration, local: false };
   }
+  playing.local ||= Boolean(s.local);
   playing.furthest = Math.max(playing.furthest, s.time);
   if (s.ended) counted();
 });

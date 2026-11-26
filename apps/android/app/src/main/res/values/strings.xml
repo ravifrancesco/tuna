@@ -16,6 +16,12 @@
     <string name="unlike">Remove from liked songs</string>
     <string name="playing_channel">Now playing</string>
 
+    <!-- Android Auto's lists -->
+    <string name="auto_home">Home</string>
+    <string name="auto_playlists">Playlists</string>
+    <string name="auto_liked">Liked songs</string>
+    <string name="auto_downloads">Downloads</string>
+
     <!-- Updates -->
     <string name="update_not_this_build">This test build can\'t update itself</string>
     <string name="update_no_file">The new version has no Android app</string>

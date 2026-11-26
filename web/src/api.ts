@@ -1,33 +1,4 @@
-import type {
-  Album,
-  AlbumDetail,
-  Artist,
-  ArtistDetail,
-  Connections,
-  GetItem,
-  GetState,
-  Home,
-  Listen,
-  ListeningStats,
-  Lyrics,
-  Me,
-  Mix,
-  Person,
-  Playlist,
-  PlaylistDetail,
-  Prefs,
-  SearchResult,
-  SpotifyImport,
-  Stocking,
-  StatsPeriod,
-  TogetherControl,
-  TogetherRoom,
-  TogetherSummary,
-  ServerInfo,
-  Track,
-  WorldAlbum,
-  WorldArtistDetail,
-} from '@tuna/shared';
+import type { Album, AlbumDetail, Artist, ArtistDetail, Connections, GetItem, GetState, Home, Listen, ListeningStats, Lyrics, Me, Mix, Person, Playlist, PlaylistDetail, Prefs, SearchResult, ServerInfo, SpotifyImport, StatsPeriod, Stocking, TogetherControl, TogetherRoom, TogetherSummary, Track, WorldAlbum, WorldAlbumDetail, WorldArtistDetail, YearInReview } from '@tuna/shared';
 import { language } from './i18n';
 import { app } from './lib/native';
 
@@ -124,6 +95,7 @@ export const api = {
   savePrefs: (patch: { quality?: Prefs['quality']; listenbrainzToken?: string; lastfmUser?: string }) => call<Prefs>('PUT', '/me/prefs', patch),
   stats: (period: StatsPeriod) => call<ListeningStats>('GET', `/me/stats${q({ period })}`),
   history: (offset: number, size: number) => call<Listen[]>('GET', `/me/history${q({ offset, size })}`),
+  year: (year: number) => call<YearInReview>('GET', `/me/year${q({ year })}`),
   played: (id: string) => call('POST', '/me/played', { id }),
   importSpotify: (file: File) => call<SpotifyImport>('POST', `/me/import/spotify${q({ name: file.name })}`, file),
 
@@ -149,6 +121,7 @@ export const api = {
   wave: (id: string) => call<{ peaks: number[] }>('GET', `/wave/${encodeURIComponent(id)}`),
 
   worldArtist: (mbid: string) => call<WorldArtistDetail>('GET', `/world/artist/${encodeURIComponent(mbid)}`),
+  worldAlbum: (mbid: string) => call<WorldAlbumDetail>('GET', `/world/album/${encodeURIComponent(mbid)}`),
   get: (album: Pick<WorldAlbum, 'mbid' | 'artistMbid' | 'title' | 'artist'>) => call<GetState>('POST', '/get', album),
   getting: () => call<GetItem[]>('GET', '/getting'),
 

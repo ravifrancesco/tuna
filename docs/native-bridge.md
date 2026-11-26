@@ -33,9 +33,15 @@ window.tunaHello = {
   platform: 'mac' | 'windows' | 'ios' | 'android' | 'androidtv',
   version: '0.1.0',
   formats: ['mp3', 'aac', 'm4a', 'flac', 'alac', 'wav'],   // what the player plays as-is
-  features: ['audio', 'changeServer', 'keepAwake', 'mobileData', 'outputs', 'tunnel', 'update'],
+  features: ['audio', 'changeServer', 'keepAwake', 'mobileData', 'outputs', 'tunnel', 'update',
+             'downloads', 'sleep', 'haptics', 'cast'],
 }
 ```
+
+- `sleep`: the app keeps the sleep timer itself (`audio.sleep`), so it stops the music with the
+  screen off. Without it the page keeps the timer (the browser, TVs).
+- `haptics`: `app.haptic` gives a short vibration (swiping a song). Phones only.
+- `cast`: the `outputs` picker also lists Chromecasts, and the music can play on one (Android).
 
 - **Android**: a `@JavascriptInterface` object named `TunaAndroid` with `String hello()` (that JSON)
   and `void post(String json)`.
@@ -59,7 +65,9 @@ converts anything else (the page asks for `f=mp3` or `f=opus` in the stream URL)
 | `audio.command` | `{ name, value? }`: `play`, `pause`, `toggle`, `next`, `previous` (restart the song if more than 3 s in, else the one before), `seek` (seconds), `jump` (queue index), `stop` (stop and empty the queue: signing out, changing server), `repeat` (`'off' \| 'all' \| 'one'`), `volume` (0–1, the player's own) | — |
 | `audio.current` | — | `{ tracks, index, state }` of what the app is playing, or `null`. The page asks after it reloads, shows that, and never loads over it |
 | `audio.liked` | `{ id, liked }`: a song liked or unliked on the page. The app keeps it with the song (for `audio.current`) and, on Android, fills or empties the lock screen's heart | — |
-| `audio.outputs` | `{ x, y, width, height }`, the page's button: show the system's list of speakers and headphones (iPhone: the AirPlay/Bluetooth picker, pointing at the button on iPad; Android: the output switcher). Only with the `outputs` feature | — |
+| `audio.outputs` | `{ x, y, width, height }`, the page's button: show the system's list of speakers and headphones (iPhone and Mac: the AirPlay/Bluetooth picker, pointing at the button on iPad; Android: the output switcher, with Chromecasts when there's `cast`). Only with the `outputs` feature | — |
+| `audio.sleep` | `{ minutes }` (stop that many minutes from now) or `{ endOfSong: true }` (stop when the song playing ends); `{}` turns it off. When it's time: pause (don't empty the queue) and forget the timer; with `endOfSong`, move on to the next song paused at its start, so play carries on from there (or end as usual if it was the last). A new `audio.load` keeps it; `stop` clears it. Report it in every state as `sleep`. Only with `sleep` | — |
+| `app.haptic` | `{ style: 'light' \| 'success' }`: a short vibration as the page confirms something (a song swiped into the queue or liked). Only with `haptics` | — |
 | `changeServer` | — | — |
 | `keepAwake` | `{ on }` (TVs: keep the screen on) | — |
 | `mobileData` | — | `true` on mobile data |
@@ -78,10 +86,14 @@ WebView2 `ExecuteScriptAsync` or `PostWebMessageAsJson` — the page listens to 
 - `{ "type": "reply", "id": 7, "value": …, "error"?: string }` (`error` when the command failed)
 - `{ "type": "audio", "state": NativeAudioState }` — **on every change** (track, play/pause,
   buffering, seek, repeat, error, end) **and about once a second while playing**:
-  `{ index, playing, buffering?, time, duration, ended?, error?, repeat?, output? }`. `index` is into the
-  queue as last loaded/updated. `ended`: the whole queue has played (repeat off). `output`: where
-  the sound comes out, `{ name, kind }` with kind `phone`, `headphones`, `bluetooth`, `airplay`, `car`,
-  `tv` or `speaker` (apps with `outputs`; sent again when it changes).
+  `{ index, id, playing, buffering?, time, duration, ended?, error?, repeat?, output?, local?, sleep? }`.
+  `index` is into the queue as last loaded/updated; `id` is that song's, so the page notices a queue
+  set from elsewhere (Android Auto, the car) and asks `audio.current` for it. `ended`: the whole queue has played (repeat
+  off). `output`: where the sound comes out, `{ name, kind }` with kind `phone`, `headphones`,
+  `bluetooth`, `airplay`, `cast`, `car`, `tv` or `speaker` (apps with `outputs`; sent again when it
+  changes). `local`: the song playing comes from a file on the device (a download, or the queue
+  kept ahead, below), so the server never sees it played; the page counts the play. `sleep`: the
+  sleep timer, `{ at /* ms since 1970 */ }` or `{ endOfSong: true }`, absent when off.
 - `{ "type": "event", "name": string, "value": … }`: `update` while installing (`{received, total}`,
   `{done: true}` or `{error}`; Settings shows progress and errors), `tunnel` changes, and `liked`
   (`{id, liked}`): the lock screen's heart on Android. The app has told the server already (`POST
@@ -117,7 +129,8 @@ about twice a second while downloading.
   device is reported as an `error` and skipped.
 - **Plays**: a download's song addresses end in `&dl=1`, so fetching them isn't counted as playing
   them; the page tells the server (`POST /api/me/played`) when half of a song played from the
-  device has been heard. Unfinished downloads are added again when the page loads, with the
+  device (`local`, or downloaded) has been heard. If the player had streamed half of that song
+  already (loading it ahead before its copy took over), the server counts it once. Unfinished downloads are added again when the page loads, with the
   session's current media key.
 - **Keeping**: in the app's own storage (not the user's files), surviving updates. A JSON manifest
   of the downloads (as given, plus which songs are ready and their files); files named by song id.
@@ -141,12 +154,44 @@ about twice a second while downloading.
   `AVQueuePlayer` + `MPNowPlayingInfoCenter`/`MPRemoteCommandCenter` (media keys, Control Centre);
   Windows `Windows.Media.Playback.MediaPlayer` + `MediaPlaybackList` (the system media overlay and
   media keys come with it).
-- The next song is loaded ahead so songs follow each other without a gap.
+- The next song is loaded ahead so songs follow each other without a gap (gapless: no silence
+  between the songs of a live album or a mix).
+- **The queue kept ahead**: the next 3 songs (1 on mobile data) are fetched in full into a cache in
+  the app's own storage, at the queue's `url` with `&dl=1` added (fetching them isn't counted as
+  playing them), and played from the file once there, so the music carries on through a dropped
+  connection, a switch between home and the tunnel, or a server restart. One at a time, after the
+  song playing has loaded; at most about 500 MB, oldest first; a song that's downloaded
+  (`downloads`) is never fetched again. While a song plays from a file (cache or download), report
+  `local: true`.
+- **Casting** (`cast`, Android): pick a Chromecast in the outputs picker and the queue moves to it
+  (Media3's `CastPlayer`, the Default Media Receiver), from where it is; the notification and lock
+  screen control it. The Chromecast fetches the songs' `url` itself, so it works with a server
+  address it can reach (at home), not through the tunnel. `output` is `{ name, kind: 'cast' }`.
 - Repeat `one` repeats the song; `all` goes back to the start after the last one.
 - A song that fails: report `error`, then go on to the next one.
 - Interruptions (a call, another app's audio): pause, and resume if the system says to.
 - Artwork for the lock screen/notification: `track.artwork`.
 - Closing the window (Mac/Windows) or leaving the app (phones) doesn't stop the music; quitting does.
+
+## Android Auto (Android phones)
+
+The app is a media app in the car: Media3's `MediaLibraryService`, with
+`com.google.android.gms.car.application` → `automotive_app_desc` (`<uses name="media"/>`) in the
+manifest. The browse tree, read from the server with the web view's cookies
+(`CookieManager.getInstance().getCookie(server)`), first level:
+
+- **Home**: the mixes in `GET /api/home` (rows of `kind: 'mixes'`; each mix plays `GET /api/mix/{id}`).
+- **Playlists**: `GET /api/playlists`; one plays `GET /api/playlist/{id}` (its `tracks`).
+- **Liked songs**: `GET /api/liked`.
+- **Downloads**: what's on the device (plays with no connection).
+
+Songs from the server become the queue as the page's would: `url` =
+`{server}/api/stream/{id}?f={format}&br={bitRate}&k={mediaKey}` and `artwork` =
+`{server}/api/cover/{cover}?s=600&k={mediaKey}`, with `mediaKey` and the person's sound quality
+from `GET /api/me` (`mediaKey`, `prefs.quality`): `original` (or `auto` on Wi-Fi) plays the file as
+it is (`f=raw`) when its format is one the player plays (`suffix`), else Opus at 256 kbps; `high`
+Opus 256, `normal` Opus 160 (and `auto` on mobile data), `low` Opus 96. The page shows whatever the
+car started (`audio.current`, and the states it sends).
 
 ## What else the apps share with Netfish
 

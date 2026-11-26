@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { Play, Search as SearchIcon, X } from 'lucide-react';
+import { History, Play, Search as SearchIcon, X } from 'lucide-react';
 import { api } from '../api';
 import { AlbumCard, ArtistCard, PlaylistCard, Row, WorldAlbumCard, WorldArtistCard, playAlbum, playMix } from '../components/Cards';
 import { TrackList } from '../components/TrackList';
 import { Cover, Spinner } from '../components/ui';
 import { t } from '../i18n';
+import { clearSearches, forgetSearch, recentSearches, rememberSearch } from '../lib/recent';
 
 function useDebounced<T>(value: T, ms: number): T {
   const [v, setV] = useState(value);
@@ -36,6 +37,33 @@ export function Search() {
   const moreAlbums = w?.albums.filter((a) => !a.albumId) ?? [];
   const lookingFurther = q.length > 1 && (qWorld !== q || world.isLoading);
   const libEmpty = r && !top && !r.tracks.length && !r.playlists.length;
+  // Only songs, artists, albums or playlists; and what was searched lately (when the box is empty).
+  const [filter, setFilter] = useState<'all' | 'songs' | 'artists' | 'albums' | 'playlists'>('all');
+  const [recent, setRecent] = useState(recentSearches);
+  useEffect(() => {
+    if (q.length < 2) return;
+    const timer = setTimeout(() => setRecent(rememberSearch(q)), 1500);
+    return () => clearTimeout(timer);
+  }, [q]);
+  const FILTERS = [
+    ['all', t('All')],
+    ['songs', t('Songs')],
+    ['artists', t('Artists')],
+    ['albums', t('Albums')],
+    ['playlists', t('Playlists')],
+  ] as const;
+  const only =
+    r && filter !== 'all'
+      ? filter === 'songs'
+        ? r.tracks.length > 0 && <TrackList tracks={r.tracks} source={{ kind: 'search', title: text }} />
+        : (filter === 'artists' ? r.artists.length + moreArtists.length : filter === 'albums' ? r.albums.length + moreAlbums.length : r.playlists.length) > 0 && (
+            <div className="grid">
+              {filter === 'artists' && [...r.artists.map((a) => <ArtistCard key={a.id} artist={a} />), ...moreArtists.map((a) => <WorldArtistCard key={a.mbid} artist={a} />)]}
+              {filter === 'albums' && [...r.albums.map((a) => <AlbumCard key={a.id} album={a} />), ...moreAlbums.map((a) => <WorldAlbumCard key={a.mbid} album={a} />)]}
+              {filter === 'playlists' && r.playlists.map((p) => <PlaylistCard key={p.id} playlist={p} />)}
+            </div>
+          )
+      : undefined;
 
   return (
     <div className="page--flush">
@@ -51,8 +79,38 @@ export function Search() {
         </div>
       </div>
       <div className="page" style={{ paddingTop: 8 }}>
-                {q && lib.isLoading && <Spinner />}
-        {r && (
+        {!q && recent.length > 0 && (
+          <section className="recent">
+            <div className="row__head">
+              <h2>{t('Recent searches')}</h2>
+              <button className="btn btn--small" onClick={() => setRecent(clearSearches())}>
+                {t('Clear')}
+              </button>
+            </div>
+            {recent.map((x) => (
+              <div className="recent__item" key={x}>
+                <button onClick={() => setText(x)}>
+                  <History size={18} /> {x}
+                </button>
+                <button className="icon-btn" aria-label={t('Remove')} onClick={() => setRecent(forgetSearch(x))}>
+                  <X size={16} />
+                </button>
+              </div>
+            ))}
+          </section>
+        )}
+        {q && (
+          <div className="chips search__filters" role="tablist">
+            {FILTERS.map(([key, label]) => (
+              <button key={key} className={`chip ${filter === key ? 'on' : ''}`} role="tab" aria-selected={filter === key} onClick={() => setFilter(key)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+        {q && lib.isLoading && <Spinner />}
+        {filter !== 'all' && r && (only || (!lookingFurther && <p className="muted">{t('Nothing found for "{q}".', { q })}</p>))}
+        {filter === 'all' && r && (
           <>
             {(top || r.tracks.length > 0) && (
               <div className="split">

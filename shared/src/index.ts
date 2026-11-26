@@ -129,6 +129,11 @@ export interface WorldArtist {
   cover?: string;
 }
 
+/** An album that isn't in the library: its songs, as MusicBrainz lists them. */
+export interface WorldAlbumDetail extends WorldAlbum {
+  tracks: { title: string; duration?: number }[];
+}
+
 export interface WorldArtistDetail extends WorldArtist {
   albums: WorldAlbum[];
 }
@@ -157,6 +162,24 @@ export interface ListeningStats {
   topAlbums: (Album & { plays: number })[];
   /** The first play Tuna counted (ISO). */
   since?: string;
+}
+
+/** Someone's year in music, from the plays Tuna counted. */
+export interface YearInReview {
+  year: number;
+  seconds: number;
+  plays: number;
+  /** Days with at least one play. */
+  days: number;
+  artists: number;
+  /** Artists first heard this year. */
+  newArtists: number;
+  topArtists: (Artist & { plays: number })[];
+  topSongs: (Track & { plays: number })[];
+  topAlbum?: Album & { plays: number };
+  /** The month (0 = January) with the most listening. */
+  busiestMonth?: { month: number; seconds: number };
+  firstSong?: Track & { at: string };
 }
 
 /** What came in from Spotify, and the albums of the songs that aren't in the library. */
@@ -296,6 +319,8 @@ export interface NativeTrack {
 export interface NativeAudioState {
   /** Which track of the queue (as last loaded) is playing. */
   index: number;
+  /** That track's id: when it isn't the page's, the queue was set from elsewhere (the car). */
+  id?: string;
   playing: boolean;
   buffering?: boolean;
   /** Seconds. */
@@ -307,12 +332,16 @@ export interface NativeAudioState {
   repeat?: 'off' | 'all' | 'one';
   /** Where the sound comes out (apps with the "outputs" feature). */
   output?: NativeOutput;
+  /** The song plays from a file on the device (a download, or the queue kept ahead): the page counts the play. */
+  local?: boolean;
+  /** The sleep timer: stops at `at` (ms since 1970) or when the song ends. Absent when off. */
+  sleep?: { at?: number; endOfSong?: boolean };
 }
 
 export interface NativeOutput {
   /** As the system names it: "AirPods Pro", "Kitchen", "Speaker". */
   name: string;
-  kind: 'phone' | 'headphones' | 'bluetooth' | 'airplay' | 'car' | 'tv' | 'speaker';
+  kind: 'phone' | 'headphones' | 'bluetooth' | 'airplay' | 'cast' | 'car' | 'tv' | 'speaker';
 }
 
 // ---- Play together -------------------------------------------------------------------------------

@@ -14,8 +14,8 @@ rm -rf "$BUILD"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$BUILD/iconset.iconset"
 
 swiftc -O -swift-version 5 -target arm64-apple-macos15.0 \
-  -framework AppKit -framework WebKit -framework AVFoundation -framework MediaPlayer -framework Network \
-  Tuna/*.swift ../ios/Tuna/OfflineStore.swift \
+  -framework AppKit -framework WebKit -framework AVFoundation -framework AVKit -framework CoreAudio -framework MediaPlayer -framework Network \
+  Tuna/*.swift ../ios/Tuna/OfflineStore.swift ../ios/Tuna/QueueCache.swift \
   -o "$APP/Contents/MacOS/Tuna"
 
 # The tunnel for away from home (apps/common/tunnel, Go), next to the app.

@@ -336,7 +336,7 @@ final class OfflineStore: NSObject, URLSessionDownloadDelegate {
     }
 
     /// The file's extension from what the server says it is (AVPlayer goes by it).
-    private static func ext(_ response: URLResponse?, _ fallback: String) -> String {
+    static func ext(_ response: URLResponse?, _ fallback: String) -> String {
         guard let mime = response?.mimeType?.lowercased() else { return fallback }
         if let ext = UTType(mimeType: mime)?.preferredFilenameExtension { return ext }
         // "audio/x-flac" → flac
@@ -346,7 +346,7 @@ final class OfflineStore: NSObject, URLSessionDownloadDelegate {
     }
 
     /// An address without its media key, which changes when you sign in again.
-    private static func withoutKey(_ address: String?) -> String? {
+    static func withoutKey(_ address: String?) -> String? {
         guard let address, var parts = URLComponents(string: address) else { return address }
         parts.queryItems = parts.queryItems?.filter { $0.name != "k" }
         return parts.string

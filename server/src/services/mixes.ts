@@ -6,7 +6,8 @@ import { HOUR, TTLCache } from '../lib/cache';
 import { t } from '../lib/i18n';
 import { HttpError } from '../lib/upstream';
 import { liked, libraryIndex, norm, toTrack } from './library';
-import { playedIds } from './listens';
+import { nameOf } from '../sessions';
+import { blendable, blendCovers, blendTracks, listeners, playedIds } from './listens';
 
 /**
  * Mixes, made from the library when they're played: radio from a song, an album or an artist,
@@ -123,9 +124,20 @@ export async function mixTracks(auth: SubsonicAuth, id: string, listenbrainzUser
       return discoverTracks(auth, listenbrainzUser);
     case 'fresh':
       return freshCatch(auth, listenbrainzUser);
+    case 'blend':
+      return spread(blendTracks(auth.username, seed));
     default:
       throw new HttpError(404, t('Not found'));
   }
+}
+
+/** A Blend with each person in the household who's been listening: "Sam + Alex". */
+export function blends(username: string, name: string): Mix[] {
+  if (!blendable(username)) return [];
+  const first = (n: string) => n.trim().split(/\s+/)[0] || n;
+  return listeners()
+    .filter((u) => u !== username && blendable(u))
+    .map((u) => ({ id: `blend:${u}`, title: t('{a} + {b}', { a: first(name), b: first(nameOf(u)) }), subtitle: t('What you both play'), covers: blendCovers(username, u) }));
 }
 
 /** The songs ListenBrainz suggests that are already in the library. */

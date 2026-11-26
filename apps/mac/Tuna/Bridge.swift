@@ -14,7 +14,7 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             "version": version,
             // What AVPlayer plays as-is; the server converts the rest.
             "formats": ["mp3", "aac", "m4a", "alac", "flac", "wav"],
-            "features": ["audio", "changeServer", "downloads", "tunnel", "update"],
+            "features": ["audio", "changeServer", "downloads", "outputs", "sleep", "tunnel", "update"],
         ]
         let json = { (value: Any) in (try? JSONSerialization.data(withJSONObject: value)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}" }
         let server = json(hello)
@@ -93,6 +93,10 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             }
         case "audio.current":
             return audio.currentQueue ?? NSNull()
+        case "audio.sleep":
+            audio.sleep(minutes: (args["minutes"] as? NSNumber)?.doubleValue, endOfSong: args["endOfSong"] as? Bool ?? false)
+        case "audio.outputs":
+            window.showOutputs(at: NSRect(x: Self.double(args["x"]), y: Self.double(args["y"]), width: Self.double(args["width"]), height: Self.double(args["height"])))
 
         // Downloads
         case "downloads.add":

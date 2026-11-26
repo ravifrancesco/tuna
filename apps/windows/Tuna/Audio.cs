@@ -27,7 +27,8 @@ sealed record Track(string Id, Uri? Url, string Title, string Artist, string Alb
 /// brings the media overlay, the media keys and the lock screen. Its list only ever holds the song
 /// that's playing and the one after it, loaded ahead so they follow each other without a gap; what
 /// "after" means (the next song, the first again, the same again) is worked out here, so changing
-/// the queue or repeat never touches the song that's playing.
+/// the queue or repeat never touches the song that's playing. The next few songs are also fetched
+/// into a cache (<see cref="SongCache"/>) and played from there once they've come.
 /// </summary>
 sealed class AudioPlayer : IDisposable
 {
@@ -38,8 +39,10 @@ sealed class AudioPlayer : IDisposable
         /// <summary>Where it is in the queue (changes when the queue does).</summary>
         public int Index = index;
         public MediaPlaybackItem Item = null!;
-        /// <summary>What it's read from, when the player doesn't fetch it itself: its download, or the tunnel.</summary>
+        /// <summary>What it's read from, when the player doesn't fetch it itself: its download, the cache, or the tunnel.</summary>
         public Stream? Stream;
+        /// <summary>Played from a file on this PC (a download or the cache): the page counts the play.</summary>
+        public bool Local;
         /// <summary>Couldn't be loaded or played.</summary>
         public bool Failed;
         /// <summary>Its failure has been reported and dealt with.</summary>
@@ -47,10 +50,13 @@ sealed class AudioPlayer : IDisposable
     }
 
     public static readonly string[] Formats = ["mp3", "aac", "m4a", "flac", "wav", "alac"];
+    /// <summary>How long before a song ends the list starts loading the one after it.</summary>
+    static readonly TimeSpan Prefetch = TimeSpan.FromSeconds(30);
 
     readonly MediaPlayer player = new();
     readonly Action<Action> ui;
     readonly DownloadStore downloads;
+    readonly SongCache cache;
     readonly System.Windows.Forms.Timer ticker = new() { Interval = 1000 };
     readonly HttpClient direct = new() { Timeout = TimeSpan.FromSeconds(20) };
     /// <summary>Through the tunnel (away from home), while there is one.</summary>
@@ -69,6 +75,9 @@ sealed class AudioPlayer : IDisposable
     bool wantPlay, ended, stalled, disposed;
     /// <summary>Songs that failed in a row, so a queue where nothing plays doesn't go round forever.</summary>
     int failures;
+    /// <summary>The sleep timer: pause at this time (ms since 1970), or when the song playing ends.</summary>
+    long? sleepAt;
+    bool sleepEndOfSong;
 
     /// <summary>The state for the page (NativeAudioState), on every change and every second while playing.</summary>
     public event Action<JsonObject>? Changed;
@@ -78,6 +87,13 @@ sealed class AudioPlayer : IDisposable
     {
         ui = action => post(() => Safely(action));
         this.downloads = downloads;
+        cache = new SongCache(downloads);
+        cache.Ready += () => Safely(() =>
+        {
+            // The song loaded ahead may now play from the file.
+            CatchUp();
+            if (list != null && current != null && !ended) FillNext();
+        });
         player.AutoPlay = false;
         player.AudioCategory = MediaPlayerAudioCategory.Media;
 
@@ -114,7 +130,13 @@ sealed class AudioPlayer : IDisposable
         session.SeekCompleted += (_, _) => ui(Report);
         ticker.Tick += (_, _) => Safely(() =>
         {
-            if (Playing) Report();
+            // The sleep timer, minimised or not.
+            if (sleepAt is { } at && DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() >= at)
+            {
+                sleepAt = null;
+                Pause();
+            }
+            else if (Playing) Report();
         });
         ticker.Start();
     }
@@ -215,6 +237,17 @@ sealed class AudioPlayer : IDisposable
         return new JsonObject { ["tracks"] = sent.DeepClone(), ["index"] = index, ["state"] = State() };
     }
 
+    /// <summary>audio.sleep: pause in so many minutes, or when the song playing ends; neither turns it off.</summary>
+    public void Sleep(double? minutes, bool endOfSong)
+    {
+        CatchUp();
+        sleepAt = minutes is > 0 ? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + (long)(minutes.Value * 60_000) : null;
+        sleepEndOfSong = sleepAt == null && endOfSong;
+        // At the end of the song, nothing is loaded after it, so the list stops there.
+        if (list != null && current != null && !ended) FillNext();
+        Report();
+    }
+
     void Play()
     {
         CatchUp();
@@ -301,6 +334,8 @@ sealed class AudioPlayer : IDisposable
         ended = false;
         stalled = false;
         pendingSeek = null;
+        sleepAt = null;
+        sleepEndOfSong = false;
         player.Pause();
         player.Source = null;
         if (current != null) Drop(current);
@@ -347,7 +382,7 @@ sealed class AudioPlayer : IDisposable
     void StartAt(int i, double start, bool play)
     {
         var old = (current, next);
-        list = new MediaPlaybackList { AutoRepeatEnabled = false, MaxPrefetchTime = TimeSpan.FromSeconds(30) };
+        list = new MediaPlaybackList { AutoRepeatEnabled = false, MaxPrefetchTime = Prefetch };
         // A new song (it moved on by itself, or the first one is in): catch up, and say so.
         list.CurrentItemChanged += (sender, _) => ui(() =>
         {
@@ -382,8 +417,9 @@ sealed class AudioPlayer : IDisposable
     void FillNext()
     {
         if (list == null || current == null) return;
-        var target = NextIndex(natural: true);
-        if (next != null && target >= 0 && next.Track.Same(tracks[target]))
+        // (The sleep timer at the end of this song: nothing after it.)
+        var target = sleepEndOfSong ? -1 : NextIndex(natural: true);
+        if (next != null && target >= 0 && next.Track.Same(tracks[target]) && !BetterFromFile(next))
         {
             // Still the right song (maybe somewhere else in the queue now).
             next.Index = target;
@@ -406,10 +442,11 @@ sealed class AudioPlayer : IDisposable
         var slot = new Slot(tracks[i], i);
         var track = slot.Track;
         MediaSource source;
-        if (downloads.Open(track.Id) is { } local)
+        if ((downloads.Open(track.Id) ?? cache.Open(track.Id)) is { } local)
         {
-            // Downloaded: the file, online too (it saves data).
+            // Downloaded or fetched ahead: the file, online too (it saves data).
             slot.Stream = local.File;
+            slot.Local = true;
             source = MediaSource.CreateFromStream(local.File.AsRandomAccessStream(), local.Type);
         }
         else if (track.Url != null && proxied == null)
@@ -434,6 +471,17 @@ sealed class AudioPlayer : IDisposable
         slot.Item.ApplyDisplayProperties(display);
         if (track.Artwork != null) _ = Cover(slot.Item, track.Artwork);
         return slot;
+    }
+
+    /// <summary>
+    /// A song loaded ahead from the server that's on this PC now, with time to swap it for the file
+    /// before the list starts loading it.
+    /// </summary>
+    bool BetterFromFile(Slot slot)
+    {
+        if (slot.Local || !(downloads.Has(slot.Track.Id) || cache.Has(slot.Track.Id)) || !Opened()) return false;
+        var session = player.PlaybackSession;
+        return session.NaturalDuration - session.Position > Prefetch + TimeSpan.FromSeconds(5);
     }
 
     static async void Bind(Slot slot, HttpClient? http, MediaBindingEventArgs e)
@@ -575,7 +623,16 @@ sealed class AudioPlayer : IDisposable
         var session = player.PlaybackSession;
         // (Still playing, well before the end: a song just started, nothing has ended.)
         if (session.PlaybackState == MediaPlaybackState.Playing && session.Position < session.NaturalDuration - TimeSpan.FromSeconds(2)) return;
-        if (next == null) Finish();
+        if (next == null)
+        {
+            // The sleep timer, at the end of the song: stopped there, at the start of the next one.
+            if (sleepEndOfSong && NextIndex(natural: true) is var after and >= 0)
+            {
+                sleepEndOfSong = false;
+                StartAt(after, 0, false);
+            }
+            else Finish();
+        }
         // It stopped short of the song after: that one couldn't be loaded ahead. One fresh try.
         else if (next.Failed) StartAt(next.Index, 0, true);
         else stalled = true;
@@ -586,6 +643,7 @@ sealed class AudioPlayer : IDisposable
     {
         ended = true;
         wantPlay = false;
+        sleepEndOfSong = false;
         pendingSeek = null;
         player.Pause();
         UpdateButtons();
@@ -631,7 +689,7 @@ sealed class AudioPlayer : IDisposable
         commands.PreviousBehavior.EnablingRule = current != null ? MediaCommandEnablingRule.Always : MediaCommandEnablingRule.Never;
     }
 
-    /// <summary>NativeAudioState: { index, playing, buffering, time, duration, ended?, error?, repeat }.</summary>
+    /// <summary>NativeAudioState: { index, playing, buffering, time, duration, ended?, error?, repeat, local?, sleep? }.</summary>
     JsonObject State(string? error = null)
     {
         var session = player.PlaybackSession;
@@ -652,13 +710,35 @@ sealed class AudioPlayer : IDisposable
         };
         if (ended) o["ended"] = true;
         if (error != null) o["error"] = error;
+        if (current is { Local: true } && !ended) o["local"] = true;
+        if (sleepAt is { } at) o["sleep"] = new JsonObject { ["at"] = at };
+        else if (sleepEndOfSong) o["sleep"] = new JsonObject { ["endOfSong"] = true };
         return o;
     }
 
     void Report()
     {
         CatchUp();
+        KeepAhead();
         Emit(State());
+    }
+
+    /// <summary>The next 3 songs for the cache, fetched once the song playing has loaded.</summary>
+    void KeepAhead()
+    {
+        var ahead = new List<Track>();
+        for (var k = 1; k <= 3 && current != null && !ended; k++)
+        {
+            var i = index + k;
+            if (i >= tracks.Count)
+            {
+                if (repeat != "all") break;
+                i %= tracks.Count;
+            }
+            if (i == index) break;
+            ahead.Add(tracks[i]);
+        }
+        cache.Want(ahead, current != null && (current.Local || Opened()));
     }
 
     void Emit(JsonObject state) => Changed?.Invoke(state);
@@ -675,6 +755,7 @@ sealed class AudioPlayer : IDisposable
     {
         disposed = true;
         ticker.Stop();
+        cache.Stop();
         try
         {
             player.Pause();

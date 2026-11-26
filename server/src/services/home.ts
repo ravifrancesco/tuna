@@ -7,7 +7,7 @@ import { t } from '../lib/i18n';
 import { log } from '../lib/log';
 import { stateOf } from './getting';
 import { albums, artists as allArtists, findAlbum, libraryIndex, liked, playlists } from './library';
-import { dailyMixes, freshCatch } from './mixes';
+import { blends, dailyMixes, freshCatch } from './mixes';
 
 /** Home: where you left off, your mixes, what's new, and what to discover (the web shows the first mix big). */
 
@@ -43,6 +43,8 @@ export async function home(auth: SubsonicAuth, name: string, listenbrainzUser?: 
   }
   if (likes.tracks.length >= 10) madeForYou.push({ id: 'liked', title: t('Liked songs mix'), subtitle: t('The songs you love, shuffled'), covers: likes.tracks.slice(0, 4).map((x) => x.cover).filter((c): c is string => Boolean(c)) });
   if (madeForYou.length) rows.push({ id: 'mixes', title: t('Made for you'), kind: 'mixes', items: madeForYou });
+  const together = blends(auth.username, name);
+  if (together.length) rows.push({ id: 'blends', title: t('Blends'), kind: 'mixes', items: together });
   if (newest.length) rows.push({ id: 'newest', title: t('New in the library'), kind: 'albums', items: newest });
 
   if (listenbrainzUser) {

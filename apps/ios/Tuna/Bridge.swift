@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 @preconcurrency import WebKit
 
 /// What the app tells the page before its scripts run, and how the page talks to the app
@@ -12,7 +13,9 @@ enum Bridge {
             "version": version,
             // What AVPlayer plays as it is; the server converts anything else.
             "formats": ["mp3", "aac", "m4a", "alac", "flac", "wav"],
-            "features": ["audio", "changeServer", "downloads", "mobileData", "outputs"],
+            // Haptics: iPhones only (iPads don't vibrate).
+            "features": ["audio", "changeServer", "downloads", "mobileData", "outputs", "sleep"]
+                + (UIDevice.current.userInterfaceIdiom == .phone ? ["haptics"] : []),
         ]
     }
 
@@ -79,6 +82,14 @@ final class BridgeHandler: NSObject, WKScriptMessageHandler {
         case "audio.outputs":
             let n = { (key: String) in CGFloat((args[key] as? NSNumber)?.doubleValue ?? 0) }
             controller.showOutputs(at: CGRect(x: n("x"), y: n("y"), width: n("width"), height: n("height")))
+        case "audio.sleep":
+            player.sleep(minutes: (args["minutes"] as? NSNumber)?.doubleValue, endOfSong: args["endOfSong"] as? Bool ?? false)
+        case "app.haptic":
+            if args["style"] as? String == "success" {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            } else {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            }
         case "mobileData":
             return controller.cellular
         case "downloads.add":

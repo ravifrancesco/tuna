@@ -46,7 +46,7 @@ sealed class DownloadStore
     /// <summary>Something changed (on the window's thread): the page hears about it at most about twice a second.</summary>
     public event Action? Changed;
 
-    static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
+    internal static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
     static HttpClient? client;
     static string? clientProxy;
     /// <summary>Through the tunnel while there is one (it goes direct or through WireGuard itself), like the player.</summary>
@@ -104,8 +104,10 @@ sealed class DownloadStore
     static IEnumerable<string> Ids(Download d) => d.Tracks.Select(t => Str(t?["id"])).OfType<string>().Where(id => id.Length > 0);
     static IEnumerable<string?> Images(Download d) => d.Tracks.Select(t => Str(t?["artwork"])).Prepend(d.Cover);
 
-    /// <summary>A song's file: its id ("2fd4e1c6…"), or a name made from it when the id isn't one Windows takes as it is.</summary>
-    string SongFile(string id) => Path.Combine(songs, Regex.IsMatch(id, "^[a-z0-9-]{8,64}$") ? id : "_" + Hash(id));
+    string SongFile(string id) => Path.Combine(songs, FileName(id));
+
+    /// <summary>A song's file name: its id ("2fd4e1c6…"), or a name made from it when the id isn't one Windows takes as it is.</summary>
+    internal static string FileName(string id) => Regex.IsMatch(id, "^[a-z0-9-]{8,64}$") ? id : "_" + Hash(id);
 
     /// <summary>A cover's file: named by its address without the media key, so a whole album shares one.</summary>
     string? ImageFile(string? address)
@@ -192,6 +194,8 @@ sealed class DownloadStore
         catch { return null; }
     }
 
+    public bool Has(string songId) => manifest.Songs.ContainsKey(songId);
+
     /// <summary>A cover kept on this PC, for the media overlay; null when it isn't here.</summary>
     public string? Image(Uri url) => ImageFile(url.OriginalString) is { } path && File.Exists(path) ? path : null;
 
@@ -261,7 +265,7 @@ sealed class DownloadStore
         }
     }
 
-    static void Delete(string path)
+    internal static void Delete(string path)
     {
         try { File.Delete(path); } catch { /* still closing; it goes next time */ }
     }
@@ -367,7 +371,7 @@ sealed class DownloadStore
     }
 
     /// <summary>Saves an address to a file (by way of a .part file): its type and size.</summary>
-    static async Task<(string Type, long Bytes)> Fetch(Uri url, string path, CancellationToken cancel, Action<long>? progress = null)
+    internal static async Task<(string Type, long Bytes)> Fetch(Uri url, string path, CancellationToken cancel, Action<long>? progress = null)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var part = path + ".part";
@@ -403,5 +407,168 @@ sealed class DownloadStore
         if (!estimated && total > 0 && received < total) throw new IOException("The connection closed early");
         File.Move(part, path, overwrite: true);
         return (response.Content.Headers.ContentType?.MediaType ?? "audio/mpeg", received);
+    }
+}
+
+/// <summary>
+/// The queue kept ahead (docs/native-bridge.md, "The player"): the next few songs, fetched in full
+/// into %LOCALAPPDATA%\Tuna\Ahead so the music carries on through a dropped connection, a switch to
+/// the tunnel or a server restart. One song at a time, once the song playing has loaded, at its
+/// address with dl=1 (fetching it isn't playing it). About 500 MB at most, oldest first; ahead.json
+/// keeps each song's type and size. Songs that are downloaded are never fetched.
+/// </summary>
+sealed class SongCache
+{
+    sealed class Song
+    {
+        public string Type { get; set; } = "audio/mpeg";
+        public long Bytes { get; set; }
+        /// <summary>When it was fetched or last played (ms since 1970): the oldest go first.</summary>
+        public long Used { get; set; }
+    }
+
+    const long Cap = 500L << 20;
+
+    /// <summary>A song has come (on the window's thread).</summary>
+    public event Action? Ready;
+
+    readonly DownloadStore downloads;
+    readonly string folder = Path.Combine(AppData.Root, "Ahead");
+    readonly string file = Path.Combine(AppData.Root, "ahead.json");
+    readonly Dictionary<string, Song> songs;
+    /// <summary>The songs to have here, in order, and those that didn't come this time round.</summary>
+    List<Track> wanted = new();
+    readonly HashSet<string> refused = new();
+    bool allowed, working, stopped;
+    (string Id, CancellationTokenSource Cancel)? fetching;
+
+    public SongCache(DownloadStore downloads)
+    {
+        this.downloads = downloads;
+        try { songs = JsonSerializer.Deserialize<Dictionary<string, Song>>(File.ReadAllText(file), DownloadStore.Json) ?? new(); }
+        catch { songs = new(); }
+        foreach (var id in songs.Keys.Where(id => !File.Exists(SongFile(id))).ToList()) songs.Remove(id);
+        // Anything else in the folder (a song cut short) goes.
+        var keep = songs.Keys.Select(SongFile).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            if (Directory.Exists(folder))
+                foreach (var path in Directory.EnumerateFiles(folder))
+                    if (!keep.Contains(path)) DownloadStore.Delete(path);
+        }
+        catch { /* next time */ }
+    }
+
+    static long Now => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+    string SongFile(string id) => Path.Combine(folder, DownloadStore.FileName(id));
+
+    public bool Has(string id) => songs.ContainsKey(id);
+
+    /// <summary>A song kept ahead, open for the player (it can still be deleted meanwhile); null when it isn't here.</summary>
+    public (FileStream File, string Type)? Open(string id)
+    {
+        if (!songs.TryGetValue(id, out var song)) return null;
+        try
+        {
+            var stream = new FileStream(SongFile(id), FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            song.Used = Now;
+            return (stream, song.Type);
+        }
+        catch
+        {
+            songs.Remove(id);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The songs to have here, in order (the player says on every change). A song coming in that's no
+    /// longer one of them stops. <paramref name="go"/>: the song playing has loaded, so the next may start.
+    /// </summary>
+    public void Want(List<Track> next, bool go)
+    {
+        if (!next.Select(t => t.Id).SequenceEqual(wanted.Select(t => t.Id)))
+        {
+            refused.Clear();
+            if (fetching is { } f && !next.Any(t => t.Id == f.Id)) f.Cancel.Cancel();
+        }
+        wanted = next;
+        allowed = go;
+        if (go) Work();
+    }
+
+    /// <summary>Tuna is quitting: the song coming in stops.</summary>
+    public void Stop()
+    {
+        stopped = true;
+        fetching?.Cancel.Cancel();
+    }
+
+    /// <summary>One song at a time, in order, while the player allows. On the window's thread.</summary>
+    async void Work()
+    {
+        if (working || stopped) return;
+        working = true;
+        try
+        {
+            while (allowed && !stopped && wanted.FirstOrDefault(t => t.Url != null && !songs.ContainsKey(t.Id) && !downloads.Has(t.Id) && !refused.Contains(t.Id)) is { } track)
+                await Keep(track.Id, track.Url!);
+        }
+        finally
+        {
+            working = false;
+        }
+    }
+
+    async Task Keep(string id, Uri url)
+    {
+        using var cancel = new CancellationTokenSource();
+        var path = SongFile(id);
+        fetching = (id, cancel);
+        try
+        {
+            var address = new Uri(url.OriginalString + (url.Query.Length > 1 ? "&" : "?") + "dl=1");
+            var (type, bytes) = await Task.Run(() => DownloadStore.Fetch(address, path, cancel.Token));
+            songs[id] = new Song { Type = type, Bytes = bytes, Used = Now };
+            Trim();
+            Save();
+            Ready?.Invoke();
+        }
+        catch
+        {
+            // Not wanted any more, or it didn't come (tried again when the queue changes).
+            DownloadStore.Delete(path + ".part");
+            if (!cancel.IsCancellationRequested) refused.Add(id);
+        }
+        finally
+        {
+            fetching = null;
+        }
+    }
+
+    /// <summary>About 500 MB at most: the songs fetched or played longest ago go, never the ones wanted now.</summary>
+    void Trim()
+    {
+        var total = songs.Values.Sum(s => s.Bytes);
+        foreach (var (id, song) in songs.OrderBy(s => s.Value.Used).ToList())
+        {
+            if (total <= Cap) break;
+            if (wanted.Any(t => t.Id == id)) continue;
+            songs.Remove(id);
+            DownloadStore.Delete(SongFile(id));
+            total -= song.Bytes;
+        }
+    }
+
+    void Save()
+    {
+        try
+        {
+            Directory.CreateDirectory(AppData.Root);
+            File.WriteAllText(file + ".new", JsonSerializer.Serialize(songs, DownloadStore.Json));
+            File.Move(file + ".new", file, overwrite: true);
+        }
+        catch { /* saved next time */ }
     }
 }

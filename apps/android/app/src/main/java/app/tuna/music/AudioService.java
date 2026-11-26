@@ -1,6 +1,7 @@
 package app.tuna.music;
 
 import android.app.NotificationManager;
+import android.content.Context;
 import android.media.AudioDeviceCallback;
 import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
@@ -8,6 +9,7 @@ import android.app.PendingIntent;
 import android.content.Intent;
 import android.net.ConnectivityManager;
 import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
@@ -20,10 +22,15 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.OptIn;
+import androidx.media3.cast.CastPlayer;
+import androidx.media3.cast.DefaultMediaItemConverter;
+import androidx.media3.cast.SessionAvailabilityListener;
 import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
+import androidx.media3.common.ForwardingPlayer;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MediaMetadata;
+import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.util.UnstableApi;
@@ -36,11 +43,19 @@ import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy;
 import androidx.media3.extractor.DefaultExtractorsFactory;
 import androidx.media3.session.CommandButton;
 import androidx.media3.session.DefaultMediaNotificationProvider;
+import androidx.media3.session.LibraryResult;
+import androidx.media3.session.MediaLibraryService;
 import androidx.media3.session.MediaSession;
-import androidx.media3.session.MediaSessionService;
 import androidx.media3.session.SessionCommand;
+import androidx.media3.session.SessionError;
 import androidx.media3.session.SessionResult;
 
+import com.google.android.gms.cast.CastDevice;
+import com.google.android.gms.cast.SessionState;
+import com.google.android.gms.cast.framework.CastContext;
+import com.google.android.gms.cast.framework.CastSession;
+import com.google.android.gms.cast.framework.SessionTransferCallback;
+import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -57,16 +72,26 @@ import java.util.List;
  * The player: the queue the page hands over (docs/native-bridge.md), played by ExoPlayer in a
  * media session, so the notification, the lock screen, headset and Bluetooth buttons and TV
  * remotes all work, and the music carries on when the window is gone. Downloaded songs play
- * from the device (Downloads). The page hears what happens through Page (MainActivity), and
+ * from the device (Downloads), and so do the next few, fetched ahead (Ahead). In the car it's a
+ * media app with lists to play from (Library); picked in the output switcher, a Chromecast takes
+ * the queue over (CastPlayer). The page hears what happens through Page (MainActivity), and
  * asks for it all again (audio.current) when it reloads. Everything here runs on the main thread.
  */
 @OptIn(markerClass = UnstableApi.class)
-public final class AudioService extends MediaSessionService {
+public final class AudioService extends MediaLibraryService {
     private static final String TAG = "TunaAudio";
     /** MainActivity binds with this action to talk to the player directly. */
     static final String ACTION_LOCAL = "app.tuna.music.AUDIO";
+    /** What ExoPlayer plays as it is (with FFmpeg inside the app); the server converts anything else. */
+    static final String[] FORMATS = {"mp3", "aac", "m4a", "flac", "alac", "wav", "opus", "ogg"};
     /** The heart beside the lock screen's controls. */
     private static final SessionCommand LIKE = new SessionCommand("app.tuna.music.LIKE", Bundle.EMPTY);
+    /** A song from the car's lists, as the page would have handed it over. */
+    private static final String TRACK = "app.tuna.music.TRACK";
+    /** Songs kept ahead, on Wi-Fi and on mobile data. */
+    private static final int AHEAD = 3, AHEAD_MOBILE = 1;
+    /** A long queue goes to the Chromecast this many songs at a time, and more as it gets there. */
+    private static final int CAST_WINDOW = 50, CAST_MORE = 10;
     /** The player is there (downloads leave the tunnel to it when they finish). */
     static volatile boolean running;
 
@@ -89,10 +114,26 @@ public final class AudioService extends MediaSessionService {
 
     private final Local local = new Local();
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private ExoPlayer player;
-    private MediaSession session;
+    /** The phone's own player; the Chromecast's (phones with Google Play services); the one playing now. */
+    private ExoPlayer exo;
+    private CastPlayer cast;
+    private Player player;
+    private CastContext castContext;
+    /** Casting: the queue's songs from castFrom to castTo are on the Chromecast. */
+    private int castFrom, castTo;
+    /** Casting: where the song playing is in a queue the Chromecast hasn't taken yet (-1: it has). */
+    private int castSettling = -1;
+    /** Back to the phone from the output switcher: the music carries on here (a Chromecast that went leaves it paused). */
+    private boolean backHere, castWasPlaying;
+    private MediaLibrarySession session;
     private Page page;
     private Downloads downloads;
+    private Ahead ahead;
+    /** The song whose having loaded started the fetching ahead (-1: none). */
+    private int aheadOf = -1;
+    /** The queue is being swapped around the song playing (audio.update). */
+    private boolean editing;
+    private Library library;
     private ConnectivityManager.NetworkCallback networkCallback;
     /** The tracks as the page last loaded or updated them, in the player's order. */
     private final List<JSONObject> queue = new ArrayList<>();
@@ -107,6 +148,9 @@ public final class AudioService extends MediaSessionService {
     private Boolean heartShown;
     private AudioManager sound;
     private AudioDeviceCallback devices;
+    /** The sleep timer: when it stops the music (ms since 1970, 0: not set), or at the end of the song. */
+    private long sleepAt;
+    private boolean sleepEndOfSong;
 
     private final Runnable tick = new Runnable() {
         @Override
@@ -126,11 +170,84 @@ public final class AudioService extends MediaSessionService {
         if (player != null && waitingForNetwork && player.getPlaybackState() == Player.STATE_IDLE) player.prepare();
     };
 
+    private final Runnable sleepDue = new Runnable() {
+        @Override
+        public void run() {
+            if (player == null || sleepAt == 0) return;
+            // (The handler's clock stops while the phone sleeps: the timer goes by the real one.)
+            long left = sleepAt - System.currentTimeMillis();
+            if (left > 500) {
+                handler.postDelayed(this, left);
+                return;
+            }
+            player.pause();
+            sleep(0, false);
+        }
+    };
+
+    private final Runnable settled = () -> {
+        castSettling = -1;
+        push();
+    };
+
+    private final Player.Listener listener = new Player.Listener() {
+        @Override
+        public void onEvents(@NonNull Player p, @NonNull Player.Events events) {
+            if (p != player) return;
+            if (events.containsAny(Player.EVENT_PLAYBACK_STATE_CHANGED, Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_TIMELINE_CHANGED)) {
+                if (p == cast && castSettling >= 0 && cast.getMediaItemCount() == castTo - castFrom) settled.run();
+                ahead();
+                castMore();
+            }
+            // The queue played to its end: nothing left for the sleep timer to stop.
+            if (sleepEndOfSong && p.getPlaybackState() == Player.STATE_ENDED) sleep(0, false);
+            push();
+        }
+
+        @Override
+        public void onIsPlayingChanged(boolean playing) {
+            handler.removeCallbacks(tick);
+            if (player != null && player.isPlaying()) {
+                failures = 0;
+                waitingForNetwork = false;
+                handler.postDelayed(tick, 1000);
+            }
+        }
+
+        @Override
+        public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
+            // The sleep timer, at the end of the song: on to the next one, paused at its start (or the end, after the last).
+            if (reason != Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM || player != exo || !sleepEndOfSong) return;
+            sleep(0, false);
+            if (exo.hasNextMediaItem()) exo.seekToNextMediaItem();
+            else if (exo.getRepeatMode() == Player.REPEAT_MODE_OFF) exo.play();
+            else exo.seekTo(0);
+        }
+
+        @Override
+        public void onMediaItemTransition(@Nullable MediaItem item, int reason) {
+            // The same on a Chromecast, which can't stop at the end of a song: paused as the next one starts.
+            if (player != cast || !sleepEndOfSong) return;
+            if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) return;
+            cast.pause();
+            cast.seekTo(cast.getCurrentMediaItemIndex(), 0);
+            sleep(0, false);
+        }
+
+        @Override
+        public void onPlayerError(@NonNull PlaybackException e) {
+            failed(e);
+        }
+    };
+
     @Override
     public void onCreate() {
         super.onCreate();
         running = true;
         downloads = Downloads.get(this);
+        // (TVs have little room: Fire TV Sticks.)
+        ahead = new Ahead(this, MainActivity.isTv(this) ? 150L << 20 : 500L << 20, this::fetched);
+        library = new Library(this, downloads);
         DefaultHttpDataSource.Factory http = new DefaultHttpDataSource.Factory()
                 .setUserAgent("Tuna/" + BuildConfig.TUNA_VERSION + " (Android)")
                 .setAllowCrossProtocolRedirects(true);
@@ -144,7 +261,8 @@ public final class AudioService extends MediaSessionService {
                 .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
                 .setEnableDecoderFallback(true);
         AudioAttributes music = new AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build();
-        player = new ExoPlayer.Builder(this, renderers)
+        // (A playlist: the next song is loaded ahead and follows without a gap.)
+        exo = new ExoPlayer.Builder(this, renderers)
                 .setMediaSourceFactory(sources)
                 // Calls and other apps' sound pause it (and resume it when the system says so).
                 .setAudioAttributes(music, true)
@@ -153,45 +271,24 @@ public final class AudioService extends MediaSessionService {
                 // Screen off: keep the processor and Wi-Fi going while it plays.
                 .setWakeMode(C.WAKE_MODE_NETWORK)
                 .build();
-        player.addListener(new Player.Listener() {
-            @Override
-            public void onEvents(@NonNull Player p, @NonNull Player.Events events) {
-                push();
-            }
-
-            @Override
-            public void onIsPlayingChanged(boolean playing) {
-                handler.removeCallbacks(tick);
-                if (playing) {
-                    failures = 0;
-                    waitingForNetwork = false;
-                    handler.postDelayed(tick, 1000);
-                }
-            }
-
-            @Override
-            public void onPlayerError(@NonNull PlaybackException e) {
-                failed(e);
-            }
-        });
+        exo.addListener(listener);
+        player = exo;
 
         Intent open = new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
         PendingIntent tap = PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        session = new MediaSession.Builder(this, player)
-                .setSessionActivity(tap)
-                .setCallback(new MediaSession.Callback() {
-                    // The queue is the page's: other apps and devices can play, pause, skip and seek, not rearrange it.
+        session = new MediaLibrarySession.Builder(this, new Shell(exo), new MediaLibrarySession.Callback() {
+                    // The queue is the page's: other apps and devices can play, pause, skip and seek, and start
+                    // something from the car's lists (Library), not rearrange it.
                     @NonNull
                     @Override
                     public MediaSession.ConnectionResult onConnect(@NonNull MediaSession s, @NonNull MediaSession.ControllerInfo controller) {
                         Player.Commands commands = MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS.buildUpon()
                                 .remove(Player.COMMAND_SET_SHUFFLE_MODE)
                                 .remove(Player.COMMAND_CHANGE_MEDIA_ITEMS)
-                                .remove(Player.COMMAND_SET_MEDIA_ITEM)
                                 .build();
                         return new MediaSession.ConnectionResult.AcceptedResultBuilder(s)
                                 .setAvailablePlayerCommands(commands)
-                                .setAvailableSessionCommands(MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon().add(LIKE).build())
+                                .setAvailableSessionCommands(MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon().add(LIKE).build())
                                 .setMediaButtonPreferences(buttons())
                                 .build();
                     }
@@ -203,7 +300,43 @@ public final class AudioService extends MediaSessionService {
                         if (LIKE.customAction.equals(command.customAction)) like();
                         return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_SUCCESS));
                     }
+
+                    @NonNull
+                    @Override
+                    public ListenableFuture<LibraryResult<MediaItem>> onGetLibraryRoot(@NonNull MediaLibrarySession s, @NonNull MediaSession.ControllerInfo controller,
+                            @Nullable LibraryParams params) {
+                        // (No "recent" list for the system to offer: what plays is the page's queue.)
+                        if (params != null && params.isRecent) return Futures.immediateFuture(LibraryResult.ofError(SessionError.ERROR_NOT_SUPPORTED));
+                        return Futures.immediateFuture(LibraryResult.ofItem(library.root(), params));
+                    }
+
+                    @NonNull
+                    @Override
+                    public ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> onGetChildren(@NonNull MediaLibrarySession s, @NonNull MediaSession.ControllerInfo controller,
+                            @NonNull String parent, int page, int size, @Nullable LibraryParams params) {
+                        return library.children(parent, page, size);
+                    }
+
+                    /** A tap in the car's lists: its songs become the queue (Shell hands them to load()). */
+                    @NonNull
+                    @Override
+                    public ListenableFuture<MediaSession.MediaItemsWithStartPosition> onSetMediaItems(@NonNull MediaSession s, @NonNull MediaSession.ControllerInfo controller,
+                            @NonNull List<MediaItem> items, int startIndex, long startPositionMs) {
+                        if (items.size() != 1) return Futures.immediateFailedFuture(new UnsupportedOperationException());
+                        return Futures.transform(library.play(items.get(0).mediaId), q -> {
+                            if (q == null || q.tracks.length() == 0) throw new IllegalArgumentException("nothing to play");
+                            List<MediaItem> out = new ArrayList<>();
+                            for (int i = 0; i < q.tracks.length(); i++) {
+                                JSONObject t = q.tracks.optJSONObject(i);
+                                Bundle extras = new Bundle();
+                                extras.putString(TRACK, t.toString());
+                                out.add(item(t).buildUpon().setRequestMetadata(new MediaItem.RequestMetadata.Builder().setExtras(extras).build()).build());
+                            }
+                            return new MediaSession.MediaItemsWithStartPosition(out, q.index, 0);
+                        }, handler::post);
+                    }
                 })
+                .setSessionActivity(tap)
                 .build();
         DefaultMediaNotificationProvider notification = new DefaultMediaNotificationProvider.Builder(this)
                 .setChannelName(R.string.playing_channel)
@@ -211,6 +344,29 @@ public final class AudioService extends MediaSessionService {
         notification.setSmallIcon(R.drawable.ic_note);
         setMediaNotificationProvider(notification);
         addSession(session);
+
+        // Chromecasts: the queue moves there when one is picked, and back.
+        if (castable(this)) {
+            CastContext.getSharedInstance(this, handler::post).addOnSuccessListener(c -> {
+                if (exo == null) return;
+                castContext = c;
+                cast = new CastPlayer(this, c, new DefaultMediaItemConverter(), 10_000, 10_000, 3_000);
+                cast.addListener(listener);
+                cast.setSessionAvailabilityListener(new SessionAvailabilityListener() {
+                    @Override
+                    public void onCastSessionAvailable() {
+                        toCast();
+                    }
+
+                    @Override
+                    public void onCastSessionUnavailable() {
+                        toPhone();
+                    }
+                });
+                c.addSessionTransferCallback(transfer);
+                if (cast.isCastSessionAvailable()) toCast();
+            }).addOnFailureListener(e -> Log.w(TAG, "no Cast: " + e));
+        }
 
         // Headphones, Bluetooth, a car: the page shows where the sound goes.
         sound = getSystemService(AudioManager.class);
@@ -242,6 +398,12 @@ public final class AudioService extends MediaSessionService {
         }
     }
 
+    /** Chromecasts: phones and tablets (not TVs) with Google Play services, where the system's output switcher lists them (Android 13). */
+    static boolean castable(Context context) {
+        return Build.VERSION.SDK_INT >= 33 && !MainActivity.isTv(context)
+                && GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context) == com.google.android.gms.common.ConnectionResult.SUCCESS;
+    }
+
     @Nullable
     @Override
     public IBinder onBind(@Nullable Intent intent) {
@@ -251,7 +413,7 @@ public final class AudioService extends MediaSessionService {
 
     @Nullable
     @Override
-    public MediaSession onGetSession(@NonNull MediaSession.ControllerInfo controller) {
+    public MediaLibrarySession onGetSession(@NonNull MediaSession.ControllerInfo controller) {
         return session;
     }
 
@@ -264,11 +426,19 @@ public final class AudioService extends MediaSessionService {
         ConnectivityManager networks = getSystemService(ConnectivityManager.class);
         if (networks != null && networkCallback != null) networks.unregisterNetworkCallback(networkCallback);
         if (sound != null && devices != null) sound.unregisterAudioDeviceCallback(devices);
-        player.release();
+        if (cast != null) {
+            castContext.removeSessionTransferCallback(transfer);
+            cast.setSessionAvailabilityListener(null);
+            cast.release();
+            cast = null;
+        }
+        exo.release();
         session.release();
         session = null;
+        exo = null;
         player = null;
         page = null;
+        ahead.want(new ArrayList<>(), new ArrayList<>());
         // A paused song's notification would stay behind, its buttons dead.
         NotificationManager notices = getSystemService(NotificationManager.class);
         if (notices != null) notices.cancel(DefaultMediaNotificationProvider.DEFAULT_NOTIFICATION_ID);
@@ -307,14 +477,19 @@ public final class AudioService extends MediaSessionService {
             return;
         }
         int i = Math.max(0, Math.min(index, queue.size() - 1));
-        player.setMediaItems(items(queue, 0, queue.size()), i, Math.max(0, (long) (start * 1000)));
-        if (play) {
-            player.prepare();
-            player.play();
+        long from = Math.max(0, (long) (start * 1000));
+        if (player == cast) {
+            castLoad(i, from, play);
         } else {
-            // Ready where it was, nothing fetched (and no notification) until it's played.
-            player.pause();
-            player.stop();
+            exo.setMediaItems(items(queue, 0, queue.size()), i, from);
+            if (play) {
+                exo.prepare();
+                exo.play();
+            } else {
+                // Ready where it was, nothing fetched (and no notification) until it's played.
+                exo.pause();
+                exo.stop();
+            }
         }
         push();
     }
@@ -331,17 +506,36 @@ public final class AudioService extends MediaSessionService {
             return;
         }
         handler.removeCallbacks(skip);
-        int now = player.getCurrentMediaItemIndex();
+        int at = player.getCurrentMediaItemIndex();
+        int now = index();
         int around = Math.max(0, Math.min(index, next.size() - 1));
         String playing = now < queue.size() ? queue.get(now).optString("id") : next.get(around).optString("id");
         int keep = find(next, playing, around);
         int count = player.getMediaItemCount();
-        if (now + 1 < count) player.removeMediaItems(now + 1, count);
-        if (now > 0) player.removeMediaItems(0, now);
-        if (keep > 0) player.addMediaItems(0, items(next, 0, keep));
-        if (keep + 1 < next.size()) player.addMediaItems(items(next, keep + 1, next.size()));
         queue.clear();
         queue.addAll(next);
+        if (player == cast) {
+            // A long queue: the Chromecast gets it from the song playing on.
+            castFrom = next.size() > CAST_WINDOW ? keep : 0;
+            castTo = Math.min(next.size(), castFrom + CAST_WINDOW);
+            // (Its queue changes when it says so: every position here is as it was before.)
+            if (keep > castFrom) cast.addMediaItems(at, items(next, castFrom, keep));
+            if (keep + 1 < castTo) cast.addMediaItems(count, items(next, keep + 1, castTo));
+            if (at + 1 < count) cast.removeMediaItems(at + 1, count);
+            if (at > 0) cast.removeMediaItems(0, at);
+            castSettling = keep;
+            handler.removeCallbacks(settled);
+            handler.postDelayed(settled, 3000);
+        } else {
+            // (Each step tells the listener: what to fetch ahead waits for the queue as it ends up.)
+            editing = true;
+            if (at + 1 < count) exo.removeMediaItems(at + 1, count);
+            if (at > 0) exo.removeMediaItems(0, at);
+            if (keep > 0) exo.addMediaItems(0, items(next, 0, keep));
+            if (keep + 1 < next.size()) exo.addMediaItems(items(next, keep + 1, next.size()));
+            editing = false;
+            ahead();
+        }
         push();
     }
 
@@ -370,17 +564,21 @@ public final class AudioService extends MediaSessionService {
                 else play();
                 break;
             case "next":
+                handler.removeCallbacks(skip);
                 if (player.hasNextMediaItem()) {
-                    handler.removeCallbacks(skip);
                     player.seekToNextMediaItem();
                     resume();
+                } else if (player == cast && castTo < queue.size()) {
+                    castLoad(index() + 1, 0, true);
                 }
                 break;
             case "previous":
                 handler.removeCallbacks(skip);
                 // More than 3 seconds in (or the first song): from the start again.
-                if (player.getCurrentPosition() > 3000 || player.getCurrentMediaItemIndex() == 0 || !player.hasPreviousMediaItem()) player.seekTo(0);
-                else player.seekToPreviousMediaItem();
+                if (player.getCurrentPosition() > 3000 || index() == 0) player.seekTo(0);
+                else if (player.hasPreviousMediaItem()) player.seekToPreviousMediaItem();
+                else if (player == cast) castLoad(index() - 1, 0, true);
+                else player.seekTo(0);
                 resume();
                 break;
             case "seek":
@@ -389,9 +587,11 @@ public final class AudioService extends MediaSessionService {
             case "jump":
                 if (value instanceof Number) {
                     int i = ((Number) value).intValue();
-                    if (i < 0 || i >= player.getMediaItemCount()) break;
+                    if (i < 0 || i >= queue.size()) break;
                     handler.removeCallbacks(skip);
-                    player.seekTo(i, 0);
+                    if (player != cast) player.seekTo(i, 0);
+                    else if (i >= castFrom && i < castFrom + cast.getMediaItemCount()) cast.seekTo(i - castFrom, 0);
+                    else castLoad(i, 0, true);
                     play();
                 }
                 break;
@@ -409,6 +609,20 @@ public final class AudioService extends MediaSessionService {
         }
     }
 
+    /**
+     * audio.sleep: stop `minutes` from now, or at the end of the song playing; neither turns it off.
+     * When it's time the music pauses (the queue stays) and the timer is forgotten.
+     */
+    void sleep(double minutes, boolean endOfSong) {
+        handler.removeCallbacks(sleepDue);
+        sleepAt = minutes > 0 ? System.currentTimeMillis() + (long) (minutes * 60_000) : 0;
+        sleepEndOfSong = sleepAt == 0 && endOfSong;
+        // ExoPlayer stops right at the end of the song (onPlayWhenReadyChanged moves on to the next).
+        exo.setPauseAtEndOfMediaItems(sleepEndOfSong);
+        if (sleepAt > 0) handler.postDelayed(sleepDue, sleepAt - System.currentTimeMillis());
+        push();
+    }
+
     /** audio.liked from the page, or the heart here: every copy of the song in the queue, and the heart. */
     void liked(String id, boolean on) {
         for (JSONObject t : queue) {
@@ -424,7 +638,7 @@ public final class AudioService extends MediaSessionService {
 
     /** The heart on the lock screen: the server is told straight away (the page may be asleep). */
     private void like() {
-        int i = player == null ? -1 : player.getCurrentMediaItemIndex();
+        int i = player == null ? -1 : index();
         if (i < 0 || i >= queue.size()) return;
         String id = queue.get(i).optString("id");
         boolean on = !queue.get(i).optBoolean("liked");
@@ -440,7 +654,7 @@ public final class AudioService extends MediaSessionService {
     }
 
     private boolean currentLiked() {
-        int i = player == null || queue.isEmpty() ? -1 : player.getCurrentMediaItemIndex();
+        int i = player == null || queue.isEmpty() ? -1 : index();
         return i >= 0 && i < queue.size() && queue.get(i).optBoolean("liked");
     }
 
@@ -478,10 +692,16 @@ public final class AudioService extends MediaSessionService {
     JSONObject current() {
         if (player == null || queue.isEmpty()) return null;
         try {
-            return new JSONObject().put("tracks", new JSONArray(queue)).put("index", player.getCurrentMediaItemIndex()).put("state", state());
+            return new JSONObject().put("tracks", new JSONArray(queue)).put("index", index()).put("state", state());
         } catch (JSONException e) {
             return null;
         }
+    }
+
+    /** Where the player is in the queue (a Chromecast has the part of a long queue from castFrom). */
+    private int index() {
+        if (player != cast) return player.getCurrentMediaItemIndex();
+        return castSettling >= 0 ? castSettling : castFrom + cast.getCurrentMediaItemIndex();
     }
 
     private void play() {
@@ -503,7 +723,123 @@ public final class AudioService extends MediaSessionService {
         player.stop();
         player.clearMediaItems();
         queue.clear();
+        sleep(0, false);
+    }
+
+    // ---------- The queue kept ahead ----------
+
+    /** The next few songs fetched whole, once the one playing has loaded (not while it's on a Chromecast). */
+    private void ahead() {
+        if (editing) return;
+        boolean ready = player == exo && exo.getPlaybackState() == Player.STATE_READY && !queue.isEmpty();
+        // (A moment's buffering in the middle of a song changes nothing.)
+        if (!ready && player == exo && exo.getPlaybackState() == Player.STATE_BUFFERING && aheadOf == index()) return;
+        aheadOf = ready ? index() : -1;
+        List<String> next = new ArrayList<>();
+        List<String> all = new ArrayList<>();
+        for (JSONObject t : queue) all.add(t.optString("url"));
+        if (ready) {
+            int now = index();
+            boolean around = exo.getRepeatMode() == Player.REPEAT_MODE_ALL;
+            int n = onMobileData() ? AHEAD_MOBILE : AHEAD;
+            for (int k = 1; k <= n && (around ? k < queue.size() : now + k < queue.size()); k++) {
+                JSONObject t = queue.get((now + k) % queue.size());
+                if (downloads.song(t.optString("id")) == null) next.add(t.optString("url"));
+            }
+        }
+        ahead.want(next, all);
+    }
+
+    /** A song fetched ahead is here: it plays from the file wherever it's still to come in the queue. */
+    private void fetched(String url) {
+        if (player != exo) return;
+        int now = exo.getCurrentMediaItemIndex();
+        long left = exo.getDuration() == C.TIME_UNSET ? Long.MAX_VALUE : exo.getDuration() - exo.getCurrentPosition();
+        for (int i = 0; i < queue.size() && i < exo.getMediaItemCount(); i++) {
+            if (i == now || !url.equals(queue.get(i).optString("url")) || local(exo.getMediaItemAt(i))) continue;
+            // (Not the next song in the last seconds of this one: it's on its way in already, gaplessly.)
+            if (i == now + 1 && left < 5000) continue;
+            exo.replaceMediaItem(i, item(queue.get(i)));
+        }
+    }
+
+    private static boolean local(@Nullable MediaItem item) {
+        return item != null && item.localConfiguration != null && "file".equals(item.localConfiguration.uri.getScheme());
+    }
+
+    private boolean onMobileData() {
+        ConnectivityManager networks = getSystemService(ConnectivityManager.class);
+        NetworkCapabilities now = networks == null ? null : networks.getNetworkCapabilities(networks.getActiveNetwork());
+        return now != null && now.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR);
+    }
+
+    // ---------- On a Chromecast ----------
+
+    /** A Chromecast was picked: the queue moves there from where it is. */
+    private void toCast() {
+        if (cast == null || player == cast) return;
+        handler.removeCallbacks(skip);
+        handler.removeCallbacks(retry);
+        int i = index();
+        long position = Math.max(0, exo.getCurrentPosition());
+        boolean play = exo.getPlayWhenReady() && exo.getPlaybackState() != Player.STATE_ENDED;
+        cast.setRepeatMode(exo.getRepeatMode());
+        exo.stop();
+        player = cast;
+        session.setPlayer(new Shell(cast));
+        if (!queue.isEmpty()) castLoad(i, position, play);
+        ahead();
         push();
+    }
+
+    /** The Chromecast went (or the output switcher brought the music back): the phone carries on from there. */
+    private void toPhone() {
+        if (player != cast) return;
+        int i = Math.max(0, Math.min(index(), queue.size() - 1));
+        long position = Math.max(0, cast.getCurrentPosition());
+        castWasPlaying = cast.getPlayWhenReady();
+        castSettling = -1;
+        exo.setRepeatMode(cast.getRepeatMode());
+        player = exo;
+        session.setPlayer(new Shell(exo));
+        if (!queue.isEmpty()) {
+            exo.setMediaItems(items(queue, 0, queue.size()), i, position);
+            exo.prepare();
+            exo.setPlayWhenReady(backHere && castWasPlaying);
+        }
+        backHere = false;
+        push();
+    }
+
+    private final SessionTransferCallback transfer = new SessionTransferCallback() {
+        @Override
+        public void onTransferring(int type) {
+            if (type == TRANSFER_TYPE_FROM_REMOTE_TO_LOCAL) backHere = true;
+        }
+
+        @Override
+        public void onTransferred(int type, @Nullable SessionState state) {
+            if (type == TRANSFER_TYPE_FROM_REMOTE_TO_LOCAL && player == exo && castWasPlaying) play();
+            castWasPlaying = false;
+        }
+    };
+
+    /** The Chromecast's queue from song `i`: all of it, or the next CAST_WINDOW songs of a long one. */
+    private void castLoad(int i, long position, boolean play) {
+        castSettling = -1;
+        castFrom = queue.size() > CAST_WINDOW ? i : 0;
+        castTo = Math.min(queue.size(), castFrom + CAST_WINDOW);
+        cast.setMediaItems(items(queue, castFrom, castTo), i - castFrom, position);
+        cast.setPlayWhenReady(play);
+        cast.prepare();
+    }
+
+    /** Nearly at the end of what the Chromecast has: more of the queue. */
+    private void castMore() {
+        if (player != cast || castSettling >= 0 || castTo >= queue.size() || castTo - index() > 2) return;
+        int to = Math.min(queue.size(), castTo + CAST_MORE);
+        cast.addMediaItems(items(queue, castTo, to));
+        castTo = to;
     }
 
     // ---------- When a song fails ----------
@@ -524,7 +860,7 @@ public final class AudioService extends MediaSessionService {
         }
     }
 
-    /** Any connection at all: with none, a song that isn't downloaded is skipped, not waited for. */
+    /** Any connection at all: with none, a song that isn't on the device is skipped, not waited for. */
     private boolean online() {
         ConnectivityManager networks = getSystemService(ConnectivityManager.class);
         return networks == null || networks.getActiveNetwork() != null;
@@ -539,6 +875,8 @@ public final class AudioService extends MediaSessionService {
             handler.post(() -> {
                 if (player == null) return;
                 if (page != null) page.rerouted();
+                // (Mobile data or Wi-Fi now: fewer or more songs ahead.)
+                ahead();
                 if (waitingForNetwork) {
                     handler.removeCallbacks(retry);
                     handler.postDelayed(retry, 500);
@@ -555,12 +893,14 @@ public final class AudioService extends MediaSessionService {
                 && state != Player.STATE_ENDED && state != Player.STATE_IDLE;
     }
 
-    /** {index, playing, buffering?, time, duration, ended?, error?, repeat}. */
+    /** {index, id, playing, buffering?, time, duration, ended?, error?, repeat, output, local?, sleep?}. */
     private JSONObject state() throws JSONException {
         JSONObject state = new JSONObject();
-        int index = queue.isEmpty() ? -1 : player.getCurrentMediaItemIndex();
+        int index = queue.isEmpty() ? -1 : index();
         int playback = player.getPlaybackState();
         state.put("index", index);
+        // (The page sees a queue it didn't set, from the car, by the song not being the one it has there.)
+        if (index >= 0 && index < queue.size()) state.put("id", queue.get(index).optString("id"));
         state.put("playing", playing());
         if (playback == Player.STATE_BUFFERING) state.put("buffering", true);
         state.put("time", Math.max(0, player.getCurrentPosition()) / 1000.0);
@@ -573,11 +913,20 @@ public final class AudioService extends MediaSessionService {
         int repeat = player.getRepeatMode();
         state.put("repeat", repeat == Player.REPEAT_MODE_ONE ? "one" : repeat == Player.REPEAT_MODE_ALL ? "all" : "off");
         state.put("output", output());
+        // From a file on the device (downloaded, or fetched ahead): the server doesn't see it played.
+        if (player == exo && index >= 0 && local(exo.getCurrentMediaItem())) state.put("local", true);
+        if (sleepAt > 0) state.put("sleep", new JSONObject().put("at", sleepAt));
+        else if (sleepEndOfSong) state.put("sleep", new JSONObject().put("endOfSong", true));
         return state;
     }
 
     /** Where the sound comes out: {name, kind}, as NativeOutput. */
     private JSONObject output() throws JSONException {
+        if (player == cast) {
+            CastSession now = castContext.getSessionManager().getCurrentCastSession();
+            CastDevice device = now == null ? null : now.getCastDevice();
+            return new JSONObject().put("name", device == null ? "Chromecast" : device.getFriendlyName()).put("kind", "cast");
+        }
         AudioDeviceInfo device = null;
         if (sound != null && Build.VERSION.SDK_INT >= 33) {
             android.media.AudioAttributes media = new android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_MEDIA).build();
@@ -670,8 +1019,13 @@ public final class AudioService extends MediaSessionService {
         return out;
     }
 
-    /** A NativeTrack as ExoPlayer and the lock screen see it: from the device when it's downloaded. */
+    /**
+     * A NativeTrack as the player and the lock screen see it: from the device when it's downloaded
+     * or fetched ahead. On a Chromecast, the stream itself (it can't read the phone's files), and as
+     * Opus or MP3, which it plays (not every file the phone does: ALAC).
+     */
     private MediaItem item(JSONObject t) {
+        boolean remote = player == cast;
         MediaMetadata.Builder meta = new MediaMetadata.Builder()
                 .setTitle(t.optString("title"))
                 .setArtist(t.optString("artist"))
@@ -680,13 +1034,61 @@ public final class AudioService extends MediaSessionService {
                 .setIsBrowsable(false)
                 .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC);
         String artwork = t.optString("artwork", "");
-        File picture = artwork.isEmpty() ? null : downloads.picture(artwork);
+        File picture = artwork.isEmpty() || remote ? null : downloads.picture(artwork);
         if (picture != null) meta.setArtworkUri(Uri.fromFile(picture));
         else if (artwork.startsWith("http")) meta.setArtworkUri(Uri.parse(artwork));
         double duration = t.optDouble("duration", 0);
         if (duration > 0) meta.setDurationMs((long) (duration * 1000));
+        String url = t.optString("url");
+        MediaItem.Builder item = new MediaItem.Builder().setMediaId(t.optString("id")).setMediaMetadata(meta.build());
+        if (remote) {
+            Uri stream = Uri.parse(url);
+            String format = stream.getQueryParameter("f");
+            if (!"mp3".equals(format) && !"opus".equals(format)) {
+                Uri.Builder opus = stream.buildUpon().clearQuery().appendQueryParameter("f", "opus").appendQueryParameter("br", "256");
+                for (String name : stream.getQueryParameterNames()) {
+                    if (!name.equals("f") && !name.equals("br")) for (String v : stream.getQueryParameters(name)) opus.appendQueryParameter(name, v);
+                }
+                stream = opus.build();
+            }
+            return item.setUri(stream).setMimeType("mp3".equals(format) ? MimeTypes.AUDIO_MPEG : MimeTypes.AUDIO_OGG).build();
+        }
         File song = downloads.song(t.optString("id"));
-        Uri uri = song != null ? Uri.fromFile(song) : Uri.parse(t.optString("url"));
-        return new MediaItem.Builder().setMediaId(t.optString("id")).setUri(uri).setMediaMetadata(meta.build()).build();
+        if (song == null) song = ahead.file(url);
+        return item.setUri(song != null ? Uri.fromFile(song) : Uri.parse(url)).build();
+    }
+
+    /**
+     * The player as the session sees it. A queue set from outside (a tap in the car's lists) comes
+     * with its songs as NativeTracks and becomes the queue as the page's would (load()).
+     */
+    private final class Shell extends ForwardingPlayer {
+        Shell(Player player) {
+            super(player);
+        }
+
+        @Override
+        public void setMediaItems(@NonNull List<MediaItem> items, int startIndex, long startPositionMs) {
+            fromOutside(items, startIndex, startPositionMs);
+        }
+
+        @Override
+        public void setMediaItems(@NonNull List<MediaItem> items, boolean resetPosition) {
+            fromOutside(items, 0, 0);
+        }
+    }
+
+    private void fromOutside(List<MediaItem> items, int index, long positionMs) {
+        JSONArray tracks = new JSONArray();
+        for (MediaItem m : items) {
+            String json = m.requestMetadata.extras == null ? null : m.requestMetadata.extras.getString(TRACK);
+            if (json == null) return;
+            try {
+                tracks.put(new JSONObject(json));
+            } catch (JSONException e) {
+                return;
+            }
+        }
+        load(tracks, index == C.INDEX_UNSET ? 0 : index, positionMs == C.TIME_UNSET ? 0 : positionMs / 1000.0, false);
     }
 }

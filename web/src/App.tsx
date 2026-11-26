@@ -11,6 +11,7 @@ import { NowPlaying } from "./components/NowPlaying";
 import { MiniPlayer } from "./components/PlayerBar";
 import { shouldShowSplash, Splash } from "./components/Splash";
 import { JoinRoom, TogetherSheetHost } from "./components/Together";
+import { SleepSheetHost } from "./components/Sleep";
 import { Empty, Toasts } from "./components/ui";
 import { t } from "./i18n";
 import {
@@ -36,6 +37,7 @@ import { Search } from "./pages/Search";
 import { Settings } from "./pages/Settings";
 import { Setup } from "./pages/Setup";
 import { WorldArtist } from "./pages/WorldArtist";
+import { WorldAlbum } from "./pages/WorldAlbum";
 
 function ScrollTop() {
   const { pathname } = useLocation();
@@ -67,6 +69,7 @@ function Shell() {
             <Route path="/album/:id" element={<Album />} />
             <Route path="/artist/:id" element={<Artist />} />
             <Route path="/world/artist/:mbid" element={<WorldArtist />} />
+            <Route path="/world/album/:mbid" element={<WorldAlbum />} />
             <Route path="/playlist/:id" element={<Playlist />} />
             <Route path="/mix/:id" element={<Mix />} />
             <Route path="/getting" element={<Getting />} />
@@ -171,6 +174,7 @@ export function App() {
         <MenuHost />
         <PlaylistPickerHost />
         <TogetherSheetHost />
+        <SleepSheetHost />
         <Toasts />
       </BrowserRouter>
     );

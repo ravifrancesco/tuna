@@ -83,7 +83,7 @@ export const MixCard = ({ mix }: { mix: Mix }) => (
 );
 
 export function WorldAlbumCard({ album }: { album: WorldAlbum }) {
-  const to = album.albumId ? `/album/${album.albumId}` : album.artistMbid ? `/world/artist/${album.artistMbid}` : '#';
+  const to = album.albumId ? `/album/${album.albumId}` : `/world/album/${album.mbid}`;
   return <Card to={to} art={<Cover src={artUrl(album.cover)} />} title={album.title} sub={[album.year, album.artist].filter(Boolean).join(' · ')} extra={<GetButton album={album} />} />;
 }
 

@@ -37,16 +37,32 @@
             </intent-filter>
         </activity>
 
-        <!-- The player: the queue, the notification, the lock screen and headset buttons. It keeps
-             playing when you leave the app. -->
+        <!-- The player: the queue, the notification, the lock screen and headset buttons, and the
+             lists Android Auto shows. It keeps playing when you leave the app. -->
         <service
             android:name=".AudioService"
             android:exported="true"
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>
+                <action android:name="androidx.media3.session.MediaLibraryService" />
                 <action android:name="androidx.media3.session.MediaSessionService" />
+                <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
+
+        <!-- Android Auto: a media app in the car. -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+
+        <!-- Chromecast: the Cast library reads its settings from this class; with the receiver,
+             Chromecasts show in the system's output switcher. -->
+        <meta-data
+            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
+            android:value="app.tuna.music.CastOptionsProvider" />
+        <receiver
+            android:name="androidx.mediarouter.media.MediaTransferReceiver"
+            android:exported="true" />
 
     </application>
 </manifest>

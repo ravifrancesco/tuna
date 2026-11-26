@@ -1,20 +1,22 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { Airplay, AudioLines, Bluetooth, Car, Check, ChevronDown, Headphones, Maximize2, Minimize2, MonitorSpeaker, MoreHorizontal, Speaker, Tv } from 'lucide-react';
+import { Airplay, AudioLines, Bluetooth, Car, Cast, Check, ChevronDown, GripVertical, Headphones, Maximize2, Minimize2, MonitorSpeaker, MoreHorizontal, Speaker, Tv, X } from 'lucide-react';
 import type { NativeOutput } from '@tuna/shared';
 import { api } from '../api';
 import { t } from '../i18n';
 import { nativeAudio } from '../lib/native';
-import { jump, playingAs, seek, usePlayer } from '../lib/player';
+import { useRowGestures } from '../lib/gestures';
+import { browserOutputs, clearQueue, jump, moveInQueue, playingAs, removeFromQueue, seek, usePlayer } from '../lib/player';
 import { QUALITIES, setQuality } from '../lib/quality';
 import { useMe } from '../lib/session';
 import { useTints } from '../lib/tint';
 import { Item, showMenu, TrackMenu } from './Menu';
+import { SleepChip, SleepItem } from './Sleep';
 import { TogetherChip, TogetherItem } from './Together';
 import { Controls, LikeNow } from './PlayerBar';
 import { WaveProgress } from './Waveform';
-import { Cover, Empty, Spinner } from './ui';
+import { Cover, Empty, Spinner, toast } from './ui';
 
 /** The full-screen player: the cover, the controls, and the lyrics or the queue beside it. */
 export function NowPlaying({ tab: firstTab, onClose }: { tab?: 'lyrics' | 'queue'; onClose: () => void }) {
@@ -24,6 +26,12 @@ export function NowPlaying({ tab: firstTab, onClose }: { tab?: 'lyrics' | 'queue
   // holds for that song.
   const [picked, setPicked] = useState(firstTab && { tab: firstTab, song: track?.id });
   const lyrics = useQuery({ queryKey: ['lyrics', track?.id], queryFn: () => api.lyrics(track!.id), enabled: Boolean(track), staleTime: Infinity });
+  // Closing with the arrow (or Escape): it sinks back down into the player, then goes.
+  const [leaving, setLeaving] = useState(false);
+  const leave = useCallback(() => {
+    setLeaving(true);
+    setTimeout(onClose, 200);
+  }, [onClose]);
   const noLyrics = lyrics.isError || (lyrics.isSuccess && !lyrics.data.lines.length);
   const tab = picked && (picked.tab === 'queue' || picked.song === track?.id) ? picked.tab : noLyrics ? 'queue' : 'lyrics';
   // Phones: three stops, one above the other. The player, with the lyrics (or queue) card peeking
@@ -108,10 +116,10 @@ export function NowPlaying({ tab: firstTab, onClose }: { tab?: 'lyrics' | 'queue
   }, []);
   const { tint, bright } = useTints(track?.cover);
   useEffect(() => {
-    const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && leave();
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [onClose]);
+  }, [leave]);
   useEffect(() => {
     if (!track) onClose();
   }, [track, onClose]);
@@ -123,9 +131,9 @@ export function NowPlaying({ tab: firstTab, onClose }: { tab?: 'lyrics' | 'queue
     </>
   );
   return (
-    <div className={`now ${down ? 'now--down' : ''}`} ref={page} data-layer="top" style={{ '--tint': tint, '--bright': bright } as React.CSSProperties} role="dialog" aria-label={t('Now playing')}>
+    <div className={`now ${down ? 'now--down' : ''} ${leaving ? 'now--leaving' : ''}`} ref={page} data-layer="top" style={{ '--tint': tint, '--bright': bright } as React.CSSProperties} role="dialog" aria-label={t('Now playing')}>
       <div className="now__top">
-        <button className="icon-btn" aria-label={t('Close')} onClick={onClose} data-close>
+        <button className="icon-btn" aria-label={t('Close')} onClick={leave} data-close>
           <ChevronDown size={26} />
         </button>
         <div className="now__from">{from}</div>
@@ -139,6 +147,7 @@ export function NowPlaying({ tab: firstTab, onClose }: { tab?: 'lyrics' | 'queue
                 <TrackMenu track={track} />
                 <hr />
                 <TogetherItem />
+                <SleepItem />
               </>,
             )
           }
@@ -163,6 +172,7 @@ export function NowPlaying({ tab: firstTab, onClose }: { tab?: 'lyrics' | 'queue
         <Controls big />
         <div className="now__extras">
           <TogetherChip />
+          <SleepChip />
           <OutputButton />
           <QualityBadge />
         </div>
@@ -196,12 +206,13 @@ function stopAt(el: Element): number {
   return el instanceof HTMLElement ? el.offsetTop - parseFloat(getComputedStyle(el).scrollMarginTop || '0') : 0;
 }
 
-const OUTPUT_ICONS: Record<NativeOutput['kind'], typeof Speaker> = { phone: MonitorSpeaker, headphones: Headphones, bluetooth: Bluetooth, airplay: Airplay, car: Car, tv: Tv, speaker: Speaker };
+const OUTPUT_ICONS: Record<NativeOutput['kind'], typeof Speaker> = { phone: MonitorSpeaker, headphones: Headphones, bluetooth: Bluetooth, airplay: Airplay, cast: Cast, car: Car, tv: Tv, speaker: Speaker };
 
 /** Where it plays (the apps): the phone itself, or AirPods, a car, a speaker, named. */
 function OutputButton() {
   const output = usePlayer((s) => s.output);
-  const choose = nativeAudio?.outputs;
+  const cast = browserOutputs;
+  const choose = nativeAudio?.outputs ?? (cast && (() => cast()));
   if (!choose) return null;
   const Icon = OUTPUT_ICONS[output?.kind ?? 'phone'] ?? MonitorSpeaker;
   const away = output && output.kind !== 'phone';
@@ -256,6 +267,28 @@ function LyricsView({ songId }: { songId: string }) {
   const time = usePlayer((s) => s.time);
   const box = useRef<HTMLDivElement>(null);
   const lines = lyrics.data?.lines ?? [];
+  // Scrolling the lyrics yourself stops them following the song, until a few quiet seconds or a tap.
+  const [away, setAway] = useState(false);
+  const touched = useRef(0);
+  useEffect(() => {
+    const scroller = box.current?.closest<HTMLElement>('.now__panel');
+    if (!scroller) return;
+    const mark = () => {
+      touched.current = Date.now();
+      setAway(true);
+    };
+    scroller.addEventListener('wheel', mark, { passive: true });
+    scroller.addEventListener('touchmove', mark, { passive: true });
+    return () => {
+      scroller.removeEventListener('wheel', mark);
+      scroller.removeEventListener('touchmove', mark);
+    };
+  }, [lines.length]);
+  useEffect(() => {
+    if (!away) return;
+    const timer = setInterval(() => Date.now() - touched.current > 5000 && setAway(false), 1000);
+    return () => clearInterval(timer);
+  }, [away]);
   const synced = Boolean(lyrics.data?.synced);
   const at = useMemo(() => {
     if (!synced) return -1;
@@ -264,7 +297,7 @@ function LyricsView({ songId }: { songId: string }) {
     return i;
   }, [lines, time, synced]);
   useEffect(() => {
-    if (at < 0) return;
+    if (at < 0 || away) return;
     // Scroll the lyrics alone (scrollIntoView would move the whole screen on phones), keeping the
     // line in the middle of what's on screen: on phones the card can run past the bottom.
     const el = box.current?.querySelector<HTMLElement>(`[data-i="${at}"]`);
@@ -274,7 +307,7 @@ function LyricsView({ songId }: { songId: string }) {
     const seen = Math.min(r.bottom, window.innerHeight) - Math.max(r.top, 0);
     const view = seen > 120 ? seen : scroller.clientHeight;
     scroller.scrollTo({ top: el.offsetTop - scroller.offsetTop - view / 2 + el.clientHeight / 2, behavior: 'smooth' });
-  }, [at]);
+  }, [at, away]);
   if (lyrics.isLoading) return <Spinner />;
   if (!lines.length) return <Empty>{t('No lyrics for this song')}</Empty>;
   return (
@@ -284,6 +317,11 @@ function LyricsView({ songId }: { songId: string }) {
           {l.text || '♪'}
         </p>
       ))}
+      {away && synced && (
+        <button className="chip lyrics__follow" onClick={() => setAway(false)}>
+          {t('Follow along')}
+        </button>
+      )}
     </div>
   );
 }
@@ -294,38 +332,114 @@ function QueueView({ onClose }: { onClose: () => void }) {
   const source = usePlayer((s) => s.source);
   const now = queue[index];
   const upcoming = queue.slice(index + 1, index + 101);
+  // Dragging a song by its handle: where it was, where it would go, and how far the finger is.
+  const [drag, setDrag] = useState<{ from: number; to: number; dy: number }>();
+  const dragging = useRef(drag);
+  dragging.current = drag;
+  const rowHeight = useRef(56);
+  const order = upcoming.map((_, i) => i);
+  if (drag) order.splice(drag.to, 0, ...order.splice(drag.from, 1));
+  const startDrag = (from: number) => (e: React.PointerEvent) => {
+    const row = (e.currentTarget as HTMLElement).closest('.swipe');
+    rowHeight.current = row?.getBoundingClientRect().height || 56;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* the pointer's already gone */
+    }
+    const y0 = e.clientY;
+    const move = (ev: PointerEvent) => {
+      const dy = ev.clientY - y0;
+      const to = Math.max(0, Math.min(upcoming.length - 1, from + Math.round(dy / rowHeight.current)));
+      setDrag({ from, to, dy });
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      const d = dragging.current;
+      if (d && d.to !== d.from) moveInQueue(index + 1 + d.from, index + 1 + d.to);
+      setDrag(undefined);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    setDrag({ from, to: from, dy: 0 });
+  };
   return (
     <div className="queue">
       <h3>{t('Now playing')}</h3>
       {now && <QueueRow trackIndex={index} />}
-      {upcoming.length > 0 && <h3>{source?.title ? t('Next from {name}', { name: source.title }) : t('Next up')}</h3>}
-      {upcoming.map((_, i) => (
-        <QueueRow key={`${queue[index + 1 + i].id}-${index + 1 + i}`} trackIndex={index + 1 + i} onClose={onClose} />
-      ))}
+      {upcoming.length > 0 && (
+        <div className="queue__head">
+          <h3>{source?.title ? t('Next from {name}', { name: source.title }) : t('Next up')}</h3>
+          <button className="btn btn--small" onClick={() => (clearQueue(), toast(t('Queue cleared')))}>
+            {t('Clear')}
+          </button>
+        </div>
+      )}
+      <div className={`queue__list ${drag ? 'dragging' : ''}`}>
+        {order.map((i, at) => (
+          <QueueRow
+            key={`${queue[index + 1 + i].id}-${index + 1 + i}`}
+            trackIndex={index + 1 + i}
+            onClose={onClose}
+            onGrip={startDrag(i)}
+            lift={drag?.from === i ? drag.dy - (at - i) * rowHeight.current : undefined}
+          />
+        ))}
+      </div>
       {!upcoming.length && <Empty>{t('Nothing else queued')}</Empty>}
     </div>
   );
 }
 
-function QueueRow({ trackIndex }: { trackIndex: number; onClose?: () => void }) {
+function QueueRow({ trackIndex, onGrip, lift }: { trackIndex: number; onClose?: () => void; onGrip?: (e: React.PointerEvent) => void; lift?: number }) {
   const track = usePlayer((s) => s.queue[trackIndex]);
   const isNow = usePlayer((s) => s.index === trackIndex);
+  const menu = (at: { clientX: number; clientY: number }) => track && showMenu(at, <TrackMenu track={track} queueIndex={isNow ? undefined : trackIndex} />);
+  // Phones: swipe a coming song left to take it out, hold for the menu.
+  const swipe = useRowGestures({
+    onLeft: isNow ? undefined : () => (removeFromQueue(trackIndex), toast(t('Removed from the queue'))),
+    onHold: menu,
+  });
   if (!track) return null;
+  const dx = swipe.dx;
   return (
-    <div className={`track ${isNow ? 'playing' : ''}`} onDoubleClick={() => jump(trackIndex)}>
-      <div className="track__main">
-        <Cover cover={track.cover} size={100} />
-        <div className="track__text">
-          <button className="track__title" style={{ textAlign: 'left', maxWidth: '100%' }} onClick={() => jump(trackIndex)}>
-            {track.title}
-          </button>
-          <span className="track__artist">{track.artist}</span>
+    <div className={`swipe ${swipe.past ? `swipe--${swipe.past}` : ''} ${lift !== undefined ? 'lifted' : ''}`} style={lift !== undefined ? { transform: `translateY(${lift}px)` } : undefined}>
+      {dx !== 0 && (
+        <div className="swipe__back swipe__back--remove" aria-hidden>
+          <span />
+          <X size={20} />
         </div>
+      )}
+      <div
+        className={`track ${isNow ? 'playing' : ''} ${dx ? 'moving' : ''}`}
+        style={dx ? { transform: `translateX(${dx}px)` } : undefined}
+        {...swipe.handlers}
+        onDoubleClick={() => jump(trackIndex)}
+        onContextMenu={(e) => swipe.fromTouch(e) || (e.preventDefault(), menu(e))}
+      >
+        <div className="track__main">
+          <Cover cover={track.cover} size={100} />
+          <div className="track__text">
+            <button className="track__title" style={{ textAlign: 'left', maxWidth: '100%' }} onClick={() => jump(trackIndex)}>
+              {track.title}
+            </button>
+            <span className="track__artist">{track.artist}</span>
+          </div>
+        </div>
+        {onGrip ? (
+          <button className="icon-btn queue__grip" aria-label={t('Move')} onPointerDown={onGrip}>
+            <GripVertical size={18} />
+          </button>
+        ) : (
+          <span />
+        )}
+        <button className="icon-btn" aria-label={t('More')} onClick={(e) => menu(e)}>
+          <MoreHorizontal size={18} />
+        </button>
       </div>
-      <span />
-      <button className="icon-btn" aria-label={t('More')} onClick={(e) => showMenu(e, <TrackMenu track={track} queueIndex={isNow ? undefined : trackIndex} />)}>
-        <MoreHorizontal size={18} />
-      </button>
     </div>
   );
 }

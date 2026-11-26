@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { LogOut, Settings } from 'lucide-react';
+import { LogOut, Settings, Sparkles } from 'lucide-react';
 import type { Listen, StatsPeriod } from '@tuna/shared';
 import { api } from '../api';
 import { AlbumCard, ArtistCard, Row } from '../components/Cards';
 import { Avatar, signOut } from '../components/Profile';
 import { TrackList } from '../components/TrackList';
+import { YearStory } from '../components/YearStory';
 import { Cover, Empty, Spinner } from '../components/ui';
 import { locale, t, tn } from '../i18n';
 import { length } from '../lib/format';
@@ -27,6 +28,8 @@ export function Profile() {
   const me = useMe();
   const [period, setPeriod] = useState<StatsPeriod>('month');
   const stats = useQuery({ queryKey: ['stats', period], queryFn: () => api.stats(period), placeholderData: keepPreviousData });
+  const [story, setStory] = useState(false);
+  const year = new Date().getFullYear();
   if (!me) return null;
   const s = stats.data;
   return (
@@ -48,6 +51,16 @@ export function Profile() {
           <LogOut size={16} /> {t('Sign out')}
         </button>
       </div>
+      {stats.data?.since && (
+        <button className="year-card" onClick={() => setStory(true)}>
+          <Sparkles size={22} />
+          <span>
+            <b>{t('Your {year} in music', { year })}</b>
+            <small>{t('See your year')}</small>
+          </span>
+        </button>
+      )}
+      {story && <YearStory year={year} onClose={() => setStory(false)} />}
 
       <div className="segments" role="tablist">
         {PERIODS.map((p) => (
