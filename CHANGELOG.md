@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.3.1 (2026-11-26)
+
+**New**
+- **When songs went in**: drag a playlist's scrollbar (on phones, the handle that shows at the edge
+  while it scrolls) and the month each song went in shows beside it. Playlists from Spotify keep
+  Spotify's dates; likes from Spotify's library file have none.
+- **The equalizer is a curve**: drag its points up or down, or pick a preset.
+- **Get all can be stopped**: On its way shows how many albums are still to ask for, with Stop.
+
+**Changed**
+- **Loading**: the fish nibbles at the hook while Tuna starts, and bites once it's ready.
+- **Get all** asks for a few albums at a time (five on their way at once, the next as one arrives),
+  and carries on after a restart.
+- **On its way**: albums that arrived show until your next visit.
+- **Settings**: Language has its own section; Download quality sits with Sound quality and the
+  equalizer.
+
+**Fixed**
+- Albums by several artists in Spotify's files ("Gorillaz;Black Thought") weren't found.
+- Albums looked up while Lidarr or MusicBrainz was too busy to answer were called missing; they're
+  looked up again later, and Couldn't find has Try again.
+
+To update: the server (pull the new image) and the apps (the loading animation is in them).
+
 ## 0.3.0 (2026-11-26)
 
 **New**

@@ -8,6 +8,8 @@ export interface Song {
   artist: string;
   title: string;
   album?: string;
+  /** When it went into the playlist on Spotify (ISO), where Spotify's files say. */
+  added?: string;
 }
 
 /** "Currents (Deluxe Edition)", "Abbey Road (Remastered 2019)", "Song - Single" are "Currents", "Abbey Road", "Song". */

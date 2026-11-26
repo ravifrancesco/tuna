@@ -79,6 +79,8 @@ export interface Playlist {
 
 export interface PlaylistDetail extends Playlist {
   tracks: Track[];
+  /** When each of `tracks` went in (ISO), where it's known. */
+  added?: (string | null)[];
   /** Imported from Spotify but not in the library yet: each shows after track `after` (-1: first). */
   waiting?: WaitingSong[];
 }
@@ -87,6 +89,8 @@ export interface WaitingSong {
   title: string;
   artist: string;
   album?: string;
+  /** When it went into the playlist on Spotify (ISO). */
+  added?: string;
   after: number;
 }
 

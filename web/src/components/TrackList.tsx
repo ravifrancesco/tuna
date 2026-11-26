@@ -13,7 +13,8 @@ import { Cover, toast } from './ui';
 /**
  * Songs in a list: the number (play on hover), title and artist, album, like, length, menu.
  * `numbers`: album order (track numbers) instead of covers. `waiting`: songs not in the library
- * yet (imported from Spotify), greyed out where they belong.
+ * yet (imported from Spotify), greyed out where they belong. `added`: when each song went in, for
+ * the date shown while dragging the scrollbar (DateScroller).
  */
 export function TrackList({
   tracks,
@@ -22,6 +23,7 @@ export function TrackList({
   compact,
   onRemove,
   waiting = [],
+  added,
 }: {
   tracks: Track[];
   source: Source;
@@ -29,6 +31,7 @@ export function TrackList({
   compact?: boolean;
   onRemove?: (index: number) => void;
   waiting?: WaitingSong[];
+  added?: (string | null)[];
 }) {
   const after = new Map<number, WaitingSong[]>();
   for (const w of waiting) after.set(w.after, [...(after.get(w.after) ?? []), w]);
@@ -38,7 +41,7 @@ export function TrackList({
   later(-1);
   tracks.forEach((tr, i) => {
     n++;
-    rows.push(<TrackRow key={`${tr.id}-${i}`} track={tr} n={numbers ? (tr.track ?? i + 1) : n} showCover={!numbers} showAlbum={!compact} onPlay={() => playTracks(tracks, i, source, { shuffle: false })} onRemove={onRemove && (() => onRemove(i))} />);
+    rows.push(<TrackRow key={`${tr.id}-${i}`} track={tr} added={added?.[i]} n={numbers ? (tr.track ?? i + 1) : n} showCover={!numbers} showAlbum={!compact} onPlay={() => playTracks(tracks, i, source, { shuffle: false })} onRemove={onRemove && (() => onRemove(i))} />);
     later(i);
   });
   return (
@@ -51,7 +54,7 @@ export function TrackList({
 /** A song that isn't in the library yet: where it belongs, not playable. */
 function WaitingRow({ song, n, showAlbum }: { song: WaitingSong; n: number; showAlbum: boolean }) {
   return (
-    <div className="track track--waiting" role="listitem" aria-disabled>
+    <div className="track track--waiting" role="listitem" aria-disabled data-added={song.added}>
       <div className="track__n">
         <span>{n}</span>
       </div>
@@ -67,7 +70,23 @@ function WaitingRow({ song, n, showAlbum }: { song: WaitingSong; n: number; show
   );
 }
 
-function TrackRow({ track, n, showCover, showAlbum, onPlay, onRemove }: { track: Track; n: number; showCover: boolean; showAlbum: boolean; onPlay: () => void; onRemove?: () => void }) {
+function TrackRow({
+  track,
+  added,
+  n,
+  showCover,
+  showAlbum,
+  onPlay,
+  onRemove,
+}: {
+  track: Track;
+  added?: string | null;
+  n: number;
+  showCover: boolean;
+  showAlbum: boolean;
+  onPlay: () => void;
+  onRemove?: () => void;
+}) {
   const isCurrent = usePlayer((s) => s.queue[s.index]?.id === track.id);
   const playing = usePlayer((s) => s.playing);
   const [liked, toggleLike] = useLiked('track', track.id, track.liked);
@@ -80,7 +99,7 @@ function TrackRow({ track, n, showCover, showAlbum, onPlay, onRemove }: { track:
     onHold: (at) => showMenu(at, <TrackMenu track={track} onRemove={onRemove} />),
   });
   return (
-    <div className={`swipe ${swipe.past ? `swipe--${swipe.past}` : ''}`} role="listitem">
+    <div className={`swipe ${swipe.past ? `swipe--${swipe.past}` : ''}`} role="listitem" data-added={added ?? undefined}>
       {swipe.dx !== 0 && (
         <div className="swipe__back" aria-hidden>
           <ListEnd size={20} />

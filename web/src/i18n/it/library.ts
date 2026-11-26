@@ -67,7 +67,12 @@ export default {
   '{left} left': 'mancano {left}',
   'Asked for "{title}"': 'Richiesto “{title}”',
   "Couldn't ask for it": 'Impossibile richiederlo',
-  'Nothing asked for yet': 'Ancora nessuna richiesta',
+  'Nothing on its way': 'Niente in arrivo',
+  '{n} more album to ask for': 'Ancora {n} album da chiedere',
+  '{n} more albums to ask for': 'Ancora {n} album da chiedere',
+  'Stopped asking for {n} album': 'Non chiedo più {n} album',
+  'Stopped asking for {n} albums': 'Non chiedo più {n} album',
+  Stop: 'Ferma',
   Creator: 'Autore',
   'Most albums': 'Più album',
 } as Record<string, string>;

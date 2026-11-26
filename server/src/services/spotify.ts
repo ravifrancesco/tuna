@@ -69,7 +69,7 @@ function read(name: string, data: Buffer, into: Found) {
         const tr = (i.track ?? {}) as Json;
         const artist = str(tr.artistName);
         const title = str(tr.trackName);
-        return artist && title ? [{ artist, title, album: str(tr.albumName) }] : [];
+        return artist && title ? [{ artist, title, album: str(tr.albumName), added: str(i.addedDate) }] : [];
       });
       const plName = str(pl.name);
       if (plName && songs.length) into.playlists.push({ name: plName, songs });
@@ -106,9 +106,10 @@ function readCsv(file: string, text: string, into: Found) {
     r[titleAt]?.trim() && r[artistAt]?.trim() ? [{ title: r[titleAt].trim(), artist: r[artistAt].trim(), album: r[albumAt]?.trim() || undefined, added: Date.parse(r[addedAt] ?? '') || 0 }] : [],
   );
   const name = file.replace(/\.csv$/i, '').replace(/_/g, ' ').trim();
+  const dated = ({ added, ...s }: (typeof songs)[number]) => ({ ...s, added: added ? new Date(added).toISOString() : undefined });
   // Liked songs newest first, as Spotify shows them; a playlist in its own order.
-  if (/^liked songs$/i.test(name)) into.liked.push(...[...songs].sort((a, b) => b.added - a.added).map(({ added: _, ...s }) => s));
-  else if (songs.length) into.playlists.push({ name: name.charAt(0).toUpperCase() + name.slice(1), songs: songs.map(({ added: _, ...s }) => s) });
+  if (/^liked songs$/i.test(name)) into.liked.push(...[...songs].sort((a, b) => b.added - a.added).map(dated));
+  else if (songs.length) into.playlists.push({ name: name.charAt(0).toUpperCase() + name.slice(1), songs: songs.map(dated) });
 }
 
 function parseCsv(text: string): string[][] {

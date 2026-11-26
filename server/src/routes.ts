@@ -7,12 +7,13 @@ import { HttpError } from './lib/upstream';
 import { authOf, mediaSessionOf, requireAdmin, requireUser, setCookie, signIn, signOut, sessionOf, COOKIE, type Session } from './sessions';
 import * as getting from './services/getting';
 import { home } from './services/home';
-import { LIKED, orderLiked, waitingIn } from './services/imported';
+import { addedDates, forgetAdded, noteAdded } from './services/added';
+import { importedSongs, LIKED, orderLiked, waitingIn } from './services/imported';
 import { addPerson, changePerson, people, removePerson } from './services/household';
 import * as library from './services/library';
 import { listeningHistory, listeningStats, yearInReview } from './services/listens';
 import { importSpotify } from './services/spotify';
-import { getMany, missedAlbums, saveStocking, stocking } from './services/stocking';
+import { getMany, missedAlbums, saveStocking, stillToAsk, stocking, stopAsking } from './services/stocking';
 import * as together from './services/together';
 import { openLine } from './lib/sse';
 import { lyrics } from './services/lyrics';
@@ -116,26 +117,37 @@ export async function apiRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/playlist/:id', async (req) => {
     const s = requireUser(req);
     const p = await library.playlist(authOf(s), req.params.id);
-    return { ...p, waiting: waitingIn(s.username, p.id, p.tracks) };
+    // When each song went in: added here, else Spotify's date (the importer's own playlists).
+    const ours = addedDates(p.id);
+    const theirs = importedSongs(p.mine ? s.username : (p.owner ?? ''), p.id);
+    return { ...p, added: p.tracks.map((tr) => ours[tr.id] ?? theirs.get(tr.id) ?? null), waiting: waitingIn(s.username, p.id, p.tracks) };
   });
   app.post<{ Body: { name?: string; tracks?: string[] } }>('/playlists', async (req) => {
     const name = req.body?.name?.trim();
     if (!name) throw new HttpError(400, t('Give the playlist a name'));
-    return library.createPlaylist(authOf(requireUser(req)), name, req.body.tracks ?? []);
+    const made = await library.createPlaylist(authOf(requireUser(req)), name, req.body.tracks ?? []);
+    noteAdded(made.id, req.body.tracks ?? []);
+    return made;
   });
-  app.put<{ Params: { id: string }; Body: { name?: string; add?: string[]; remove?: number[]; order?: string[] } }>('/playlist/:id', async (req) =>
-    library.updatePlaylist(authOf(requireUser(req)), req.params.id, req.body ?? {}),
-  );
+  app.put<{ Params: { id: string }; Body: { name?: string; add?: string[]; remove?: number[]; order?: string[] } }>('/playlist/:id', async (req) => {
+    const p = await library.updatePlaylist(authOf(requireUser(req)), req.params.id, req.body ?? {});
+    noteAdded(req.params.id, req.body?.add ?? []);
+    return p;
+  });
   app.delete<{ Params: { id: string } }>('/playlist/:id', async (req) => {
     await library.deletePlaylist(authOf(requireUser(req)), req.params.id);
+    forgetAdded(req.params.id);
     return { ok: true };
   });
 
   app.get('/liked', async (req) => {
     const s = requireUser(req);
-    const l = await library.liked(authOf(s));
+    const { starred, ...l } = await library.liked(authOf(s));
     const tracks = orderLiked(s.username, l.tracks);
-    return { ...l, tracks, waiting: waitingIn(s.username, LIKED, tracks) };
+    // When each was liked: Spotify's date for likes brought over (unknown in its library file), else when it was liked here.
+    const imported = importedSongs(s.username, LIKED);
+    const added = tracks.map((tr) => (imported.has(tr.id) ? (imported.get(tr.id) ?? null) : (starred[tr.id] ?? null)));
+    return { ...l, tracks, added, waiting: waitingIn(s.username, LIKED, tracks) };
   });
   app.post<{ Body: { kind: 'track' | 'album' | 'artist'; id: string; on: boolean } }>('/like', async (req) => {
     const { kind, id, on } = req.body ?? ({} as never);
@@ -181,12 +193,16 @@ export async function apiRoutes(app: FastifyInstance) {
     if (!b.mbid) throw new HttpError(400, 'mbid');
     return getting.get(s, { mbid: b.mbid, artistMbid: b.artistMbid, title: b.title ?? '', artist: b.artist ?? '' });
   });
-  app.get('/getting', async (req) => {
-    requireUser(req);
-    return getting.list();
+  app.get('/getting', async (req) => getting.list(requireUser(req).username));
+  app.post('/getting/opened', async (req) => {
+    const s = requireUser(req);
+    getting.opened(s.username);
+    return getting.list(s.username);
   });
   app.post<{ Body: { albums?: Array<{ artist: string; album: string }> } }>('/get/many', async (req) => ({ asked: getMany(requireUser(req), req.body?.albums ?? []) }));
   app.get('/get/missed', async (req) => (requireUser(req), missedAlbums()));
+  app.get('/get/waiting', async (req) => stillToAsk(requireUser(req)));
+  app.post('/get/stop', async (req) => ({ stopped: stopAsking(requireUser(req)) }));
 
   // ---- Play together -----------------------------------------------------------------------------
   app.get('/together', async (req) => {

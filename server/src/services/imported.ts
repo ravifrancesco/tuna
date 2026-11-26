@@ -56,6 +56,12 @@ export function keepImported(username: string, playlistId: string, name: string,
   save(username, list);
 }
 
+/** The songs of an imported playlist that are in it, with Spotify's date added where it's known. */
+export function importedSongs(username: string, playlistId: string): Map<string, string | undefined> {
+  const kept = load(username).find((x) => x.playlistId === playlistId);
+  return new Map((kept?.songs ?? []).flatMap((s) => (s.id ? [[s.id, s.added] as const] : [])));
+}
+
 /**
  * Liked songs in Spotify's order: likes made here since come first (newest first, as they are), then
  * the imported ones as Spotify listed them.
@@ -83,7 +89,7 @@ export function waitingIn(username: string, playlistId: string, tracks: Track[])
   let after = first ? at.get(first.id!)! - 1 : playlistId === LIKED ? tracks.length - 1 : -1;
   for (const s of kept.songs) {
     if (s.id && at.has(s.id)) after = at.get(s.id)!;
-    else if (!(s.id && removed.has(s.id))) out.push({ title: s.title, artist: s.artist, album: s.album, after });
+    else if (!(s.id && removed.has(s.id))) out.push({ title: s.title, artist: s.artist, album: s.album, added: s.added, after });
   }
   return out;
 }

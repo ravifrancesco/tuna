@@ -2,33 +2,69 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { t } from '../i18n';
 
 /**
- * The loading animation (same as the apps' loading page, apps/common/loading.html): the note's stem
- * drops in as a hook, the fish swims up, stops short, bites in one snap, and the tug tilts it into
- * the logo; then it's reeled away and it starts again.
+ * The loading animation (as on the apps' loading page, apps/common/loading.html): the note's stem
+ * hangs on a line, bent into a hook, and the fish nibbles at it, the hook twitching each time. Once
+ * Tuna is ready it bites, and the tug tilts it into the logo.
  */
+const F = (x: number, y: number, r = 0) => `translate(${x}px,${y}px) translate(41.34px,45.49px) rotate(${r}deg) translate(-41.34px,-45.49px)`;
+type Frame = [at: string, x: number, y: number, ease?: string, r?: number];
+const keyframes = (name: string, frames: Frame[], move: (f: Frame) => string) =>
+  `@keyframes ${name}{${frames.map((f) => `${f[0]}{transform:${move(f)}${f[3] ? `;animation-timing-function:${f[3]}` : ''}}`).join('')}}`;
+const DART = 'cubic-bezier(.5,0,.9,.5)';
+const BACK = 'cubic-bezier(.2,.7,.4,1)';
+/** Hovering, a dart in to touch the hook's point and back; then two quick ones. At rest at 0% and 42%. */
+const NIBBLE: Frame[] = [
+  ['0%', -16.5, -1.8, 'ease-in-out'],
+  ['14%', -14.5, -2.4, DART],
+  ['20%', -10, -1.5, BACK],
+  ['32%', -15.5, -1.3, 'ease-in-out'],
+  ['42%', -16.5, -1.8, 'ease-in-out'],
+  ['54%', -14, -2.2, DART],
+  ['59%', -10.5, -1.6, BACK],
+  ['65%', -13, -1.4, DART],
+  ['70%', -10.2, -1.5, BACK],
+  ['84%', -15.8, -2.1, 'ease-in-out'],
+  ['100%', -16.5, -1.8],
+];
+/** From rest: a little wind-up, one snap that takes the whole hook, then the tug tilts it nose-up. */
+const BITE: Frame[] = [
+  ['0%', -16.5, -1.8, 'cubic-bezier(.4,0,.6,1)'],
+  ['22%', -18.5, -1.4, 'cubic-bezier(.7,0,1,.6)'],
+  ['40%', 0, -1, 'cubic-bezier(.3,1.5,.5,1)'],
+  ['62%,100%', 0.02, -2.8, undefined, -12],
+];
+const fish = (f: Frame) => F(f[1], f[2], f[4]);
+// The tail keeps up with the fish and, once it's hooked, settles level, as in the logo.
+const tail = (f: Frame) => (f[4] ? 'translate(.14px,1.31px)' : `translate(${f[1]}px,${f[2]}px)`);
+
 const CSS = `
 .tl svg{display:block;width:96px;height:96px;overflow:visible}
 .tl .all,.tl .hook,.tl .fish,.tl .tailpos{transform-box:view-box;transform-origin:0 0}
-.tl .fish{transform:translate(.02px,-2.8px) translate(41.34px,45.49px) rotate(-12deg) translate(-41.34px,-45.49px)}
+.tl .fish{transform:${F(0.02, -2.8, -12)}}
 .tl .tailpos{transform:translate(.14px,1.31px)}
-.tl .curl{opacity:0}
-.tl .all{animation:tl-all 3.2s infinite}.tl .hook{animation:tl-hook 3.2s infinite}.tl .curl{animation:tl-curl 3.2s infinite}
-.tl .fish{animation:tl-fish 3.2s infinite}.tl .tailpos{animation:tl-tail 3.2s infinite}
 .tl .tail{transform-box:fill-box;transform-origin:100% 50%;animation:tl-wag .45s ease-in-out infinite alternate}
-@keyframes tl-all{0%,47%{transform:translate(0,0);opacity:1;animation-timing-function:cubic-bezier(.2,.8,.3,1)}50%{transform:translate(0,-5px);animation-timing-function:ease-in-out}56%{transform:translate(0,1px);animation-timing-function:ease-in-out}61%{transform:translate(0,0);animation-timing-function:ease-in-out}72%{transform:translate(0,-1.5px);animation-timing-function:ease-in-out}84%{transform:translate(0,0);opacity:1;animation-timing-function:cubic-bezier(.5,0,.8,.4)}100%{transform:translate(0,-70px);opacity:0}}
-@keyframes tl-hook{0%{transform:translate(0,-46px);opacity:0;animation-timing-function:cubic-bezier(.3,.6,.4,1)}5%{opacity:1}13%{transform:translate(0,2px);animation-timing-function:ease-in-out}19%{transform:translate(0,0);animation-timing-function:ease-in-out}31%{transform:translate(0,-1.5px);animation-timing-function:ease-in-out}42%{transform:translate(0,.5px);animation-timing-function:ease-in-out}49%,100%{transform:translate(0,0)}}
-@keyframes tl-curl{0%,49%{opacity:1;animation-timing-function:steps(1,end)}50%,100%{opacity:0}}
-@keyframes tl-fish{0%,14%{transform:translate(-46px,-1px) translate(41.34px,45.49px) rotate(0) translate(-41.34px,-45.49px);opacity:0;animation-timing-function:cubic-bezier(.25,.6,.45,1)}22%{opacity:1}28%{transform:translate(-27px,-2.2px) translate(41.34px,45.49px) rotate(0) translate(-41.34px,-45.49px);animation-timing-function:ease-in-out}36%{transform:translate(-13.5px,-1.4px) translate(41.34px,45.49px) rotate(0) translate(-41.34px,-45.49px);animation-timing-function:ease-in-out}42%{transform:translate(-15.5px,-1px) translate(41.34px,45.49px) rotate(0) translate(-41.34px,-45.49px);animation-timing-function:cubic-bezier(.7,0,1,.6)}47%{transform:translate(0,-1px) translate(41.34px,45.49px) rotate(0) translate(-41.34px,-45.49px);animation-timing-function:cubic-bezier(.3,1.5,.5,1)}54%,100%{transform:translate(.02px,-2.8px) translate(41.34px,45.49px) rotate(-12deg) translate(-41.34px,-45.49px);opacity:1}}
-@keyframes tl-tail{0%,14%{transform:translate(-46px,-1px);opacity:0;animation-timing-function:cubic-bezier(.25,.6,.45,1)}22%{opacity:1}28%{transform:translate(-27px,-2.2px);animation-timing-function:ease-in-out}36%{transform:translate(-13.5px,-1.4px);animation-timing-function:ease-in-out}42%{transform:translate(-15.5px,-1px);animation-timing-function:cubic-bezier(.7,0,1,.6)}47%{transform:translate(0,-1px);animation-timing-function:cubic-bezier(.3,1.5,.5,1)}54%,100%{transform:translate(.14px,1.31px);opacity:1}}
+.tl .fish{animation:tl-fish 2.4s infinite}.tl .tailpos{animation:tl-tail 2.4s infinite}.tl .hook{animation:tl-hook 2.4s infinite}
+.tl.is-biting .fish{animation:tl-bite-fish 1s forwards}.tl.is-biting .tailpos{animation:tl-bite-tail 1s forwards}.tl.is-biting .hook{animation:none}
+.tl.is-biting .curl{animation:tl-curl 1s forwards}.tl.is-biting .all{animation:tl-tug 1s}.tl.is-biting .tail{animation:tl-thrash 1s}
+.tl.is-logo .fish,.tl.is-logo .tailpos,.tl.is-logo .hook,.tl.is-logo .tail{animation:none}.tl.is-logo .curl{opacity:0}
+${keyframes('tl-fish', NIBBLE, fish)}
+${keyframes('tl-tail', NIBBLE, tail)}
+${keyframes('tl-bite-fish', BITE, fish)}
+${keyframes('tl-bite-tail', BITE, tail)}
+@keyframes tl-hook{0%,19.5%{transform:translate(0,0);animation-timing-function:cubic-bezier(.2,.8,.3,1)}23%{transform:translate(0,1.4px);animation-timing-function:ease-in-out}29%{transform:translate(0,-.5px);animation-timing-function:ease-in-out}36%{transform:translate(0,.2px);animation-timing-function:ease-in-out}42%,58.5%{transform:translate(0,0);animation-timing-function:cubic-bezier(.2,.8,.3,1)}62%{transform:translate(0,1.1px);animation-timing-function:ease-in-out}69.5%{transform:translate(0,-.2px);animation-timing-function:cubic-bezier(.2,.8,.3,1)}73%{transform:translate(0,1.4px);animation-timing-function:ease-in-out}80%{transform:translate(0,-.5px);animation-timing-function:ease-in-out}88%{transform:translate(0,.15px);animation-timing-function:ease-in-out}94%,100%{transform:translate(0,0)}}
+@keyframes tl-curl{0%,39%{opacity:1;animation-timing-function:steps(1,end)}40%,100%{opacity:0}}
+@keyframes tl-tug{0%,40%{transform:translate(0,0);animation-timing-function:cubic-bezier(.2,.8,.3,1)}48%{transform:translate(0,-5px);animation-timing-function:ease-in-out}60%{transform:translate(0,1px);animation-timing-function:ease-in-out}70%{transform:translate(0,0);animation-timing-function:ease-in-out}85%{transform:translate(0,-1.5px);animation-timing-function:ease-in-out}100%{transform:translate(0,0)}}
+@keyframes tl-thrash{0%{transform:rotate(-10deg)}15%{transform:rotate(14deg)}30%{transform:rotate(-14deg)}45%{transform:rotate(12deg)}60%{transform:rotate(-8deg)}78%{transform:rotate(4deg)}100%{transform:rotate(0)}}
 @keyframes tl-wag{from{transform:rotate(-10deg)}to{transform:rotate(10deg)}}
-@media (prefers-reduced-motion: reduce){.tl .all,.tl .hook,.tl .curl,.tl .fish,.tl .tailpos,.tl .tail{animation:none!important}}
+@media (prefers-reduced-motion: reduce){.tl .all,.tl .hook,.tl .curl,.tl .fish,.tl .tailpos,.tl .tail{animation:none!important}.tl .curl{opacity:0}}
 `;
 
 const G = 'url(#tl-g)';
 
-export function HookFish({ size = 96 }: { size?: number }) {
+/** `biting`: Tuna is ready, the fish bites. `logo`: just the logo. */
+export function HookFish({ size = 96, state }: { size?: number; state?: 'biting' | 'logo' }) {
   return (
-    <div className="tl" style={{ width: size, height: size }}>
+    <div className={`tl${state ? ` is-${state}` : ''}`} style={{ width: size, height: size }}>
       <style>{CSS}</style>
       <svg viewBox="0 0 64 64" style={{ width: size, height: size }} aria-hidden="true">
         <defs>
@@ -88,30 +124,23 @@ export function shouldShowSplash(): boolean {
 /** Each loop on the clock, as on the apps' loading page, so the hand-over between them carries on in step. */
 function onClock(root: HTMLElement | null) {
   if (!root || !document.timeline || !Element.prototype.getAnimations) return;
-  const periods: Record<string, number> = { 'tl-all': 3200, 'tl-hook': 3200, 'tl-curl': 3200, 'tl-fish': 3200, 'tl-tail': 3200, 'tl-wag': 900, 'tl-breathe': 1600 };
+  const periods: Record<string, number> = { 'tl-fish': NIBBLE_MS, 'tl-tail': NIBBLE_MS, 'tl-hook': NIBBLE_MS, 'tl-wag': 900, 'tl-breathe': 1600 };
   for (const a of root.getAnimations({ subtree: true })) {
     const period = periods[(a as CSSAnimation).animationName];
     if (period) a.startTime = (document.timeline.currentTime as number) - (Date.now() % period);
   }
 }
 
-/** Stops the loop where it is (on the logo, when called at the right moment). */
-function hold(root: HTMLElement | null, at?: number) {
-  for (const a of root?.querySelector('.tl')?.getAnimations({ subtree: true }) ?? []) {
-    if (at !== undefined && (a as CSSAnimation).animationName !== 'tl-wag') a.currentTime = at;
-    a.pause();
-  }
-}
-
-/** In each 3.2 s loop, the fish has bitten and the mark is the logo from here… */
-const LOGO_FROM = 1730;
-/** …until about here, when it's reeled away. */
-const LOGO_UNTIL = 2600;
+const NIBBLE_MS = 2400;
+/** Where in each nibbling loop the fish is back at rest, ready to bite (0% and 42%). */
+const REST = [0, 1008, NIBBLE_MS];
+/** From the start of the bite to the tug. */
+const TUG_MS = 450;
 
 /**
- * The opening animation, doubling as the loading screen, as in Netfish: the hook and the fish carry
- * on in step from the apps' loading page; once Tuna is ready the loop lands on the logo at the next
- * bite, the word gives a little hop, and it all fades. Away from home (#tunnel), the loading page
+ * The opening animation, doubling as the loading screen, as in Netfish: the fish nibbling at the
+ * hook carries on in step from the apps' loading page; once Tuna is ready it bites the next time it's
+ * back at rest, the tug makes the logo, the word gives a little hop, and it all fades. Away from home (#tunnel), the loading page
  * left only the tunnel, a breathing ring the mark swam into: it's taken over here at the same place,
  * size and breath, and the mark comes out of it. Click or any key: as soon as Tuna is ready.
  * `quick`: just the loop while Tuna starts (it played already this session).
@@ -119,14 +148,11 @@ const LOGO_UNTIL = 2600;
 export function Splash({ ready = false, quick = false, onDone }: { ready?: boolean; quick?: boolean; onDone?: () => void }) {
   const root = useRef<HTMLDivElement>(null);
   const [hurry, setHurry] = useState(false);
+  const [biting, setBiting] = useState(false);
   const [landed, setLanded] = useState(false);
   const [leaving, setLeaving] = useState(false);
 
-  useLayoutEffect(() => {
-    onClock(root.current);
-    // In the tunnel, the mark waits as the logo.
-    if (viaTunnel) hold(root.current, LOGO_FROM + 100);
-  }, []);
+  useLayoutEffect(() => onClock(root.current), []);
 
   useEffect(() => {
     const skip = () => setHurry(true);
@@ -137,14 +163,18 @@ export function Splash({ ready = false, quick = false, onDone }: { ready?: boole
   useEffect(() => {
     if (!ready || landed) return;
     if (quick || hurry || reducedMotion()) return setLanded(true);
-    const phase = Date.now() % 3200;
-    const wait = viaTunnel ? 300 : phase >= LOGO_FROM && phase <= LOGO_UNTIL ? 0 : (LOGO_FROM - phase + 3200) % 3200;
-    const timer = setTimeout(() => {
-      if (!viaTunnel) hold(root.current);
-      setLanded(true);
-    }, wait);
+    if (viaTunnel) {
+      const timer = setTimeout(() => setLanded(true), 300);
+      return () => clearTimeout(timer);
+    }
+    if (biting) {
+      const timer = setTimeout(() => setLanded(true), TUG_MS);
+      return () => clearTimeout(timer);
+    }
+    const phase = Date.now() % NIBBLE_MS;
+    const timer = setTimeout(() => setBiting(true), Math.min(...REST.filter((at) => at >= phase)) - phase);
     return () => clearTimeout(timer);
-  }, [ready, landed, quick, hurry]);
+  }, [ready, landed, biting, quick, hurry]);
 
   useEffect(() => {
     if (!landed) return;
@@ -172,7 +202,8 @@ export function Splash({ ready = false, quick = false, onDone }: { ready?: boole
               <i />
             </span>
           )}
-          <HookFish />
+          {/* In the tunnel, the mark waits as the logo. */}
+          <HookFish state={viaTunnel ? 'logo' : biting ? 'biting' : undefined} />
         </div>
         <div className="splash__below">
           <span className="splash__word">tuna</span>

@@ -128,12 +128,14 @@ export async function updatePlaylist(
 
 export const deletePlaylist = (auth: SubsonicAuth, id: string) => subsonic(auth, 'deletePlaylist', { id });
 
-export async function liked(auth: SubsonicAuth): Promise<{ tracks: Track[]; albums: Album[]; artists: Artist[] }> {
+/** Everything someone likes, newest first; `starred`: when each song was liked (ISO). */
+export async function liked(auth: SubsonicAuth): Promise<{ tracks: Track[]; albums: Album[]; artists: Artist[]; starred: Record<string, string> }> {
   const r = await subsonic<{ starred2?: { song?: Child[]; album?: AlbumID3[]; artist?: ArtistID3[] } }>(auth, 'getStarred2');
   const s = r.starred2 ?? {};
   // Newest likes first.
   const bySaved = <T extends { starred?: string }>(xs: T[] = []) => [...xs].sort((a, b) => (b.starred ?? '').localeCompare(a.starred ?? ''));
-  return { tracks: bySaved(s.song).map(toTrack), albums: bySaved(s.album).map(toAlbum), artists: bySaved(s.artist).map(toArtist) };
+  const starred = Object.fromEntries((s.song ?? []).flatMap((c) => (c.starred ? [[c.id, c.starred]] : [])));
+  return { tracks: bySaved(s.song).map(toTrack), albums: bySaved(s.album).map(toAlbum), artists: bySaved(s.artist).map(toArtist), starred };
 }
 
 export async function like(auth: SubsonicAuth, kind: 'track' | 'album' | 'artist', id: string, on: boolean) {

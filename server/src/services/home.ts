@@ -30,7 +30,7 @@ export async function home(auth: SubsonicAuth, name: string, listenbrainzUser?: 
     settle(albums(auth, 'random', 16), [], quiet('random')),
     settle(playlists(auth), [], quiet('playlists')),
     settle(dailyMixes(auth), [], quiet('mixes')),
-    settle(liked(auth), { tracks: [], albums: [], artists: [] }, quiet('liked')),
+    settle(liked(auth), { tracks: [], albums: [], artists: [], starred: {} }, quiet('liked')),
   ]);
 
   const rows: Row[] = [];

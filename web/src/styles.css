@@ -1228,30 +1228,69 @@ html.tv .mobile-only {
   justify-content: space-between;
   font-weight: 600;
 }
-.eq__bands {
-  display: grid;
-  gap: 6px;
-}
-.eq__band {
-  display: grid;
-  grid-template-columns: 56px minmax(0, 1fr) 56px;
-  align-items: center;
-  gap: 10px;
-  font-size: 13px;
-  color: var(--muted);
-}
-.eq__band input {
+/* The bands as a curve: points to drag, a purple line and a glow under it. */
+.eq__graph {
+  display: block;
   width: 100%;
-  accent-color: var(--accent);
+  max-width: 480px;
+  height: auto;
+  overflow: visible;
+  user-select: none;
+  -webkit-user-select: none;
 }
-.eq__band b {
-  text-align: right;
+.eq__grid {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.eq__zero {
+  stroke: rgba(255, 255, 255, 0.18);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+.eq__fill {
+  fill: url(#eq-fill);
+}
+.eq__line {
+  fill: none;
+  stroke: url(#eq-line);
+  stroke-width: 3;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 6px rgba(155, 123, 255, 0.55));
+}
+.eq__dot {
+  fill: #f1eefc;
+  stroke: var(--accent-2);
+  stroke-width: 3;
+  transition: r 0.12s ease;
+  pointer-events: none;
+}
+.eq__point.is-active .eq__dot {
+  fill: var(--accent-light);
+}
+.eq__hit {
+  fill: transparent;
+  cursor: ns-resize;
+  touch-action: none;
+  outline: none;
+}
+.eq__hz {
+  fill: var(--dim);
+  font-size: 11px;
+  text-anchor: middle;
+}
+.eq__db {
+  fill: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  text-anchor: middle;
   font-variant-numeric: tabular-nums;
-  color: var(--text);
-  font-weight: 600;
 }
-.eq--off .eq__bands {
-  opacity: 0.45;
+.eq--off .eq__line {
+  stroke: var(--dim);
+  filter: none;
+}
+.eq--off .eq__fill {
+  opacity: 0;
 }
 .sheet .eq {
   min-width: min(420px, 80vw);
@@ -2657,6 +2696,50 @@ html.tv .mobile-only {
   }
   .away-card__text {
     flex-basis: calc(100% - 40px);
+  }
+}
+
+/* Dragging a long list's scrollbar (phones: its handle): the month each song went in, beside it. */
+.date-bubble {
+  position: fixed;
+  z-index: 60;
+  transform: translateY(-50%);
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--panel-3);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+.date-handle {
+  position: fixed;
+  z-index: 60;
+  right: 0;
+  width: 28px;
+  height: 48px;
+  transform: translateY(-50%);
+  touch-action: none;
+  animation: date-handle-in 0.2s ease-out;
+}
+.date-handle::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 4px;
+  bottom: 6px;
+  width: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.5);
+}
+.date-handle.is-dragging::after {
+  background: var(--accent);
+}
+@keyframes date-handle-in {
+  from {
+    opacity: 0;
   }
 }
 

@@ -27,6 +27,7 @@ export function Settings() {
       <h1 className="settings__title">{t('Settings')}</h1>
       <Account me={me} />
       <Listening prefs={me.prefs} />
+      <LanguageSection />
       <ListenBrainz prefs={me.prefs} />
       <LastFm prefs={me.prefs} />
       <Spotify />
@@ -78,15 +79,23 @@ function Listening({ prefs }: { prefs: Prefs }) {
         </select>
         <small className="muted">{QUALITIES.find((q) => q.value === prefs.quality)?.detail()}</small>
       </label>
+      {canDownload && <DownloadQualityField />}
       {hasEq && (
         <div className="field">
           <EqualizerControls />
           <small className="muted">{t('On this device, for every song.')}</small>
         </div>
       )}
+    </section>
+  );
+}
+
+function LanguageSection() {
+  return (
+    <section className="panel">
+      <h2>{t('Language')}</h2>
       <label className="field">
-        <span>{t('Language')}</span>
-        <select className="input" value={languageSetting()} onChange={(e) => setLanguage(e.target.value as 'auto' | 'en' | 'it')}>
+        <select className="input" value={languageSetting()} onChange={(e) => setLanguage(e.target.value as 'auto' | 'en' | 'it')} aria-label={t('Language')}>
           {LANGUAGES.map((l) => (
             <option key={l.value} value={l.value}>
               {l.value === 'auto' ? t('Automatic') : l.label}
@@ -272,7 +281,7 @@ function Spotify() {
                 </div>
               ) : (
                 <p className="small">
-                  {tn(asked, 'Asked for {n} album, most played first.', 'Asked for {n} albums, most played first.')} <Link to="/getting">{t('On its way')}</Link>
+                  {tn(asked, '{n} album to get, most played first, a few at a time.', '{n} albums to get, most played first, a few at a time.')} <Link to="/getting">{t('On its way')}</Link>
                 </p>
               )}
             </>
@@ -374,7 +383,6 @@ function AppSection() {
           </Link>
         </div>
       )}
-      {canDownload && <DownloadQualityField />}
       {has('changeServer') && (
         <div className="account">
           <span className="account__who">{location.host}</span>

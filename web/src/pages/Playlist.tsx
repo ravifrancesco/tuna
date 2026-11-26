@@ -8,6 +8,7 @@ import type { Track, WaitingSong } from '@tuna/shared';
 import { api } from '../api';
 import { Item, showMenu } from '../components/Menu';
 import { PlayButton } from '../components/PlayButton';
+import { DateScroller } from '../components/DateScroller';
 import { TrackList } from '../components/TrackList';
 import { Cover, Empty, LikedCover, Sheet, Spinner, toast } from '../components/ui';
 import { t, tn } from '../i18n';
@@ -141,6 +142,7 @@ export function Playlist() {
         {p.tracks.length || p.waiting?.length ? (
           <TrackList
             tracks={p.tracks}
+            added={p.added}
             waiting={p.waiting}
             source={source}
             onRemove={
@@ -156,6 +158,7 @@ export function Playlist() {
           <Empty>{t('This playlist is empty')}</Empty>
         )}
       </div>
+      <DateScroller />
       {renaming && (
         <Sheet title={t('Rename')} onClose={() => setRenaming(false)}>
           <form
@@ -207,7 +210,10 @@ export function Liked() {
           <GetMissing waiting={waiting} />
         </div>
       )}
-      <div className="section">{tracks.length || waiting.length ? <TrackList tracks={tracks} waiting={waiting} source={source} /> : <Empty>{t('No liked songs yet')}</Empty>}</div>
+      <div className="section">
+        {tracks.length || waiting.length ? <TrackList tracks={tracks} added={liked.data?.added} waiting={waiting} source={source} /> : <Empty>{t('No liked songs yet')}</Empty>}
+      </div>
+      <DateScroller />
     </div>
   );
 }

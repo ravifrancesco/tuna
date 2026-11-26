@@ -156,6 +156,13 @@ export function stateOf(mbid: string): GetState {
   return { state: 'looking' };
 }
 
+/** How many albums are being looked for or downloaded right now. */
+export const onTheWay = () =>
+  requests.filter((r) => {
+    const s = stateOf(r.mbid).state;
+    return s === 'looking' || s === 'downloading';
+  }).length;
+
 /** Before showing states: bring Lidarr's side up to date if anything is on its way. */
 export async function freshen() {
   if (pending().length) await refresh();
@@ -233,10 +240,29 @@ export async function getAs(by: string, q: { mbid: string; artistMbid?: string; 
   return stateOf(q.mbid);
 }
 
-export async function list(): Promise<GetItem[]> {
+/** When each person opened On its way, this time and the time before (ISO). */
+const SEEN = () => path.join(config.dataDir, 'getting-seen.json');
+let seen: Record<string, { now: string; before?: string }> = (() => {
+  try {
+    return JSON.parse(fs.readFileSync(SEEN(), 'utf8')) as Record<string, { now: string; before?: string }>;
+  } catch {
+    return {};
+  }
+})();
+
+/** Someone opened On its way: albums that were ready on their visit before this one go from it. */
+export function opened(username: string) {
+  seen = { ...seen, [username]: { now: new Date().toISOString(), before: seen[username]?.now } };
+  writeJson(SEEN(), seen);
+}
+
+/** What's been asked for, newest first; albums that arrived show until the visit after the one they were seen on. */
+export async function list(username?: string): Promise<GetItem[]> {
   await freshen();
+  const before = username ? seen[username]?.before : undefined;
   return [...requests]
     .reverse()
+    .filter((r) => !(before && r.ready && r.ready <= before))
     .slice(0, 60)
     .map((r) => ({ mbid: r.mbid, title: r.title, artist: r.artist, cover: coverArtFor(r.mbid), get: stateOf(r.mbid), by: r.by, at: r.at }));
 }
