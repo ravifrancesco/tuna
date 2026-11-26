@@ -91,7 +91,7 @@ const quote = (s: string) => `"${s.replace(/(["\\])/g, '\\$1')}"`;
  * "Gorillaz;Black Thought" (Spotify's way of listing artists) by its first. Throws when neither
  * answered, so it's looked up again later rather than called missing.
  */
-async function resolve(artist: string, title: string): Promise<{ mbid: string; artistMbid?: string; title: string; artist: string } | undefined> {
+export async function resolve(artist: string, title: string): Promise<{ mbid: string; artistMbid?: string; title: string; artist: string } | undefined> {
   const name = cleanAlbum(title);
   const first = artist.split(/\s*;\s*/)[0] || artist;
   const credited = (n: string | undefined) => Boolean(n) && artistsOf(artist).some((a) => artistsOf(n!).includes(a));

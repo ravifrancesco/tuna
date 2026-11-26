@@ -24,6 +24,8 @@ export default {
   "Couldn't find": 'Non trovati',
   'Get the missing songs': 'Prendi i brani mancanti',
   'Asked for {n} album': 'Chiesto {n} album',
+  'Asked for {n} song': 'Chiesto {n} brano',
+  'Asked for {n} songs': 'Chiesti {n} brani',
   'Asked for {n} albums': 'Chiesti {n} album',
   'Recent searches': 'Ricerche recenti',
   'Not in your library': 'Non nella tua libreria',

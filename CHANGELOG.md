@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.4.0 (2026-11-26)
+
+**New**
+- **Single songs**: with slskd connected (Settings → Connections), Tuna gets one song instead of its
+  whole album. slskd finds it on Soulseek and downloads just that file, and Lidarr files it into
+  its album and keeps track of it like everything else (the album stays unwatched).
+  - Greyed songs in playlists and Liked songs, songs in search and each song on an album page have
+    their own small Get; once the song is here, it turns into the round arrow that keeps it on the
+    device (in the apps).
+  - Get the missing songs and Get all ask for the songs themselves, most played first, four at a
+    time. Without slskd, their albums, as before.
+- **Songs you don't have, in search**: after the library's songs, songs from all music, each with Get.
+- **New songs every Monday**: each person gets songs they don't have (ListenBrainz's suggestions and
+  songs like the ones they play most), first in their Fresh catch, which is Home's big card while
+  there are some. Songs nobody likes or adds to a playlist go the next week. An admin sets how many
+  in Settings → Weekly picks.
+- **Song radio finds new songs**: a few songs like it that aren't here join it as they arrive.
+
+**Changed**
+- **iPhone**: tapping a text box no longer zooms the page in (which pushed the tabs off the
+  screen), and text on phones is sized as in Netfish.
+- **On its way** shows songs too, with their progress; albums taken out of Lidarr leave it.
+- The opening animation always ends on the logo, and the empty-list fish shows on coloured
+  backgrounds.
+
+To update: the server (pull the new image); the apps don't need updating. For single songs, add
+slskd's address and API key in Settings → Connections; its downloads folder has to be visible to
+Lidarr (docs/install/server.md).
+
 ## 0.3.1 (2026-11-26)
 
 **New**

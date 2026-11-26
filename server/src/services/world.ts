@@ -4,6 +4,7 @@ import { coverArtFor, lastfmSimilar, mbArtist, mbArtistAlbums, mbReleaseGroup, m
 import { settle } from '../lib/async';
 import { log } from '../lib/log';
 import { freshen, stateOf } from './getting';
+import { songState, withTracks } from './songs';
 import { findAlbum, findArtist, libraryIndex, norm, toAlbum, toArtist, toTrack, type LibraryIndex } from './library';
 
 /** Music beyond the library: MusicBrainz says what exists, Lidarr gets it. */
@@ -106,6 +107,12 @@ export async function worldAlbum(auth: SubsonicAuth, mbid: string): Promise<Worl
   const withSongs = releases.filter((r) => r.media?.some((m) => m.tracks?.length));
   const official = withSongs.filter((r) => !r.status || /official/i.test(r.status));
   const release = (official.length ? official : withSongs).sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'))[0];
-  const tracks = (release?.media ?? []).flatMap((m) => (m.tracks ?? []).map((tr) => ({ title: tr.title || tr.recording?.title || '', duration: tr.length ? Math.round(tr.length / 1000) : undefined })));
-  return { ...toWorldAlbum(group, idx), tracks };
+  const album = toWorldAlbum(group, idx);
+  const tracks = (release?.media ?? []).flatMap((m) =>
+    (m.tracks ?? []).map((tr) => {
+      const title = tr.title || tr.recording?.title || '';
+      return { title, duration: tr.length ? Math.round(tr.length / 1000) : undefined, get: songState({ artist: album.artist, title }) };
+    }),
+  );
+  return { ...album, tracks: await withTracks(auth, tracks.map((x) => ({ ...x, artist: album.artist }))) };
 }

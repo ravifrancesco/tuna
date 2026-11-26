@@ -1,7 +1,7 @@
 import { Link, Navigate, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
-import { GetButton } from '../components/GetButton';
+import { GetButton, SongGet } from '../components/GetButton';
 import { Cover, Empty, Spinner } from '../components/ui';
 import { t } from '../i18n';
 import { clock, length, songs } from '../lib/format';
@@ -46,12 +46,16 @@ export function WorldAlbum() {
               <div className="track__main">
                 <div className="track__text">
                   <span className="track__title">{x.title}</span>
-                  <span className="track__artist">{a.artist}</span>
+                  <span className="track__artist">
+                    {a.artist}
+                    {x.duration ? ` · ${clock(x.duration)}` : ''}
+                  </span>
                 </div>
               </div>
               <div />
-              <div />
-              <div className="track__time">{x.duration ? clock(x.duration) : ''}</div>
+              <div className="track__get">
+                <SongGet song={{ title: x.title, artist: a.artist }} get={x.get} album={a.title} />
+              </div>
             </div>
           ))}
         </div>

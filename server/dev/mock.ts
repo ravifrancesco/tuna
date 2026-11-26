@@ -1,12 +1,14 @@
 /**
- * A fake Navidrome, Lidarr, MusicBrainz, Cover Art Archive, LRCLIB, ListenBrainz and Last.fm on
- * port 7701, for developing Tuna without a real server or the internet. Made-up artists and
- * albums; the music is a soft tune made up on the spot from each song's id (a WAV, so every
+ * A fake Navidrome, Lidarr, slskd, MusicBrainz, Cover Art Archive, LRCLIB, ListenBrainz and
+ * Last.fm on port 7701, for developing Tuna without a real server or the internet. Made-up artists
+ * and albums; the music is a soft tune made up on the spot from each song's id (a WAV, so every
  * player plays it); covers are gradients drawn the same way.
  *
  *   Users: demo/demo (admin), sam/sam, admin/admin (admin). Lidarr key: mock-lidarr-key.
- *   MOCK_GET_SECONDS (default 40): how long a Get takes to "download".
+ *   slskd (at /slskd) key: mock-slskd-key.
+ *   MOCK_GET_SECONDS (default 40): how long a Get takes to "download" (a song from slskd: 8).
  *   MOCK_EMPTY_LIBRARY=1: nothing in the library yet, as a new install.
+ *   MOCK_SLSKD_EMPTY=1: Soulseek finds nothing. MOCK_SLSKD_FAIL=<user>: that peer's downloads fail.
  *   ListenBrainz token for Settings: mock-lb.
  */
 import crypto from 'node:crypto';
@@ -16,6 +18,9 @@ import zlib from 'node:zlib';
 const PORT = Number(process.env.MOCK_PORT ?? 7701);
 const GET_SECONDS = Number(process.env.MOCK_GET_SECONDS ?? 40);
 const EMPTY_LIBRARY = process.env.MOCK_EMPTY_LIBRARY === '1';
+const SONG_SECONDS = Number(process.env.MOCK_GET_SECONDS ?? 8);
+const SLSKD_EMPTY = process.env.MOCK_SLSKD_EMPTY === '1';
+const SLSKD_FAIL = process.env.MOCK_SLSKD_FAIL;
 
 // ---- A made-up world, the same every time ------------------------------------------------------
 
@@ -92,6 +97,13 @@ interface MTrack {
   duration: number;
   mbid: string;
   hasLyrics: boolean;
+  /** Lidarr's ids for the song and, when it has one, its file. */
+  lidarrId: number;
+  fileId?: number;
+  /** In an album not wholly in the library: Navidrome has scanned this song's file. */
+  scanned?: boolean;
+  /** Lidarr added or removed its file; Navidrome hasn't scanned since. */
+  changed?: number;
 }
 interface MAlbum {
   id: string;
@@ -122,7 +134,12 @@ interface MArtist {
 const artists: MArtist[] = [];
 const albums = new Map<string, MAlbum>();
 const tracks = new Map<string, MTrack>();
+// Lidarr's ids are kept apart (albums from 1, releases from 1001, songs from 10001, files from
+// 50001), so mixing them up shows.
 let nextLidarrAlbum = 1;
+let nextLidarrTrack = 10001;
+let nextTrackFile = 50001;
+const releaseId = (a: MAlbum) => 1000 + a.lidarrId;
 
 for (const [ai, a] of ARTISTS.entries()) {
   const r = rng(a.name);
@@ -166,6 +183,8 @@ for (const [ai, a] of ARTISTS.entries()) {
         duration: 140 + Math.floor(r() * 160),
         mbid: uuid(`rec:${a.name}:${name}:${s}`),
         hasLyrics: s % 3 === 0,
+        lidarrId: nextLidarrTrack++,
+        fileId: inLibrary ? nextTrackFile++ : undefined,
       };
       album.tracks.push(t);
       tracks.set(t.id, t);
@@ -176,9 +195,12 @@ for (const [ai, a] of ARTISTS.entries()) {
   artists.push(artist);
 }
 
-const libArtists = () => artists.filter((a) => a.albums.some((al) => al.inLibrary));
-const libAlbums = () => [...albums.values()].filter((a) => a.inLibrary);
-const libTracks = () => libAlbums().flatMap((a) => a.tracks);
+/** What Navidrome has of an album: all of it, or the songs got one at a time that it has scanned. */
+const isPresent = (t: MTrack) => albums.get(t.albumId)!.inLibrary || Boolean(t.scanned);
+const present = (a: MAlbum) => a.tracks.filter(isPresent);
+const libArtists = () => artists.filter((a) => a.albums.some((al) => present(al).length));
+const libAlbums = () => [...albums.values()].filter((a) => present(a).length);
+const libTracks = () => libAlbums().flatMap(present);
 
 // ---- People and their listening ----------------------------------------------------------------
 
@@ -261,26 +283,29 @@ const child = (u: User, t: MTrack) => ({
   type: 'music',
 });
 
-const albumId3 = (u: User, a: MAlbum, withSongs = false) => ({
-  id: a.id,
-  name: a.name,
-  artist: a.artist,
-  artistId: a.artistId,
-  coverArt: `al-${a.id}`,
-  songCount: a.tracks.length,
-  duration: a.tracks.reduce((n, t) => n + t.duration, 0),
-  year: a.year,
-  genre: a.genre,
-  created: a.created,
-  playCount: albumPlays(u, a),
-  played: u.played.get(a.id),
-  starred: u.starred.get(a.id),
-  musicBrainzId: a.mbid,
-  ...(withSongs ? { song: a.tracks.map((t) => child(u, t)) } : {}),
-});
+const albumId3 = (u: User, a: MAlbum, withSongs = false) => {
+  const songs = present(a);
+  return {
+    id: a.id,
+    name: a.name,
+    artist: a.artist,
+    artistId: a.artistId,
+    coverArt: `al-${a.id}`,
+    songCount: songs.length,
+    duration: songs.reduce((n, t) => n + t.duration, 0),
+    year: a.year,
+    genre: a.genre,
+    created: a.created,
+    playCount: albumPlays(u, a),
+    played: u.played.get(a.id),
+    starred: u.starred.get(a.id),
+    musicBrainzId: a.mbid,
+    ...(withSongs ? { song: songs.map((t) => child(u, t)) } : {}),
+  };
+};
 
 const artistId3 = (u: User, a: MArtist, withAlbums = false) => {
-  const own = a.albums.filter((x) => x.inLibrary);
+  const own = a.albums.filter((x) => present(x).length);
   return {
     id: a.id,
     name: a.name,
@@ -475,12 +500,14 @@ function tickDownloads() {
     if (Date.now() - d.started >= GET_SECONDS * 1000) {
       const a = albums.get(d.albumId)!;
       a.filed = Date.now();
+      for (const t of a.tracks) t.fileId ??= nextTrackFile++;
       downloads.splice(downloads.indexOf(d), 1);
       console.log(`mock lidarr: "${a.name}" by ${a.artist} is in the music folder; Navidrome sees it when it scans`);
     }
   }
   // As Navidrome's own scheduled scan, for when nobody asks for one.
   for (const a of albums.values()) if (a.filed && Date.now() - a.filed > 5 * 60_000) scanned(a);
+  for (const t of tracks.values()) if (t.changed && Date.now() - t.changed > 5 * 60_000) scannedSong(t);
 }
 function scanned(a: MAlbum) {
   a.filed = undefined;
@@ -488,10 +515,36 @@ function scanned(a: MAlbum) {
   a.created = new Date().toISOString();
   console.log(`mock navidrome: "${a.name}" by ${a.artist} is in the library now`);
 }
+/** One song whose file came or went, in an album Navidrome sees song by song. */
+function scannedSong(t: MTrack) {
+  const a = albums.get(t.albumId)!;
+  t.changed = undefined;
+  if (a.inLibrary || Boolean(t.scanned) === (t.fileId !== undefined)) return;
+  if (!present(a).length) a.created = new Date().toISOString();
+  t.scanned = t.fileId !== undefined;
+  console.log(`mock navidrome: "${t.title}" by ${t.artist} is ${t.scanned ? 'in' : 'out of'} the library now`);
+}
+function scan() {
+  for (const a of albums.values()) if (a.filed) scanned(a);
+  for (const t of tracks.values()) if (t.changed) scannedSong(t);
+}
+/** Lidarr deletes one song's file: from then on Navidrome sees its album song by song. */
+function unfile(t: MTrack) {
+  const a = albums.get(t.albumId)!;
+  if (a.inLibrary || a.filed) {
+    for (const x of a.tracks) Object.assign(x, { scanned: a.inLibrary, changed: a.filed });
+    a.inLibrary = false;
+    a.filed = undefined;
+  }
+  t.fileId = undefined;
+  t.changed = Date.now();
+  console.log(`mock lidarr: deleted the file of "${t.title}" by ${t.artist}; Navidrome drops it when it scans`);
+}
 setInterval(tickDownloads, 1000);
 
 const lidarrAlbum = (a: MAlbum) => {
   const artist = artists.find((x) => x.id === a.artistId)!;
+  const files = a.tracks.filter((t) => t.fileId !== undefined).length;
   return {
     id: a.lidarrId,
     title: a.name,
@@ -501,16 +554,203 @@ const lidarrAlbum = (a: MAlbum) => {
     albumType: a.type,
     releaseDate: `${a.year}-05-01T00:00:00Z`,
     artist: { id: artist.lidarrId ?? 0, artistName: artist.name, foreignArtistId: artist.mbid },
+    releases: [
+      {
+        id: releaseId(a),
+        albumId: a.lidarrId,
+        foreignReleaseId: uuid(`release:${a.mbid}`),
+        title: a.name,
+        trackCount: a.tracks.length,
+        duration: a.tracks.reduce((n, t) => n + t.duration * 1000, 0),
+        monitored: true,
+      },
+    ],
     statistics: {
-      trackFileCount: a.inLibrary || a.filed ? a.tracks.length : 0,
+      trackFileCount: files,
       trackCount: a.tracks.length,
       totalTrackCount: a.tracks.length,
-      percentOfTracks: a.inLibrary || a.filed ? 100 : 0,
+      percentOfTracks: Math.round((100 * files) / a.tracks.length),
     },
   };
 };
+const lidarrTrack = (t: MTrack) => {
+  const a = albums.get(t.albumId)!;
+  return {
+    id: t.lidarrId,
+    artistId: artists.find((x) => x.id === t.artistId)!.lidarrId ?? 0,
+    albumId: a.lidarrId,
+    albumReleaseId: releaseId(a),
+    foreignTrackId: uuid(`track:${t.mbid}`),
+    foreignRecordingId: t.mbid,
+    title: t.title,
+    trackNumber: String(t.track),
+    absoluteTrackNumber: t.track,
+    mediumNumber: t.disc,
+    duration: t.duration * 1000,
+    hasFile: t.fileId !== undefined,
+    trackFileId: t.fileId ?? 0,
+  };
+};
+interface Command {
+  id: number;
+  name: string;
+  status: 'queued' | 'completed' | 'failed';
+  message?: string;
+  queued: string;
+  ended?: string;
+  body: Record<string, unknown>;
+}
+const commands = new Map<number, Command>();
+let nextCommand = 1;
+
+/** Lidarr's ManualImport: each file into the album and songs it's told. Says what went wrong, if anything. */
+function manualImport(files: Array<{ path?: string; artistId?: number; albumId?: number; albumReleaseId?: number; trackIds?: number[] }>) {
+  const problems: string[] = files.length ? [] : ['No files to import'];
+  for (const f of files) {
+    const a = [...albums.values()].find((x) => x.lidarrId === f.albumId);
+    const artist = a && artists.find((x) => x.id === a.artistId);
+    const songs = (f.trackIds ?? []).map((id) => a?.tracks.find((t) => t.lidarrId === id));
+    if (!onDisk().some((x) => localPath(x) === f.path)) problems.push(`Not a finished download: ${f.path}`);
+    else if (!a || !artist) problems.push(`Album ${f.albumId} not found`);
+    else if (!artist.lidarrId || artist.lidarrId !== f.artistId) problems.push(`Artist ${f.artistId} not found (add ${artist.name} to Lidarr first)`);
+    else if (f.albumReleaseId !== releaseId(a)) problems.push(`Release ${f.albumReleaseId} is not one of "${a.name}"`);
+    else if (!songs.length || songs.some((t) => !t)) problems.push(`Tracks ${f.trackIds} are not all on "${a.name}"`);
+    else {
+      for (const x of transfers) if (localPath(x) === f.path) x.imported = true;
+      for (const t of songs as MTrack[]) Object.assign(t, { fileId: nextTrackFile++, changed: Date.now() });
+      console.log(`mock lidarr: imported ${f.path} into "${a.name}" by ${a.artist}; Navidrome sees it when it scans`);
+    }
+  }
+  return problems.join('; ') || undefined;
+}
 const lidarrArtist = (a: MArtist) => ({ id: a.lidarrId ?? 0, artistName: a.name, foreignArtistId: a.mbid, monitored: true, disambiguation: '' });
 let nextLidarrArtist = 1;
+
+// ---- slskd's side: Soulseek searches and downloads -------------------------------------------------
+
+const DOWNLOADS = '/downloads/slskd';
+const PEERS = ['vinyl_ghost', 'flacmeister', 'nightbus', 'tapehiss', 'cratedigger77', 'lunar.kev', 'oddsocks', 'basement_tapes', 'mp3owl', 'soulseeker'];
+const ROOTS = ['Music', 'Shared\\Music', 'Downloads\\Soulseek'];
+
+interface Search {
+  id: string;
+  searchText: string;
+  token: number;
+  started: number;
+}
+const searches = new Map<string, Search>();
+let nextSearch = 1;
+
+interface Transfer {
+  id: string;
+  n: number;
+  username: string;
+  filename: string;
+  size: number;
+  requested: number;
+  cancelled?: number;
+  removed?: boolean;
+  imported?: boolean;
+}
+const transfers: Transfer[] = [];
+
+const words = (s: string) =>
+  s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+
+/** Who on Soulseek has the songs a search names: 2–4 people for each song whose artist and title it has. */
+function peersFor(text: string) {
+  const asked = new Set(words(text));
+  const found = SLSKD_EMPTY ? [] : [...tracks.values()].filter((t) => words(`${t.artist} ${t.title}`).every((w) => asked.has(w)));
+  const byUser = new Map<string, Array<Record<string, unknown>>>();
+  for (const t of found) {
+    const r = rng(`peers:${t.id}`);
+    const a = albums.get(t.albumId)!;
+    const count = 2 + Math.floor(r() * 3);
+    const first = Math.floor(r() * PEERS.length);
+    // Sometimes one of them has another version (an edit, a live take).
+    const other = r() < 0.5 ? Math.floor(r() * count) : -1;
+    for (let k = 0; k < count; k++) {
+      const flac = r() < 0.6;
+      const length = t.duration + (k === other ? (r() < 0.5 ? -1 : 1) * (25 + Math.floor(r() * 60)) : 0);
+      const folder = `${pick(r, ROOTS)}\\${t.artist}\\${a.name} (${a.year}) [${flac ? 'FLAC' : 'MP3 320'}]`;
+      const username = PEERS[(first + k * 3) % PEERS.length];
+      byUser.set(username, [
+        ...(byUser.get(username) ?? []),
+        {
+          filename: `${folder}\\${String(t.track).padStart(2, '0')} - ${t.title}.${flac ? 'flac' : 'mp3'}`,
+          size: flac ? length * (100_000 + Math.floor(r() * 40_000)) : length * 40_000 + 4096,
+          ...(flac ? { bitDepth: 16, sampleRate: 44100 } : { bitRate: 320 }),
+          length,
+          extension: flac ? 'flac' : 'mp3',
+          isLocked: false,
+        },
+      ]);
+    }
+  }
+  return [...byUser].map(([username, files]) => {
+    const r = rng(`peer:${username}`);
+    const free = r() < 0.6;
+    return { username, fileCount: files.length, files, hasFreeUploadSlot: free, queueLength: free ? 0 : 1 + Math.floor(r() * 40), uploadSpeed: 60_000 + Math.floor(r() * 4_000_000), lockedFileCount: 0, lockedFiles: [] };
+  });
+}
+
+/** A search is "in progress" for a moment and then has found what it found. */
+function searchView(s: Search, withResponses = false) {
+  const done = Date.now() - s.started >= 1500;
+  const responses = done ? peersFor(s.searchText) : [];
+  return {
+    id: s.id,
+    searchText: s.searchText,
+    token: s.token,
+    state: done ? 'Completed, TimedOut' : 'InProgress',
+    isComplete: done,
+    startedAt: new Date(s.started).toISOString(),
+    endedAt: done ? new Date(s.started + 1500).toISOString() : undefined,
+    responseCount: responses.length,
+    fileCount: responses.reduce((n, x) => n + x.fileCount, 0),
+    lockedFileCount: 0,
+    responses: withResponses ? responses : [],
+  };
+}
+
+/** Queued by the other side for 2 seconds, then SONG_SECONDS of downloading (a failing peer gives up halfway). */
+function transferView(x: Transfer) {
+  const whole = SONG_SECONDS * 1000;
+  const start = x.requested + 2000;
+  const end = start + (x.username === SLSKD_FAIL ? whole / 2 : whole);
+  const stopped = x.cancelled !== undefined && x.cancelled < end;
+  const now = stopped ? x.cancelled! : Date.now();
+  const done = Math.max(0, Math.min(now, end) - start) / whole;
+  const bytes = Math.round(x.size * done);
+  const state = stopped ? 'Completed, Cancelled' : now < start ? 'Queued, Remotely' : now < end ? 'InProgress' : x.username === SLSKD_FAIL ? 'Completed, Errored' : 'Completed, Succeeded';
+  return {
+    id: x.id,
+    username: x.username,
+    direction: 'Download',
+    filename: x.filename,
+    size: x.size,
+    state,
+    requestedAt: new Date(x.requested).toISOString(),
+    enqueuedAt: new Date(x.requested + 200).toISOString(),
+    startedAt: now >= start ? new Date(start).toISOString() : undefined,
+    endedAt: state.startsWith('Completed') ? new Date(Math.min(now, end)).toISOString() : undefined,
+    bytesTransferred: bytes,
+    averageSpeed: now >= start ? x.size / SONG_SECONDS : 0,
+    bytesRemaining: x.size - bytes,
+    percentComplete: 100 * done,
+    ...(state === 'Completed, Errored' ? { exception: 'Remote connection closed' } : {}),
+  };
+}
+
+/** Where slskd puts a download: its folder (the last one of the remote path) in the downloads folder. */
+const localPath = (x: Transfer) => [DOWNLOADS, ...x.filename.split(/[\\/]/).slice(-2)].join('/');
+/** Files slskd has finished and Lidarr hasn't imported yet (slskd forgetting a transfer leaves its file). */
+const onDisk = () => transfers.filter((x) => !x.imported && transferView(x).state === 'Completed, Succeeded');
 
 // ---- MusicBrainz shapes ----------------------------------------------------------------------------
 
@@ -617,12 +857,12 @@ function navidrome(method: string, q: URLSearchParams, req: http.IncomingMessage
     case 'getTopSongs': {
       const a = artists.find((x) => x.name === q.get('artist'));
       if (!a) return ok(res, { topSongs: {} });
-      const songs = a.albums.filter((x) => x.inLibrary).flatMap((x) => x.tracks);
+      const songs = a.albums.flatMap(present);
       return ok(res, { topSongs: { song: songs.sort((x, y) => (hash(y.id) % 100) - (hash(x.id) % 100)).slice(0, Number(q.get('count') ?? 10)).map((t) => child(u, t)) } });
     }
     case 'getAlbum': {
       const a = albums.get(q.get('id') ?? '');
-      return a && a.inLibrary ? ok(res, { album: albumId3(u, a, true) }) : fail(res, 70, 'Album not found');
+      return a && present(a).length ? ok(res, { album: albumId3(u, a, true) }) : fail(res, 70, 'Album not found');
     }
     case 'getAlbumList2': {
       let list = libAlbums();
@@ -638,7 +878,7 @@ function navidrome(method: string, q: URLSearchParams, req: http.IncomingMessage
     }
     case 'getSong': {
       const t = tracks.get(q.get('id') ?? '');
-      return t ? ok(res, { song: child(u, t) }) : fail(res, 70, 'Song not found');
+      return t && isPresent(t) ? ok(res, { song: child(u, t) }) : fail(res, 70, 'Song not found');
     }
     case 'getStarred2': {
       const lib = libTracks();
@@ -702,7 +942,7 @@ function navidrome(method: string, q: URLSearchParams, req: http.IncomingMessage
     }
     case 'getSimilarSongs2': {
       const id = q.get('id') ?? '';
-      const seed = tracks.get(id) ?? albums.get(id)?.tracks[0] ?? artists.find((a) => a.id === id)?.albums.find((x) => x.inLibrary)?.tracks[0];
+      const seed = tracks.get(id) ?? albums.get(id)?.tracks[0] ?? artists.find((a) => a.id === id)?.albums.flatMap(present)[0];
       if (!seed) return ok(res, { similarSongs2: {} });
       const same = libTracks().filter((t) => t.genre === seed.genre && t.id !== seed.id);
       const others = shuffled(libTracks()).slice(0, 12);
@@ -732,7 +972,7 @@ function navidrome(method: string, q: URLSearchParams, req: http.IncomingMessage
       return ok(res);
     }
     case 'startScan':
-      for (const a of albums.values()) if (a.filed) scanned(a);
+      scan();
       return ok(res, { scanStatus: { scanning: false, count: libTracks().length } });
     case 'getScanStatus':
       return ok(res, { scanStatus: { scanning: false, count: libTracks().length } });
@@ -868,6 +1108,36 @@ async function lidarr(path: string, q: URLSearchParams, req: http.IncomingMessag
     }
     return json(res, 202, {});
   }
+  if (p === '/track') {
+    const a = [...albums.values()].find((x) => x.lidarrId === Number(q.get('albumId')) || releaseId(x) === Number(q.get('albumReleaseId')));
+    return json(res, 200, a ? a.tracks.map(lidarrTrack) : []);
+  }
+  const file = p.match(/^\/trackfile\/(\d+)$/);
+  if (file && req.method === 'DELETE') {
+    const t = [...tracks.values()].find((x) => x.fileId === Number(file[1]));
+    if (!t) return json(res, 404, { message: 'Not found' });
+    unfile(t);
+    return json(res, 200, {});
+  }
+  if (p === '/remotepathmapping') return json(res, 200, []);
+  if (p === '/manualimport') {
+    const folder = (q.get('folder') ?? '').replace(/\/+$/, '');
+    const found = new Map(onDisk().map((x) => [localPath(x), x]));
+    return json(
+      res,
+      200,
+      [...found]
+        .filter(([path]) => folder && path.startsWith(`${folder}/`))
+        .map(([path, x]) => ({
+          id: x.n,
+          path,
+          name: path.split('/').pop()!.replace(/\.[^.]+$/, ''),
+          size: x.size,
+          quality: { quality: /\.flac$/i.test(path) ? { id: 6, name: 'FLAC' } : { id: 4, name: 'MP3-320' }, revision: { version: 1, real: 0, isRepack: false } },
+          rejections: [],
+        })),
+    );
+  }
   if (p === '/command' && req.method === 'POST') {
     const b = await body(req);
     if (b.name === 'AlbumSearch') {
@@ -877,7 +1147,19 @@ async function lidarr(path: string, q: URLSearchParams, req: http.IncomingMessag
         if (a && !a.inLibrary && !downloads.some((d) => d.albumId === a.id)) setTimeout(() => downloads.push({ albumId: a.id, started: Date.now(), size: a.tracks.length * 42_000_000 }), 4000);
       }
     }
-    return json(res, 201, { id: Date.now(), name: b.name, status: 'queued' });
+    const c: Command = { id: nextCommand++, name: String(b.name), status: 'queued', queued: new Date().toISOString(), body: b };
+    commands.set(c.id, c);
+    // It runs a moment later.
+    setTimeout(() => {
+      const problem = b.name === 'ManualImport' ? manualImport(Array.isArray(b.files) ? b.files : []) : undefined;
+      Object.assign(c, { status: problem ? 'failed' : 'completed', message: problem ?? 'Completed', ended: new Date().toISOString() });
+    }, 1000);
+    return json(res, 201, c);
+  }
+  const command = p.match(/^\/command\/(\d+)$/);
+  if (command) {
+    const c = commands.get(Number(command[1]));
+    return c ? json(res, 200, c) : json(res, 404, { message: 'Not found' });
   }
   if (p === '/queue') {
     return json(res, 200, {
@@ -909,6 +1191,62 @@ async function lidarr(path: string, q: URLSearchParams, req: http.IncomingMessag
         .map((a) => ({ foreignId: a.mbid, album: { title: a.name, foreignAlbumId: a.mbid, artist: { artistName: a.artist, foreignArtistId: artists.find((x) => x.id === a.artistId)!.mbid } } })),
     ];
     return json(res, 200, out);
+  }
+  return json(res, 404, { message: `Not in the mock: ${p}` });
+}
+
+async function slskd(path: string, q: URLSearchParams, req: http.IncomingMessage, res: http.ServerResponse) {
+  if (req.headers['x-api-key'] !== 'mock-slskd-key') return json(res, 401, {});
+  const p = path.replace(/^\/api\/v0/, '');
+  const none = () => res.writeHead(204).end();
+  if (p === '/application') return json(res, 200, { version: { current: '0.22.0', full: '0.22.0 (mock)' }, server: { state: 'Connected, LoggedIn', isConnected: true, isLoggedIn: true } });
+  if (p === '/options') return json(res, 200, { directories: { downloads: DOWNLOADS, incomplete: `${DOWNLOADS}/incomplete` } });
+  if (p === '/searches' && req.method === 'POST') {
+    const b = await body(req);
+    const s: Search = { id: typeof b.id === 'string' && b.id ? b.id : uuid(`search:${nextSearch}`), searchText: String(b.searchText ?? ''), token: nextSearch++, started: Date.now() };
+    searches.set(s.id, s);
+    return json(res, 200, searchView(s));
+  }
+  const search = p.match(/^\/searches\/([^/]+)(\/responses)?$/);
+  if (search) {
+    const s = searches.get(decodeURIComponent(search[1]));
+    if (!s) return json(res, 404, {});
+    if (req.method === 'DELETE') {
+      searches.delete(s.id);
+      return none();
+    }
+    return json(res, 200, search[2] ? searchView(s, true).responses : searchView(s, q.get('includeResponses') === 'true'));
+  }
+  if (p === '/transfers/downloads' && req.method === 'GET') {
+    // Grouped as slskd does: by person, then by remote folder.
+    const groups = new Map<string, Map<string, Array<ReturnType<typeof transferView>>>>();
+    for (const x of transfers.filter((t) => !t.removed)) {
+      const dir = x.filename.split('\\').slice(0, -1).join('\\');
+      const user = groups.get(x.username) ?? new Map();
+      groups.set(x.username, user.set(dir, [...(user.get(dir) ?? []), transferView(x)]));
+    }
+    return json(res, 200, [...groups].map(([username, dirs]) => ({ username, directories: [...dirs].map(([directory, files]) => ({ directory, fileCount: files.length, files })) })));
+  }
+  const from = p.match(/^\/transfers\/downloads\/([^/]+)$/);
+  if (from && req.method === 'POST') {
+    const files = (await body(req)) as unknown as Array<{ filename?: string; size?: number }>;
+    if (!Array.isArray(files) || !files.length) return json(res, 400, 'At least one file is required');
+    const username = decodeURIComponent(from[1]);
+    const added = files.map((f) => {
+      const x: Transfer = { id: uuid(`transfer:${transfers.length + 1}`), n: transfers.length + 1, username, filename: String(f.filename ?? ''), size: Number(f.size) || 0, requested: Date.now() };
+      transfers.push(x);
+      return x;
+    });
+    console.log(`mock slskd: getting ${added.map((x) => x.filename.split('\\').pop()).join(', ')} from ${username}`);
+    return json(res, 201, { enqueued: added.map(transferView), failed: [] });
+  }
+  const one = p.match(/^\/transfers\/downloads\/([^/]+)\/([^/]+)$/);
+  if (one && req.method === 'DELETE') {
+    const x = transfers.find((t) => !t.removed && t.id === one[2] && t.username === decodeURIComponent(one[1]));
+    if (!x) return json(res, 404, {});
+    if (!transferView(x).state.startsWith('Completed')) x.cancelled = Date.now();
+    if (q.get('remove') === 'true') x.removed = true;
+    return none();
   }
   return json(res, 404, { message: `Not in the mock: ${p}` });
 }
@@ -953,6 +1291,30 @@ function musicbrainz(path: string, q: URLSearchParams, res: http.ServerResponse)
     };
     return json(res, 200, { releases: release ? [release] : [] });
   }
+  if (p === '/recording') {
+    // A song by name, `recording:"…" AND artist:"…"` as Tuna asks, or any words of its title.
+    const exact = (q.get('query') ?? '').match(/recording:"((?:[^"\\]|\\.)*)"(?:\s+AND\s+artist:"((?:[^"\\]|\\.)*)")?/);
+    const same = (a: string, b = '') => words(a).join(' ') === words(b.replace(/\\(.)/g, '$1')).join(' ');
+    const query = cleanQuery(q.get('query') ?? '');
+    const rank = (t: MTrack) => (exact ? (same(t.title, exact[1]) && (!exact[2] || same(t.artist, exact[2])) ? 100 : 0) : score(t.title, query));
+    const found = [...tracks.values()]
+      .filter((t) => rank(t) > 0)
+      .sort((x, y) => rank(y) - rank(x))
+      .slice(0, Number(q.get('limit') ?? 10));
+    return json(res, 200, {
+      recordings: found.map((t) => {
+        const a = albums.get(t.albumId)!;
+        return {
+          id: t.mbid,
+          title: t.title,
+          length: t.duration * 1000,
+          score: rank(t),
+          'artist-credit': mbGroup(a)['artist-credit'],
+          releases: [{ id: uuid(`release:${a.mbid}`), title: a.name, status: 'Official', 'release-group': { id: a.mbid, title: a.name, 'primary-type': a.type, 'secondary-types': [] } }],
+        };
+      }),
+    });
+  }
   const artist = p.match(/^\/artist\/([\w-]+)$/);
   if (artist) {
     const a = artists.find((x) => x.mbid === artist[1]);
@@ -980,10 +1342,13 @@ function listenbrainz(path: string, q: URLSearchParams, req: http.IncomingMessag
       .map((p, i) => ({ listened_at: Math.floor(p.at / 1000), track_metadata: { artist_name: p.t.artist, track_name: p.t.title, release_name: p.t.album, additional_info: i % 7 === 0 ? { submission_client: 'Tuna' } : {} } }));
     return json(res, 200, { payload: { count: listens.length, listens } });
   }
-  if (/^\/cf\/recommendation\/user\/[^/]+\/recording$/.test(path)) {
+  const recsFor = path.match(/^\/cf\/recommendation\/user\/([^/]+)\/recording$/);
+  if (recsFor) {
+    // Songs from albums not in the library (some by artists not in it at all), and some that are.
     const r = rng('recommendations');
     const pool = [...albums.values()].filter((a) => !a.inLibrary || r() < 0.3).flatMap((a) => a.tracks.slice(0, 2));
-    return json(res, 200, { payload: { mbids: shuffled(pool).slice(0, Number(q.get('count') ?? 50)).map((t) => ({ recording_mbid: t.mbid, score: r() })), count: 50 } });
+    pool.sort((x, y) => hash(recsFor[1] + x.mbid) - hash(recsFor[1] + y.mbid));
+    return json(res, 200, { payload: { mbids: pool.slice(0, Number(q.get('count') ?? 50)).map((t) => ({ recording_mbid: t.mbid, score: r() })), count: 50 } });
   }
   if (path === '/metadata/recording/' || path === '/metadata/recording') {
     const out: Record<string, unknown> = {};
@@ -1011,7 +1376,7 @@ function outsidePlays(who: string) {
 }
 
 function lastfm(q: URLSearchParams, res: http.ServerResponse) {
-  const method = q.get('method');
+  const method = q.get('method')?.toLowerCase();
   const user = q.get('user') ?? '';
   if (method === 'user.getinfo') return user === 'nobody' ? json(res, 200, { error: 6, message: 'User not found' }) : json(res, 200, { user: { name: user } });
   if (method === 'user.getrecenttracks') {
@@ -1028,6 +1393,35 @@ function lastfm(q: URLSearchParams, res: http.ServerResponse) {
   if (method === 'artist.gettopalbums') {
     const a = artists.find((x) => x.mbid === q.get('mbid') || x.name.toLowerCase() === (q.get('artist') ?? '').toLowerCase());
     return json(res, 200, { topalbums: { album: (a?.albums ?? []).filter((x) => x.type === 'Album').map((x) => ({ name: x.name })) } });
+  }
+  if (method === 'track.getsimilar') {
+    const named = (s: string, p: string) => s.toLowerCase() === (q.get(p) ?? '').toLowerCase();
+    const seed = [...tracks.values()].find((t) => t.mbid === q.get('mbid') || (named(t.artist, 'artist') && named(t.title, 'track')));
+    if (!seed) return json(res, 200, { error: 6, message: 'Track not found', links: [] });
+    // Three songs from each artist: the same genre first, then the seed's own artist, then the rest.
+    // Some aren't in the library, some have no mbid.
+    const rank = (a: MArtist) => (a.id === seed.artistId ? 1 : a.genre === seed.genre ? 0 : 2);
+    const similar = [...artists]
+      .sort((x, y) => rank(x) - rank(y) || hash(seed.id + x.name) - hash(seed.id + y.name))
+      .flatMap((a) =>
+        a.albums
+          .flatMap((x) => x.tracks)
+          .filter((t) => t.title !== seed.title)
+          .sort((x, y) => hash(seed.id + x.id) - hash(seed.id + y.id))
+          .slice(0, 3),
+      );
+    return json(res, 200, {
+      similartracks: {
+        track: similar.slice(0, Number(q.get('limit') ?? 50)).map((t, i) => ({
+          name: t.title,
+          mbid: hash(t.id) % 5 ? t.mbid : '',
+          match: Number((1 - i / similar.length).toFixed(3)),
+          duration: t.duration,
+          artist: { name: t.artist, mbid: artists.find((x) => x.id === t.artistId)!.mbid },
+        })),
+        '@attr': { artist: seed.artist },
+      },
+    });
   }
   if (method !== 'artist.getsimilar') return json(res, 200, { error: 3, message: 'Invalid method' });
   const a = artists.find((x) => x.mbid === q.get('mbid') || x.name.toLowerCase() === (q.get('artist') ?? '').toLowerCase());
@@ -1055,6 +1449,7 @@ http
         if (path.startsWith('/nd/rest/')) return navidrome(path.slice(9).replace(/\.view$/, ''), q, req, res);
         if (path.startsWith('/nd/')) return await navidromeApi(path.slice(3), req, res);
         if (path.startsWith('/lidarr/')) return await lidarr(path.slice(7), q, req, res);
+        if (path.startsWith('/slskd/')) return await slskd(path.slice(6), q, req, res);
         if (path.startsWith('/mb/')) return musicbrainz(path.slice(3), q, res);
         const caa = path.match(/^\/caa\/release-group\/([\w-]+)\/front/);
         if (caa) {

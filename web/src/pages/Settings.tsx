@@ -194,7 +194,7 @@ function Spotify() {
   const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<SpotifyImport>();
-  const [asked, setAsked] = useState<number>();
+  const [asked, setAsked] = useState<{ n: number; songs: boolean }>();
   const [error, setError] = useState<string>();
   const choose = async (files: File[]) => {
     if (!files.length) return;
@@ -215,7 +215,10 @@ function Spotify() {
   };
   const getAll = async () => {
     try {
-      setAsked((await api.getMany(done!.missingAlbums.map((a) => ({ artist: a.artist, album: a.album })))).asked);
+      if (done!.missingSongs?.length) {
+        const r = await api.getSongs(done!.missingSongs);
+        setAsked({ n: r.asked, songs: r.songs });
+      } else setAsked({ n: (await api.getMany(done!.missingAlbums.map((a) => ({ artist: a.artist, album: a.album })))).asked, songs: false });
     } catch (err) {
       setError(failed(err));
     }
@@ -276,12 +279,15 @@ function Spotify() {
               {asked === undefined ? (
                 <div>
                   <button className="btn btn--primary" onClick={() => void getAll()}>
-                    {tn(missing.length, 'Get it', 'Get all {n}')}
+                    {done.missingSongs?.length ? tn(done.missingSongs.length, 'Get it', 'Get all {n}') : tn(missing.length, 'Get it', 'Get all {n}')}
                   </button>
                 </div>
               ) : (
                 <p className="small">
-                  {tn(asked, '{n} album to get, most played first, a few at a time.', '{n} albums to get, most played first, a few at a time.')} <Link to="/getting">{t('On its way')}</Link>
+                  {asked.songs
+                    ? tn(asked.n, '{n} song to get, most played first, a few at a time.', '{n} songs to get, most played first, a few at a time.')
+                    : tn(asked.n, '{n} album to get, most played first, a few at a time.', '{n} albums to get, most played first, a few at a time.')}{' '}
+                  <Link to="/getting">{t('On its way')}</Link>
                 </p>
               )}
             </>
@@ -402,6 +408,30 @@ const WHY: Record<StockingWhy, () => string> = {
   more: () => t('More by an artist you play'),
 };
 const PER_WEEK = [0, 3, 5, 10, 20, 40];
+const SONGS_PER_WEEK = [0, 10, 20, 30];
+
+/** New songs each person gets every Monday, in their Fresh catch; kept only if someone keeps them. */
+function NewSongsField() {
+  const qc = useQueryClient();
+  const d = useQuery({ queryKey: ['discovery'], queryFn: api.discovery });
+  if (!d.data) return null;
+  const save = async (perWeek: number) => qc.setQueryData(['discovery'], await api.saveDiscovery(perWeek));
+  return (
+    <label className="field">
+      <span>{t('New songs a week, for each person')}</span>
+      <select className="input" value={d.data.perWeek} disabled={!d.data.available} onChange={(e) => void save(Number(e.target.value))}>
+        {[...new Set([...SONGS_PER_WEEK, d.data.perWeek])].sort((x, y) => x - y).map((n) => (
+          <option key={n} value={n}>
+            {n ? n : t('Off')}
+          </option>
+        ))}
+      </select>
+      <small className="muted">
+        {d.data.available ? t('In their Fresh catch every Monday. Songs nobody likes or adds to a playlist go the week after.') : t('Needs slskd and Lidarr, in Connections below.')}
+      </small>
+    </label>
+  );
+}
 
 /** Keeping the library stocked: how much of what's played is here, and the weekly picks. */
 function WeeklyPicks() {
@@ -452,6 +482,7 @@ function WeeklyPicks() {
         </select>
         <small className="muted">{s.needsLidarr ? t('Needs Lidarr, in Connections below.') : s.perWeek ? tn(s.thisWeek, '{n} so far this week', '{n} so far this week') : t('From ListenBrainz, Last.fm and what’s played here.')}</small>
       </label>
+      <NewSongsField />
       {s.picks.length > 0 && (
         <div className="picks">
           {s.picks.map((p) => (
@@ -478,12 +509,15 @@ function ConnectionsSection() {
   const [navidrome, setNavidrome] = useState('');
   const [lidarrUrl, setLidarrUrl] = useState('');
   const [lidarrKey, setLidarrKey] = useState('');
+  const [slskdUrl, setSlskdUrl] = useState('');
+  const [slskdKey, setSlskdKey] = useState('');
   const [lastfm, setLastfm] = useState('');
   const [error, setError] = useState<string>();
   useEffect(() => {
     if (!conn.data) return;
     setNavidrome(conn.data.navidrome.url ?? '');
     setLidarrUrl(conn.data.lidarr.url ?? '');
+    setSlskdUrl(conn.data.slskd?.url ?? '');
   }, [conn.data]);
   const save = async () => {
     setError(undefined);
@@ -492,9 +526,12 @@ function ConnectionsSection() {
         navidromeUrl: navidrome,
         lidarrUrl,
         ...(lidarrKey ? { lidarrApiKey: lidarrKey } : {}),
+        slskdUrl,
+        ...(slskdKey ? { slskdApiKey: slskdKey } : {}),
         ...(lastfm ? { lastfmApiKey: lastfm } : {}),
       });
       setLidarrKey('');
+      setSlskdKey('');
       setLastfm('');
       void qc.invalidateQueries({ queryKey: ['connections'] });
       toast(t('Saved'));
@@ -505,7 +542,7 @@ function ConnectionsSection() {
   return (
     <section className="panel">
       <h2>{t('Connections')}</h2>
-      <p className="muted small">{t('Navidrome has the music, Lidarr gets albums, Last.fm finds similar artists.')}</p>
+      <p className="muted small">{t('Navidrome has the music, Lidarr gets albums, slskd gets single songs (Lidarr files them), Last.fm finds similar artists.')}</p>
       <label className="field">
         <span>{t('Navidrome address')}</span>
         <input className="input" value={navidrome} onChange={(e) => setNavidrome(e.target.value)} />
@@ -518,6 +555,16 @@ function ConnectionsSection() {
         <label className="field">
           <span>{t('Lidarr API key')}</span>
           <input className="input" value={lidarrKey} onChange={(e) => setLidarrKey(e.target.value)} placeholder={conn.data?.lidarr.apiKey ? t('Saved (type to replace)') : ''} />
+        </label>
+      </div>
+      <div className="field-row">
+        <label className="field">
+          <span>{t('slskd address')}</span>
+          <input className="input" value={slskdUrl} onChange={(e) => setSlskdUrl(e.target.value)} placeholder="http://192.168.1.10:5030" />
+        </label>
+        <label className="field">
+          <span>{t('slskd API key')}</span>
+          <input className="input" value={slskdKey} onChange={(e) => setSlskdKey(e.target.value)} placeholder={conn.data?.slskd?.apiKey ? t('Saved (type to replace)') : t('Optional')} />
         </label>
       </div>
       <label className="field">

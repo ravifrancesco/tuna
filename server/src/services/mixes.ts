@@ -7,6 +7,7 @@ import { t } from '../lib/i18n';
 import { HttpError } from '../lib/upstream';
 import { liked, libraryIndex, norm, toTrack } from './library';
 import { nameOf } from '../sessions';
+import { arrived, radioDiscoveries } from './discovery';
 import { blendable, blendCovers, blendTracks, listeners, playedIds } from './listens';
 
 /**
@@ -101,6 +102,8 @@ export async function mixTracks(auth: SubsonicAuth, id: string, listenbrainzUser
     case 'song': {
       const r = await subsonic<{ song: Child }>(auth, 'getSong', { id: seed });
       const first = toTrack(r.song);
+      // A few new songs like it, which join the radio as they arrive (the page asks for them, /radio/new).
+      void radioDiscoveries(auth.username, first).catch(() => undefined);
       return [first, ...spread(unique((await radio(auth, seed, r.song.artistId, r.song.genre)).filter((x) => x.id !== first.id)))].slice(0, 60);
     }
     case 'album': {
@@ -158,10 +161,10 @@ export async function discoverTracks(auth: SubsonicAuth, listenbrainzUser?: stri
 // ---- Fresh catch -------------------------------------------------------------------------------------
 
 /** The week (from Monday) a moment is in, as a number. */
-const weekOf = (at = Date.now()) => Math.floor((at / 86_400_000 + 3) / 7);
+export const weekOf = (at = Date.now()) => Math.floor((at / 86_400_000 + 3) / 7);
 
 /** The same "random" order for the same seed. */
-function seeded(seed: string) {
+export function seeded(seed: string) {
   let h = 2166136261;
   for (const c of seed) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
   return () => {
@@ -174,11 +177,18 @@ function seeded(seed: string) {
 const freshCache = new TTLCache<Track[]>(200);
 
 /**
- * Fresh catch: thirty songs someone hasn't played yet, new every Monday. ListenBrainz's picks that
- * are here, songs by artists like the ones they play most, and what came into the library lately.
+ * Fresh catch: thirty songs someone hasn't played yet, new every Monday. First the new songs Tuna got
+ * for them this week (services/discovery.ts), then ListenBrainz's picks that are here, songs by
+ * artists like the ones they play most, and what came into the library lately.
  */
-export function freshCatch(auth: SubsonicAuth, listenbrainzUser?: string): Promise<Track[]> {
+export async function freshCatch(auth: SubsonicAuth, listenbrainzUser?: string): Promise<Track[]> {
   const week = weekOf();
+  const fresh = await arrived(auth.username, { week });
+  const rest = await freshFromLibrary(auth, week, listenbrainzUser);
+  return unique([...fresh, ...rest]).slice(0, Math.max(30, fresh.length));
+}
+
+function freshFromLibrary(auth: SubsonicAuth, week: number, listenbrainzUser?: string): Promise<Track[]> {
   return freshCache.wrap(`${auth.username}:${week}`, 6 * HOUR, async () => {
     const played = playedIds(auth.username);
     const top = (await topArtists(auth)).slice(0, 6);

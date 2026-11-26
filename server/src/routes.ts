@@ -14,6 +14,8 @@ import * as library from './services/library';
 import { listeningHistory, listeningStats, yearInReview } from './services/listens';
 import { importSpotify } from './services/spotify';
 import { getMany, missedAlbums, saveStocking, stillToAsk, stocking, stopAsking } from './services/stocking';
+import { songItems, songsWaiting, stopSongs, wantSongs, withTracks } from './services/songs';
+import { arrived, discoverySettings, saveDiscovery } from './services/discovery';
 import * as together from './services/together';
 import { openLine } from './lib/sse';
 import { lyrics } from './services/lyrics';
@@ -34,7 +36,7 @@ export async function apiRoutes(app: FastifyInstance) {
   app.get('/server', async (): Promise<ServerInfo> => ({
     version: config.version,
     ready: has.navidrome(),
-    services: { navidrome: has.navidrome(), lidarr: has.lidarr(), lastfm: has.lastfm() },
+    services: { navidrome: has.navidrome(), lidarr: has.lidarr(), slskd: has.slskd(), lastfm: has.lastfm() },
   }));
 
   // ---- First run: where Navidrome (and Lidarr) are, with the code from the server's log ----------
@@ -193,16 +195,38 @@ export async function apiRoutes(app: FastifyInstance) {
     if (!b.mbid) throw new HttpError(400, 'mbid');
     return getting.get(s, { mbid: b.mbid, artistMbid: b.artistMbid, title: b.title ?? '', artist: b.artist ?? '' });
   });
-  app.get('/getting', async (req) => getting.list(requireUser(req).username));
+  app.get('/getting', async (req) => {
+    const s = requireUser(req);
+    return getting.list(s.username, await withTracks(authOf(s), songItems()));
+  });
   app.post('/getting/opened', async (req) => {
     const s = requireUser(req);
     getting.opened(s.username);
-    return getting.list(s.username);
+    return getting.list(s.username, songItems());
   });
   app.post<{ Body: { albums?: Array<{ artist: string; album: string }> } }>('/get/many', async (req) => ({ asked: getMany(requireUser(req), req.body?.albums ?? []) }));
   app.get('/get/missed', async (req) => (requireUser(req), missedAlbums()));
-  app.get('/get/waiting', async (req) => stillToAsk(requireUser(req)));
-  app.post('/get/stop', async (req) => ({ stopped: stopAsking(requireUser(req)) }));
+  // New songs: the weekly ones for each person (an admin sets how many), and a radio's.
+  app.get('/discovery', async (req) => (requireUser(req), discoverySettings()));
+  app.put<{ Body: { perWeek?: number } }>('/discovery', async (req) => saveDiscovery(requireAdmin(req), Number(req.body?.perWeek) || 0));
+  app.get<{ Querystring: { seed?: string } }>('/radio/new', async (req) => (req.query.seed ? arrived(requireUser(req).username, { radio: req.query.seed }) : []));
+  app.get('/get/waiting', async (req) => {
+    const s = requireUser(req);
+    const albums = stillToAsk(s);
+    return { count: albums.count + songsWaiting(), mine: albums.mine + songsWaiting(s.name) };
+  });
+  app.post('/get/stop', async (req) => {
+    const s = requireUser(req);
+    return { stopped: stopAsking(s) + stopSongs(s.admin ? undefined : s.name) };
+  });
+  // Single songs (a playlist's missing songs, Get all): through slskd, filed by Lidarr; without slskd, their albums.
+  app.post<{ Body: { songs?: Array<{ artist: string; title: string; album?: string }> } }>('/get/songs', async (req) => {
+    const s = requireUser(req);
+    const list = (req.body?.songs ?? []).filter((x) => x.artist && x.title).slice(0, 5000);
+    if (has.slskd() && has.lidarr()) return { asked: wantSongs(s.name, list), songs: true };
+    const albums = [...new Map(list.filter((x) => x.album).map((x) => [`${x.artist}|${x.album}`.toLowerCase(), { artist: x.artist, album: x.album! }])).values()];
+    return { asked: getMany(s, albums), songs: false };
+  });
 
   // ---- Play together -----------------------------------------------------------------------------
   app.get('/together', async (req) => {

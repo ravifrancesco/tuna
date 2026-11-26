@@ -35,6 +35,8 @@ export function Search() {
   const w = qWorld === q ? world.data : undefined;
   const moreArtists = w?.artists.filter((a) => !a.artistId) ?? [];
   const moreAlbums = w?.albums.filter((a) => !a.albumId) ?? [];
+  // Songs that aren't here, after the library's: greyed, each with Get.
+  const moreSongs = w?.songs ?? [];
   const lookingFurther = q.length > 1 && (qWorld !== q || world.isLoading);
   const libEmpty = r && !top && !r.tracks.length && !r.playlists.length;
   // Only songs, artists, albums or playlists; and what was searched lately (when the box is empty).
@@ -55,7 +57,7 @@ export function Search() {
   const only =
     r && filter !== 'all'
       ? filter === 'songs'
-        ? r.tracks.length > 0 && <TrackList tracks={r.tracks} source={{ kind: 'search', title: text }} />
+        ? (r.tracks.length > 0 || moreSongs.length > 0) && <TrackList tracks={r.tracks} waiting={moreSongs.map((s) => ({ ...s, after: r.tracks.length - 1 }))} source={{ kind: 'search', title: text }} />
         : (filter === 'artists' ? r.artists.length + moreArtists.length : filter === 'albums' ? r.albums.length + moreAlbums.length : r.playlists.length) > 0 && (
             <div className="grid">
               {filter === 'artists' && [...r.artists.map((a) => <ArtistCard key={a.id} artist={a} />), ...moreArtists.map((a) => <WorldArtistCard key={a.mbid} artist={a} />)]}
@@ -158,12 +160,17 @@ export function Search() {
                     )}
                   </section>
                 )}
-                {r.tracks.length > 0 && (
+                {(r.tracks.length > 0 || moreSongs.length > 0) && (
                   <section>
                     <div className="row__head">
                       <h2>{t('Songs')}</h2>
                     </div>
-                    <TrackList tracks={r.tracks.slice(0, 5)} source={{ kind: 'search', title: text }} compact />
+                    <TrackList
+                      tracks={r.tracks.slice(0, 5)}
+                      waiting={moreSongs.slice(0, Math.max(0, 5 - Math.min(5, r.tracks.length)) || 2).map((s) => ({ ...s, after: Math.min(5, r.tracks.length) - 1 }))}
+                      source={{ kind: 'search', title: text }}
+                      compact
+                    />
                   </section>
                 )}
               </div>
@@ -190,7 +197,7 @@ export function Search() {
             )}
             {r.playlists.length > 0 && <Row title={t('Playlists')}>{r.playlists.map((p) => <PlaylistCard key={p.id} playlist={p} />)}</Row>}
             {libEmpty && world.isError && <p className="muted">{t('Nothing in your library for "{q}".', { q })}</p>}
-            {libEmpty && !lookingFurther && !world.isError && !moreArtists.length && !moreAlbums.length && (
+            {libEmpty && !lookingFurther && !world.isError && !moreArtists.length && !moreAlbums.length && !moreSongs.length && (
               <p className="muted">{t('Nothing found for "{q}".', { q })}</p>
             )}
           </>

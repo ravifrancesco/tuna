@@ -87,10 +87,13 @@ export function Getting() {
           <div className="list-item__text">
             <b>{x.title}</b>
             <small>
-              {x.artist} · {t('{name}, {when}', { name: x.by, when: ago(x.at) })}
+              {x.kind === 'song' && x.album ? `${x.artist} · ${x.album}` : x.artist} · {t('{name}, {when}', { name: x.by, when: ago(x.at) })}
             </small>
           </div>
-          <GetButton album={{ mbid: x.mbid, title: x.title, artist: x.artist, get: x.get }} />
+          <GetButton
+            album={{ mbid: x.mbid, title: x.title, artist: x.artist, get: x.get }}
+            onAsk={x.kind === 'song' ? () => api.getSongs([{ artist: x.artist, title: x.title, album: x.album }]).then(() => ({ state: 'looking' as const })) : undefined}
+          />
         </div>
       ))}
       <Missed />

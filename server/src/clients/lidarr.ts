@@ -29,6 +29,24 @@ export interface LAlbum {
   artist?: LArtist;
   images?: Array<{ coverType: string; url?: string; remoteUrl?: string }>;
   statistics?: { trackFileCount: number; trackCount: number; totalTrackCount: number; percentOfTracks: number };
+  /** Its editions; the monitored one is the one Lidarr files songs into. */
+  releases?: Array<{ id: number; title?: string; trackCount?: number; monitored?: boolean }>;
+}
+
+export interface LTrack {
+  id: number;
+  albumId: number;
+  albumReleaseId?: number;
+  title: string;
+  /** Milliseconds. */
+  duration?: number;
+  hasFile: boolean;
+  trackFileId?: number;
+}
+
+export interface LQuality {
+  quality: { id: number; name: string };
+  revision: { version: number; real: number; isRepack?: boolean };
 }
 
 export interface LQueueItem {
@@ -78,5 +96,26 @@ export const findArtists = (term: string) => call<LFoundArtist[]>('/artist/looku
 export const findAlbums = (term: string) => call<LFoundAlbum[]>('/album/lookup', { query: { term }, timeoutMs: 20_000 });
 
 export const addArtist = (body: Record<string, unknown>) => call<LArtist>('/artist', { method: 'POST', body });
+export const albumByMbid = (mbid: string) => call<LAlbum[]>('/album', { query: { foreignAlbumId: mbid } }).then((a) => a[0]);
+export const tracks = (albumId: number) => call<LTrack[]>('/track', { query: { albumId } });
+export const deleteTrackFile = (id: number) => call<unknown>(`/trackfile/${id}`, { method: 'DELETE' });
+export const remotePathMappings = () => call<Array<{ host: string; remotePath: string; localPath: string }>>('/remotepathmapping');
+
+/** What Lidarr makes of the files in a folder (the quality, mainly), as its manual import page. */
+export const importable = (folder: string) =>
+  call<Array<{ path: string; quality: LQuality; rejections?: Array<{ reason: string }> }>>('/manualimport', { query: { folder, filterExistingFiles: false } });
+
+/** Files one song into its album: renamed, tagged and kept track of, as everything Lidarr gets. */
+export const importSong = (file: { path: string; artistId: number; albumId: number; albumReleaseId: number; trackId: number; quality: LQuality }) =>
+  call<{ id: number }>('/command', {
+    method: 'POST',
+    body: {
+      name: 'ManualImport',
+      importMode: 'move',
+      replaceExistingFiles: false,
+      files: [{ path: file.path, artistId: file.artistId, albumId: file.albumId, albumReleaseId: file.albumReleaseId, trackIds: [file.trackId], quality: file.quality, disableReleaseSwitching: true }],
+    },
+  });
+export const command = (id: number) => call<{ id: number; status: string; message?: string }>(`/command/${id}`);
 export const monitorAlbums = (albumIds: number[]) => call<unknown>('/album/monitor', { method: 'PUT', body: { albumIds, monitored: true } });
 export const searchAlbums = (albumIds: number[]) => call<unknown>('/command', { method: 'POST', body: { name: 'AlbumSearch', albumIds } });

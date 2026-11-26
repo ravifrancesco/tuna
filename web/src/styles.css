@@ -55,6 +55,17 @@ select {
   font: inherit;
   color: inherit;
 }
+html {
+  -webkit-text-size-adjust: 100%;
+}
+/* Fields under 16px make iPhones zoom in when they're tapped (and stay zoomed), as in Netfish. */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+}
 img {
   display: block;
 }
@@ -278,7 +289,8 @@ body.resizing .right {
     align-items: center;
     justify-content: center;
     gap: 2px;
-    font-size: 11px;
+    font-size: 10.5px;
+    font-weight: 600;
     color: var(--muted);
   }
   .tabs a.active {
@@ -452,11 +464,12 @@ body.resizing .right {
   animation-delay: 1.6s;
 }
 /* Empty screens: the fish in one quiet colour, drifting. */
+/* A light silhouette, so it shows on the page and on Now Playing's coloured card alike. */
 .empty__fish {
   display: block;
   margin: 0 auto 10px;
-  opacity: 0.3;
-  filter: grayscale(1);
+  opacity: 0.45;
+  filter: grayscale(1) brightness(2.4);
   animation: fish-drift 6s ease-in-out infinite;
 }
 @keyframes fish-appear {
@@ -862,10 +875,14 @@ html.tv .mobile-only {
     gap: 12px;
   }
   .hello {
-    font-size: 24px;
+    font-size: 22px;
   }
   .home-head .hello {
-    font-size: 22px;
+    font-size: 20px;
+  }
+  .row__head h2,
+  .section h2 {
+    font-size: 18px;
   }
 }
 .grid {
@@ -1366,7 +1383,7 @@ html.tv .mobile-only {
   }
 }
 /* Imported from Spotify, not in the library yet. */
-.track--waiting {
+.track--waiting > :not(.track__get) {
   opacity: 0.4;
 }
 .track--waiting:hover {
@@ -1465,6 +1482,65 @@ html.tv .mobile-only {
 }
 
 /* ---- Get ------------------------------------------------------------------------------------------ */
+
+/* Get for one song: a small round button; a spinner, then a ring, as it comes; then the round arrow. */
+.song-get {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: var(--accent-light);
+}
+button.song-get:hover {
+  background: rgba(155, 123, 255, 0.16);
+}
+.song-get--done {
+  color: var(--good);
+  padding: 7px;
+}
+.song-get--kept {
+  color: var(--accent);
+}
+.song-get__spin {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(220, 203, 255, 0.25);
+  border-top-color: var(--accent-light);
+  animation: spin 0.9s linear infinite;
+}
+.song-get__ring {
+  width: 20px;
+  height: 20px;
+  transform: rotate(-90deg);
+}
+.song-get__ring circle {
+  fill: none;
+  stroke-width: 2.5;
+  stroke: rgba(220, 203, 255, 0.25);
+}
+.song-get__ring circle + circle {
+  stroke: var(--accent-light);
+  stroke-linecap: round;
+}
+
+/* A song not here yet: Get for just it, at the end of its row. */
+.track__get {
+  grid-column: 4 / -1;
+  justify-self: end;
+}
+.tracks--compact .track__get {
+  grid-column: 3 / -1;
+}
+@media (max-width: 899px) {
+  .track.track--waiting {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .track__get {
+    grid-column: 2;
+  }
+}
 
 .get {
   display: inline-flex;
@@ -3034,7 +3110,10 @@ html.tv .track:focus-within {
   }
   .hero-feature__art {
     width: 100%;
-    max-width: 240px;
+    max-width: 200px;
+  }
+  .hero-feature__title {
+    font-size: 26px;
   }
 }
 

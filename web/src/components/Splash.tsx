@@ -202,8 +202,9 @@ export function Splash({ ready = false, quick = false, onDone }: { ready?: boole
               <i />
             </span>
           )}
-          {/* In the tunnel, the mark waits as the logo. */}
-          <HookFish state={viaTunnel ? 'logo' : biting ? 'biting' : undefined} />
+          {/* The logo whenever it isn't nibbling or biting: in the tunnel, when it played already this
+              session, or when it's skipped, so it never leaves on the fish and the hook apart. */}
+          <HookFish state={biting ? 'biting' : viaTunnel || quick || landed ? 'logo' : undefined} />
         </div>
         <div className="splash__below">
           <span className="splash__word">tuna</span>

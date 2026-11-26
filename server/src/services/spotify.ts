@@ -155,11 +155,18 @@ export async function importSpotify(auth: SubsonicAuth, username: string, name: 
 
   const find = matcher(await songIndex(auth));
   const missing = new Map<string, { artist: string; album: string; songs: Set<string>; plays: number }>();
+  const missingSongs = new Map<string, { artist: string; title: string; album?: string; plays: number }>();
   const seen = new Map<string, boolean>();
   const look = (s: Song) => {
     const c = find(s);
     const key = `${norm(s.artist)}|${norm(s.title)}`;
     seen.set(key, Boolean(c) || Boolean(seen.get(key)));
+    if (!c) {
+      const m = missingSongs.get(key) ?? { artist: s.artist, title: s.title, album: s.album, plays: 0 };
+      m.album ??= s.album;
+      m.plays++;
+      missingSongs.set(key, m);
+    }
     if (!c && s.album) {
       // "Currents" and "Currents (Deluxe)" are one album to get.
       const k = `${norm(s.artist)}|${norm(cleanAlbum(s.album))}`;
@@ -219,6 +226,7 @@ export async function importSpotify(auth: SubsonicAuth, username: string, name: 
       .sort((a, b) => b.plays - a.plays || b.songs.size - a.songs.size)
       .slice(0, 2000)
       .map((m) => ({ artist: m.artist, album: m.album, songs: m.songs.size, plays: m.plays })),
+    missingSongs: [...missingSongs.values()].sort((a, b) => b.plays - a.plays).slice(0, 5000),
   };
   log.info(
     'spotify',

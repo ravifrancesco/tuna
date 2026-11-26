@@ -31,29 +31,23 @@ function Header({ kind, title, meta, cover, tint }: { kind: string; title: strin
   );
 }
 
-/** The albums of a playlist's songs that aren't here yet, in its order: Lidarr gets whole albums. */
+/** A playlist's songs that aren't here yet, in its order: the songs themselves (or, without slskd, their albums). */
 function GetMissing({ waiting }: { waiting: WaitingSong[] }) {
-  const [asked, setAsked] = useState<number>();
-  const seen = new Set<string>();
-  const albums = waiting.flatMap((w) => {
-    const key = `${w.artist}|${w.album}`.toLowerCase();
-    if (!w.album || seen.has(key)) return [];
-    seen.add(key);
-    return [{ artist: w.artist, album: w.album }];
-  });
-  if (!albums.length) return null;
+  const [asked, setAsked] = useState<string>();
+  if (!waiting.length) return null;
+  const said = (r: { asked: number; songs: boolean }) => (r.songs ? tn(r.asked, 'Asked for {n} song', 'Asked for {n} songs') : tn(r.asked, 'Asked for {n} album', 'Asked for {n} albums'));
   return (
     <button
       className="btn btn--small"
       disabled={asked !== undefined}
       onClick={() =>
         void api
-          .getMany(albums)
-          .then((r) => (setAsked(r.asked), toast(tn(r.asked, 'Asked for {n} album', 'Asked for {n} albums'))))
+          .getSongs(waiting.map((w) => ({ artist: w.artist, title: w.title, album: w.album })))
+          .then((r) => (setAsked(said(r)), toast(said(r))))
           .catch((err: Error) => toast(err.message))
       }
     >
-      <Download size={16} /> {asked !== undefined ? tn(asked, 'Asked for {n} album', 'Asked for {n} albums') : t('Get the missing songs')}
+      <Download size={16} /> {asked ?? t('Get the missing songs')}
     </button>
   );
 }

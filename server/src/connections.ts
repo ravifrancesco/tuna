@@ -9,7 +9,7 @@ import { writeJson } from './lib/storage';
 import { HttpError } from './lib/upstream';
 
 /**
- * Where Navidrome, Lidarr and Last.fm are. The stack's environment wins; otherwise what an admin
+ * Where Navidrome, Lidarr, slskd and Last.fm are. The stack's environment wins; otherwise what an admin
  * saved (first in Setup, then in Settings → Connections), kept in the data folder.
  */
 
@@ -17,6 +17,8 @@ interface Saved {
   navidromeUrl?: string;
   lidarrUrl?: string;
   lidarrApiKey?: string;
+  slskdUrl?: string;
+  slskdApiKey?: string;
   lastfmApiKey?: string;
 }
 
@@ -43,11 +45,18 @@ export const lidarr = () => {
   const apiKey = config.env.lidarrApiKey ?? saved.lidarrApiKey;
   return url && apiKey ? { url, apiKey } : undefined;
 };
+/** slskd (Soulseek): single songs, which Lidarr then files. */
+export const slskd = () => {
+  const url = config.env.slskdUrl ?? saved.slskdUrl;
+  const apiKey = config.env.slskdApiKey ?? saved.slskdApiKey;
+  return url && apiKey ? { url, apiKey } : undefined;
+};
 export const lastfmKey = () => config.env.lastfmApiKey ?? saved.lastfmApiKey;
 
 export const has = {
   navidrome: () => Boolean(navidromeUrl()),
   lidarr: () => Boolean(lidarr()),
+  slskd: () => Boolean(slskd()),
   lastfm: () => Boolean(lastfmKey()),
 };
 
@@ -55,6 +64,7 @@ export function connections(): Connections {
   return {
     navidrome: { url: navidromeUrl() },
     lidarr: { url: config.env.lidarrUrl ?? saved.lidarrUrl, apiKey: Boolean(config.env.lidarrApiKey ?? saved.lidarrApiKey) },
+    slskd: { url: config.env.slskdUrl ?? saved.slskdUrl, apiKey: Boolean(config.env.slskdApiKey ?? saved.slskdApiKey) },
     lastfm: { apiKey: has.lastfm() },
   };
 }
@@ -72,6 +82,8 @@ export interface ConnectionsPatch {
   lidarrUrl?: string;
   /** Empty string: forget it. Undefined: keep it. */
   lidarrApiKey?: string;
+  slskdUrl?: string;
+  slskdApiKey?: string;
   lastfmApiKey?: string;
 }
 
@@ -95,9 +107,17 @@ export async function saveConnections(patch: ConnectionsPatch): Promise<Connecti
     if (res.status === 401) throw new HttpError(400, t("Lidarr didn't accept that API key"));
     if (!res.ok) throw new HttpError(400, t("Couldn't reach Lidarr at that address"));
   }
+  if (patch.slskdUrl !== undefined) next.slskdUrl = clean(patch.slskdUrl);
+  if (patch.slskdApiKey !== undefined) next.slskdApiKey = patch.slskdApiKey.trim() || undefined;
+  if (next.slskdUrl && next.slskdApiKey && (patch.slskdUrl !== undefined || patch.slskdApiKey !== undefined)) {
+    const res = await reachable(`${next.slskdUrl}/api/v0/application`, { headers: { 'X-API-Key': next.slskdApiKey } });
+    if (!res) throw new HttpError(400, t("Couldn't reach slskd at that address"));
+    if (res.status === 401 || res.status === 403) throw new HttpError(400, t("slskd didn't accept that API key"));
+    if (!res.ok) throw new HttpError(400, t("Couldn't reach slskd at that address"));
+  }
   if (patch.lastfmApiKey !== undefined) next.lastfmApiKey = patch.lastfmApiKey.trim() || undefined;
   writeJson(FILE(), next, 0o600);
-  const changed = (['navidromeUrl', 'lidarrUrl', 'lidarrApiKey', 'lastfmApiKey'] as const).filter((k) => next[k] !== saved[k]);
+  const changed = (['navidromeUrl', 'lidarrUrl', 'lidarrApiKey', 'slskdUrl', 'slskdApiKey', 'lastfmApiKey'] as const).filter((k) => next[k] !== saved[k]);
   saved = next;
   if (changed.length) log.info('settings', `Connections changed: ${changed.map((k) => k.replace(/Url$|ApiKey$/, '')).join(', ')}`);
   return connections();

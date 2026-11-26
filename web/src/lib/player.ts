@@ -438,6 +438,15 @@ export function playNext(tracks: Track[]) {
   replaceQueue(q, state.index);
 }
 
+/** New songs into what's playing, a few songs apart, starting two songs ahead (a radio's new songs). */
+export function slipIn(tracks: Track[]) {
+  if (state.index < 0 || !tracks.length) return;
+  const q = [...state.queue];
+  tracks.forEach((t, i) => q.splice(Math.min(q.length, state.index + 2 + i * 3), 0, t));
+  unshuffled = unshuffled ? [...unshuffled, ...tracks] : undefined;
+  replaceQueue(q, state.index);
+}
+
 export function addToQueue(tracks: Track[]) {
   if (state.index < 0) return playTracks(tracks, 0, { kind: 'queue' });
   unshuffled = unshuffled ? [...unshuffled, ...tracks] : undefined;

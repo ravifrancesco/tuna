@@ -9,7 +9,7 @@ import { has } from '../connections';
 import { t } from '../lib/i18n';
 import { log } from '../lib/log';
 import { writeJson } from '../lib/storage';
-import { HttpError } from '../lib/upstream';
+import { HttpError, UpstreamError } from '../lib/upstream';
 import { adminAuth, type Session } from '../sessions';
 import { fillImported } from './imported';
 import { forgetSongIndex } from './matching';
@@ -57,7 +57,7 @@ const filesSeen = new Map<number, number>();
 // Lidarr filed new songs: Navidrome looks now rather than at its next scheduled scan.
 let scanning = false;
 let scanAgain = false;
-async function scanNavidrome() {
+export async function scanNavidrome() {
   if (scanning) return void (scanAgain = true);
   const auth = adminAuth();
   if (!auth) return forgetLibraryIndex();
@@ -89,10 +89,24 @@ async function refresh() {
   if (!has.lidarr() || Date.now() - state.at < 4000) return;
   refreshing ??= (async () => {
     try {
+      const gone = new Set<number>();
       const [queue, albums] = await Promise.all([
         lidarr.queue(),
-        Promise.all(pending().map((r) => lidarr.album(r.lidarrAlbumId!).catch(() => undefined))),
+        Promise.all(
+          pending().map((r) =>
+            lidarr.album(r.lidarrAlbumId!).catch((err: unknown) => {
+              if (err instanceof UpstreamError && err.status === 404) gone.add(r.lidarrAlbumId!);
+              return undefined;
+            }),
+          ),
+        ),
       ]);
+      // Taken out of Lidarr: no longer on its way.
+      if (gone.size) {
+        for (const r of requests.filter((x) => !x.ready && gone.has(x.lidarrAlbumId!))) log.info('get', `No longer in Lidarr: "${r.title}" by ${r.artist}`);
+        requests = requests.filter((x) => x.ready || !gone.has(x.lidarrAlbumId!));
+        save();
+      }
       const map = new Map<number, lidarr.LAlbum>();
       for (const a of albums) if (a) map.set(a.id, a);
       state = { at: Date.now(), queue, albums: map };
@@ -179,7 +193,7 @@ async function profiles() {
   };
 }
 
-async function ensureArtist(artistMbid: string, name: string): Promise<number> {
+export async function ensureArtist(artistMbid: string, name: string): Promise<number> {
   const existing = (await lidarr.artists()).find((a) => a.foreignArtistId === artistMbid);
   if (existing) return existing.id;
   const [found] = await lidarr.lookupArtist(artistMbid);
@@ -195,7 +209,7 @@ async function ensureArtist(artistMbid: string, name: string): Promise<number> {
   return added.id;
 }
 
-async function findAlbum(artistId: number, mbid: string): Promise<lidarr.LAlbum | undefined> {
+export async function findAlbum(artistId: number, mbid: string): Promise<lidarr.LAlbum | undefined> {
   // A newly added artist's albums arrive a few seconds later.
   for (let i = 0; i < 15; i++) {
     const album = (await lidarr.albums(artistId)).find((a) => a.foreignAlbumId === mbid);
@@ -256,15 +270,18 @@ export function opened(username: string) {
   writeJson(SEEN(), seen);
 }
 
-/** What's been asked for, newest first; albums that arrived show until the visit after the one they were seen on. */
-export async function list(username?: string): Promise<GetItem[]> {
+/**
+ * What's been asked for (albums, and `more`: songs), newest first; what arrived shows until the visit
+ * after the one it was seen on.
+ */
+export async function list(username?: string, more: Array<GetItem & { ready?: string }> = []): Promise<GetItem[]> {
   await freshen();
   const before = username ? seen[username]?.before : undefined;
-  return [...requests]
-    .reverse()
-    .filter((r) => !(before && r.ready && r.ready <= before))
-    .slice(0, 60)
-    .map((r) => ({ mbid: r.mbid, title: r.title, artist: r.artist, cover: coverArtFor(r.mbid), get: stateOf(r.mbid), by: r.by, at: r.at }));
+  return [...requests.map((r) => ({ mbid: r.mbid, title: r.title, artist: r.artist, cover: coverArtFor(r.mbid), get: stateOf(r.mbid), by: r.by, at: r.at, ready: r.ready })), ...more]
+    .filter((x) => !(before && x.ready && x.ready <= before))
+    .sort((a, b) => b.at.localeCompare(a.at))
+    .slice(0, 80)
+    .map(({ ready: _, ...x }) => x);
 }
 
 watch();

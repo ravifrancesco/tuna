@@ -1,7 +1,7 @@
 import type { SearchResult, WorldAlbum, WorldArtist } from '@tuna/shared';
 import { subsonic, type AlbumID3, type ArtistID3, type Child, type SubsonicAuth } from '../clients/navidrome';
 import * as lidarr from '../clients/lidarr';
-import { mbSearchAlbums, mbSearchArtists, type MbArtist, type MbReleaseGroup } from '../clients/public';
+import { mbFindSongs, mbSearchAlbums, mbSearchArtists, type MbArtist, type MbReleaseGroup } from '../clients/public';
 import { has } from '../connections';
 import { settle } from '../lib/async';
 import { t } from '../lib/i18n';
@@ -9,6 +9,8 @@ import { log } from '../lib/log';
 import { HttpError } from '../lib/upstream';
 import { findArtist, libraryIndex, norm, playlists, toAlbum, toArtist, toTrack } from './library';
 import { freshen } from './getting';
+import { matcher, songIndex } from './matching';
+import { songState, withTracks } from './songs';
 import { toWorldAlbum } from './world';
 
 /** Search: the library first (fast), then everything else that exists (MusicBrainz) in a second call. */
@@ -87,9 +89,27 @@ async function find(query: string): Promise<[MbArtist[], MbReleaseGroup[]]> {
 
 export async function searchWorld(auth: SubsonicAuth, q: string): Promise<SearchResult['world']> {
   const query = q.trim();
-  if (query.length < 2) return { artists: [], albums: [] };
+  if (query.length < 2) return { artists: [], albums: [], songs: [] };
   await freshen();
-  const [[artists, groups], idx] = await Promise.all([find(query), libraryIndex(auth)]);
+  const [[artists, groups], idx, recordings, here] = await Promise.all([
+    find(query),
+    libraryIndex(auth),
+    settle(mbFindSongs(query.replace(/([+\-&|!(){}[\]^"~*?:\\/])/g, '\\$1')), [], (err) => failed('MusicBrainz', err)),
+    songIndex(auth).then(matcher),
+  ]);
+  // Songs that aren't here, to get one by one: the best match of each, once.
+  const seen = new Set<string>();
+  const songs = recordings
+    .filter((r) => (r.score ?? 0) >= 70 && r['artist-credit']?.length)
+    .flatMap((r) => {
+      const artist = r['artist-credit']!.map((c) => c.name).join(', ');
+      const album = r.releases?.find((x) => x['release-group']?.['primary-type'] === 'Album' && !x['release-group']?.['secondary-types']?.length)?.title ?? r.releases?.[0]?.title;
+      const k = `${norm(artist)}|${norm(r.title)}`;
+      if (seen.has(k) || here({ artist, title: r.title, album })) return [];
+      seen.add(k);
+      return [{ title: r.title, artist, album, after: -1, get: songState({ artist, title: r.title }) }];
+    })
+    .slice(0, 8);
   const worldArtists: WorldArtist[] = artists
     .filter((a) => (a.score ?? 0) >= 60)
     .slice(0, 6)
@@ -98,5 +118,5 @@ export async function searchWorld(auth: SubsonicAuth, q: string): Promise<Search
     .filter((g) => (g.score ?? 0) >= 60 && !(g['secondary-types'] ?? []).length)
     .map((g) => toWorldAlbum(g, idx))
     .slice(0, 10);
-  return { artists: worldArtists, albums };
+  return { artists: worldArtists, albums, songs: await withTracks(auth, songs) };
 }

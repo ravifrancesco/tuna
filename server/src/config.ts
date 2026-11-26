@@ -35,6 +35,8 @@ export const config = {
     navidromeUrl: url('NAVIDROME_URL'),
     lidarrUrl: url('LIDARR_URL'),
     lidarrApiKey: env('LIDARR_API_KEY'),
+    slskdUrl: url('SLSKD_URL'),
+    slskdApiKey: env('SLSKD_API_KEY'),
     lastfmApiKey: env('LASTFM_API_KEY'),
   },
 

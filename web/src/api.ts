@@ -128,13 +128,19 @@ export const api = {
   gettingOpened: () => call<GetItem[]>('POST', '/getting/opened'),
 
   connections: () => call<Connections>('GET', '/connections'),
-  saveConnections: (patch: { navidromeUrl?: string; lidarrUrl?: string; lidarrApiKey?: string; lastfmApiKey?: string }) =>
+  saveConnections: (patch: { navidromeUrl?: string; lidarrUrl?: string; lidarrApiKey?: string; slskdUrl?: string; slskdApiKey?: string; lastfmApiKey?: string }) =>
     call<Connections>('PUT', '/connections', patch),
   waves: () => call<NightWaves>('GET', '/waves'),
   stocking: () => call<Stocking>('GET', '/stocking'),
   saveStocking: (perWeek: number) => call<Stocking>('PUT', '/stocking', { perWeek }),
   getMany: (albums: Array<{ artist: string; album: string }>) => call<{ asked: number }>('POST', '/get/many', { albums }),
+  /** Single songs (through slskd, filed by Lidarr); `songs: false`: the server got their albums instead. */
+  getSongs: (songs: Array<{ artist: string; title: string; album?: string }>) => call<{ asked: number; songs: boolean }>('POST', '/get/songs', { songs }),
   missed: () => call<MissedAlbum[]>('GET', '/get/missed'),
+  /** New songs for each person every week (an admin sets how many; needs slskd), and a radio's. */
+  discovery: () => call<{ perWeek: number; available: boolean }>('GET', '/discovery'),
+  saveDiscovery: (perWeek: number) => call<{ perWeek: number; available: boolean }>('PUT', '/discovery', { perWeek }),
+  radioNew: (seed: string) => call<Track[]>('GET', `/radio/new?seed=${encodeURIComponent(seed)}`),
   /** Albums still to ask for (Get all), a few at a time: all of them, and how many are mine. */
   stillToAsk: () => call<{ count: number; mine: number }>('GET', '/get/waiting'),
   stopAsking: () => call<{ stopped: number }>('POST', '/get/stop'),

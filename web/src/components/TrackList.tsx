@@ -7,6 +7,7 @@ import { useOnDevice } from '../lib/downloads';
 import { clock } from '../lib/format';
 import { useRowGestures } from '../lib/gestures';
 import { addToQueue, current, playTracks, toggle, usePlayer, type Source } from '../lib/player';
+import { SongGet } from './GetButton';
 import { showMenu, TrackMenu } from './Menu';
 import { Cover, toast } from './ui';
 
@@ -51,7 +52,7 @@ export function TrackList({
   );
 }
 
-/** A song that isn't in the library yet: where it belongs, not playable. */
+/** A song that isn't in the library yet: where it belongs, not playable, with Get for just it. */
 function WaitingRow({ song, n, showAlbum }: { song: WaitingSong; n: number; showAlbum: boolean }) {
   return (
     <div className="track track--waiting" role="listitem" aria-disabled data-added={song.added}>
@@ -66,6 +67,9 @@ function WaitingRow({ song, n, showAlbum }: { song: WaitingSong; n: number; show
         </div>
       </div>
       {showAlbum && <div className="track__album">{song.album}</div>}
+      <div className="track__get">
+        <SongGet song={song} get={song.get} album={song.album} />
+      </div>
     </div>
   );
 }

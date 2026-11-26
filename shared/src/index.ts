@@ -89,6 +89,8 @@ export interface WaitingSong {
   title: string;
   artist: string;
   album?: string;
+  /** Asked for already: where it's at. */
+  get?: GetState;
   /** When it went into the playlist on Spotify (ISO). */
   added?: string;
   after: number;
@@ -107,7 +109,7 @@ export type GetState =
   | { state: 'none' }
   | { state: 'looking' }
   | { state: 'downloading'; progress: number; left?: string }
-  | { state: 'ready'; albumId?: string }
+  | { state: 'ready'; albumId?: string; /** A song got on its own: it, in the library (to download onto a device). */ track?: Track }
   | { state: 'notFound' };
 
 export interface WorldAlbum {
@@ -135,7 +137,8 @@ export interface WorldArtist {
 
 /** An album that isn't in the library: its songs, as MusicBrainz lists them. */
 export interface WorldAlbumDetail extends WorldAlbum {
-  tracks: { title: string; duration?: number }[];
+  /** `get`: each song asked for on its own, where it's at. */
+  tracks: { title: string; duration?: number; get?: GetState }[];
 }
 
 export interface WorldArtistDetail extends WorldArtist {
@@ -204,8 +207,10 @@ export interface SpotifyImport {
   plays: number;
   /** Songs that aren't in the library. */
   missing: number;
-  /** The albums of the songs that aren't here, most played first (up to 50). */
+  /** The albums of the songs that aren't here, most played first. */
   missingAlbums: { artist: string; album: string; songs: number; plays: number }[];
+  /** The songs that aren't here, most played first. */
+  missingSongs?: { artist: string; title: string; album?: string; plays: number }[];
 }
 
 /** Why the weekly picks chose an album. */
@@ -248,8 +253,8 @@ export interface SearchResult {
   albums: Album[];
   artists: Artist[];
   playlists: Playlist[];
-  /** Not in the library: from MusicBrainz (or Lidarr's search). */
-  world: { artists: WorldArtist[]; albums: WorldAlbum[] };
+  /** Not in the library: from MusicBrainz (or Lidarr's search); songs from MusicBrainz, to get one by one. */
+  world: { artists: WorldArtist[]; albums: WorldAlbum[]; songs?: WaitingSong[] };
 }
 
 export interface Lyrics {
@@ -259,9 +264,14 @@ export interface Lyrics {
 }
 
 export interface GetItem {
+  /** An album's MusicBrainz id; a song's own id. */
   mbid: string;
+  /** A whole album (the default), or one song. */
+  kind?: 'album' | 'song';
   title: string;
   artist: string;
+  /** A song's album. */
+  album?: string;
   cover?: string;
   get: GetState;
   by: string;
@@ -295,12 +305,13 @@ export interface ServerInfo {
   version: string;
   /** Navidrome is set up: people can sign in. */
   ready: boolean;
-  services: { navidrome: boolean; lidarr: boolean; lastfm: boolean };
+  services: { navidrome: boolean; lidarr: boolean; slskd: boolean; lastfm: boolean };
 }
 
 export interface Connections {
   navidrome: { url?: string };
   lidarr: { url?: string; apiKey?: boolean };
+  slskd: { url?: string; apiKey?: boolean };
   lastfm: { apiKey?: boolean };
 }
 

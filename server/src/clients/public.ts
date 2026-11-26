@@ -63,6 +63,19 @@ export const mbSearchAlbums = (q: string) =>
     mb<{ 'release-groups': MbReleaseGroup[] }>('/release-group', { query: q, limit: 10 }).then((r) => r['release-groups'] ?? []),
   );
 
+export interface MbRecording {
+  id: string;
+  title: string;
+  'artist-credit'?: MbArtistCredit[];
+  releases?: Array<{ id: string; title: string; status?: string; 'release-group'?: { id: string; title: string; 'primary-type'?: string; 'secondary-types'?: string[] } }>;
+  score?: number;
+}
+/** Songs by name (title, artist and album at once, as typed in a search box). */
+export const mbFindSongs = (q: string) =>
+  cached(`songs:${q.toLowerCase()}`, () => mb<{ recordings?: MbRecording[] }>('/recording', { query: q, limit: 25, dismax: 'true' }).then((r) => r.recordings ?? []));
+export const mbSearchRecordings = (q: string) =>
+  cached(`rec:${q.toLowerCase()}`, () => mb<{ recordings?: MbRecording[] }>('/recording', { query: q, limit: 10 }).then((r) => r.recordings ?? []));
+
 export const mbArtist = (mbid: string) => cached(`a:${mbid}`, () => mb<MbArtist>(`/artist/${mbid}`, {}));
 
 /** An artist's albums, EPs and singles (no compilations, live recordings or bootlegs). */
@@ -220,6 +233,22 @@ export function lastfmSimilar(artist: string, mbid?: string): Promise<LfmSimilar
 }
 
 /** Someone's Last.fm account, by name (nothing to sign in to: their listening is public). */
+const lfmTracks = new TTLCache<Array<{ title: string; artist: string }>>(500);
+
+/** Songs like a song, as Last.fm's listeners hear it. */
+export function lastfmSimilarTracks(artist: string, title: string): Promise<Array<{ title: string; artist: string }>> {
+  const key = lastfmKey();
+  if (!key) return Promise.resolve([]);
+  return lfmTracks.wrap(`${artist}|${title}`.toLowerCase(), 24 * HOUR, async () => {
+    const res = await request<{ similartracks?: { track?: Array<{ name: string; artist?: { name?: string } }> } }>('Last.fm', config.lastfmUrl, '/', {
+      query: { method: 'track.getsimilar', api_key: key, format: 'json', limit: 30, autocorrect: 1, artist, track: title },
+      headers: headers(),
+      timeoutMs: 8000,
+    });
+    return (res.similartracks?.track ?? []).flatMap((t) => (t.name && t.artist?.name ? [{ title: t.name, artist: t.artist.name }] : []));
+  });
+}
+
 export async function lastfmUser(user: string): Promise<string | undefined> {
   const key = lastfmKey();
   if (!key) return undefined;
