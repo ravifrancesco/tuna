@@ -17,21 +17,21 @@
       "category": "entertainment",
       "versions": [
         {
-          "version": "0.4.6",
+          "version": "0.4.7",
           "buildVersion": "1",
           "date": "2026-11-26",
-          "localizedDescription": "New\n- Music on another of your devices shows in the normal player, glowing, instead of a bar: play, pause, skip, seek and the heart act on that device, and the line along the player follows the song. Now Playing says where it's playing, has Play here, and shows what's next there.\n\nFixed\n- Single songs from Soulseek: a song could be given up on just as it finished downloading (\"Lidarr can't see slskd's downloads\"), because Tuna took it off slskd's list a moment before slskd moved the file into its downloads folder. Tuna now waits until the file is there and Lidarr has filed it. Copies that fail or are refused no longer pile up in slskd's list.\n- Play here after a seek on the other device carries on from where the song was, not from before the seek.\n\nTo update: the server (pull the new image); the apps don't need updating.",
-          "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.4.6/Tuna-ios.ipa",
-          "size": 4703852,
-          "sha256": "9f128ae9f8364d4090af4d9204d28ec18ece5df08d541a388bd1488777b89a97",
+          "localizedDescription": "New\n- Songs from Soulseek (Settings → Connections, under slskd): which copies of a song Tuna gets. Lossless, CD quality (the default now), Lossless, hi-res too, or MP3 320. Until now it took any lossless copy, so hi-res files of 100 MB or more a song came in. When nobody has the kind chosen, the nearest one comes instead.\n\nTo update: the server (pull the new image); the apps don't need updating.",
+          "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.4.7/Tuna-ios.ipa",
+          "size": 4703854,
+          "sha256": "5ab00b9f3bb5d576ca7716a205e994b99cf5c4206d1234cbaa0b12b2c51a441c",
           "minOSVersion": "16.0"
         }
       ],
-      "version": "0.4.6",
+      "version": "0.4.7",
       "versionDate": "2026-11-26",
-      "versionDescription": "New\n- Music on another of your devices shows in the normal player, glowing, instead of a bar: play, pause, skip, seek and the heart act on that device, and the line along the player follows the song. Now Playing says where it's playing, has Play here, and shows what's next there.\n\nFixed\n- Single songs from Soulseek: a song could be given up on just as it finished downloading (\"Lidarr can't see slskd's downloads\"), because Tuna took it off slskd's list a moment before slskd moved the file into its downloads folder. Tuna now waits until the file is there and Lidarr has filed it. Copies that fail or are refused no longer pile up in slskd's list.\n- Play here after a seek on the other device carries on from where the song was, not from before the seek.\n\nTo update: the server (pull the new image); the apps don't need updating.",
-      "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.4.6/Tuna-ios.ipa",
-      "size": 4703852,
+      "versionDescription": "New\n- Songs from Soulseek (Settings → Connections, under slskd): which copies of a song Tuna gets. Lossless, CD quality (the default now), Lossless, hi-res too, or MP3 320. Until now it took any lossless copy, so hi-res files of 100 MB or more a song came in. When nobody has the kind chosen, the nearest one comes instead.\n\nTo update: the server (pull the new image); the apps don't need updating.",
+      "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.4.7/Tuna-ios.ipa",
+      "size": 4703854,
       "appPermissions": {
         "entitlements": [],
         "privacy": {
