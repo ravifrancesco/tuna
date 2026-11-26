@@ -17,21 +17,21 @@
       "category": "entertainment",
       "versions": [
         {
-          "version": "0.4.4",
+          "version": "0.4.5",
           "buildVersion": "1",
           "date": "2026-11-26",
-          "localizedDescription": "Fixed\n- Get all after bringing in several files from Spotify at once (Exportify's CSV files) asked for only the 50 most played albums. It now asks for every missing song, each once, however many playlists it's in, and the count of songs not in the library no longer counts them twice.\n\nTo update: the server (pull the new image); the apps don't need updating.",
-          "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.4.4/Tuna-ios.ipa",
-          "size": 949658,
-          "sha256": "95fadc0c157f68bb296804e98a8a64893568705c0ddcbe4b63ba5b7a462a0bc1",
+          "localizedDescription": "New\n- Away from home on iPhone and iPad, as in the Android, Mac and Windows apps: Tuna reaches your server through WireGuard, built in and used only by Tuna, with no VPN to switch on. Set it up in Settings → Away from home with the device's WireGuard .conf file. Needs iOS 17 or later. - Pages, songs, the songs kept ahead and downloads all go through it. Away from home, downloads carry on while Tuna is running (playing music keeps it running). - Installing with Xcode now also needs Go (brew install go).\n\nFixed\n- Away from home: the WireGuard .conf file couldn't be chosen on iPhone and iPad (it was greyed out). Any file can be chosen now, and Tuna says if it isn't a WireGuard file.\n\nTo update: the server (pull the new image) and the iPhone app.",
+          "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.4.5/Tuna-ios.ipa",
+          "size": 4703848,
+          "sha256": "62c34e82d188011bc9f1b8c2c86e6ef4c0159189ae075b252c88d2226fa77214",
           "minOSVersion": "16.0"
         }
       ],
-      "version": "0.4.4",
+      "version": "0.4.5",
       "versionDate": "2026-11-26",
-      "versionDescription": "Fixed\n- Get all after bringing in several files from Spotify at once (Exportify's CSV files) asked for only the 50 most played albums. It now asks for every missing song, each once, however many playlists it's in, and the count of songs not in the library no longer counts them twice.\n\nTo update: the server (pull the new image); the apps don't need updating.",
-      "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.4.4/Tuna-ios.ipa",
-      "size": 949658,
+      "versionDescription": "New\n- Away from home on iPhone and iPad, as in the Android, Mac and Windows apps: Tuna reaches your server through WireGuard, built in and used only by Tuna, with no VPN to switch on. Set it up in Settings → Away from home with the device's WireGuard .conf file. Needs iOS 17 or later. - Pages, songs, the songs kept ahead and downloads all go through it. Away from home, downloads carry on while Tuna is running (playing music keeps it running). - Installing with Xcode now also needs Go (brew install go).\n\nFixed\n- Away from home: the WireGuard .conf file couldn't be chosen on iPhone and iPad (it was greyed out). Any file can be chosen now, and Tuna says if it isn't a WireGuard file.\n\nTo update: the server (pull the new image) and the iPhone app.",
+      "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.4.5/Tuna-ios.ipa",
+      "size": 4703848,
       "appPermissions": {
         "entitlements": [],
         "privacy": {
