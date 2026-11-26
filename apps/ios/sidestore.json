@@ -17,21 +17,21 @@
       "category": "entertainment",
       "versions": [
         {
-          "version": "0.4.5",
+          "version": "0.4.6",
           "buildVersion": "1",
           "date": "2026-11-26",
-          "localizedDescription": "New\n- Away from home on iPhone and iPad, as in the Android, Mac and Windows apps: Tuna reaches your server through WireGuard, built in and used only by Tuna, with no VPN to switch on. Set it up in Settings → Away from home with the device's WireGuard .conf file. Needs iOS 17 or later. - Pages, songs, the songs kept ahead and downloads all go through it. Away from home, downloads carry on while Tuna is running (playing music keeps it running). - Installing with Xcode now also needs Go (brew install go).\n\nFixed\n- Away from home: the WireGuard .conf file couldn't be chosen on iPhone and iPad (it was greyed out). Any file can be chosen now, and Tuna says if it isn't a WireGuard file.\n\nTo update: the server (pull the new image) and the iPhone app.",
-          "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.4.5/Tuna-ios.ipa",
-          "size": 4703848,
-          "sha256": "62c34e82d188011bc9f1b8c2c86e6ef4c0159189ae075b252c88d2226fa77214",
+          "localizedDescription": "New\n- Music on another of your devices shows in the normal player, glowing, instead of a bar: play, pause, skip, seek and the heart act on that device, and the line along the player follows the song. Now Playing says where it's playing, has Play here, and shows what's next there.\n\nFixed\n- Single songs from Soulseek: a song could be given up on just as it finished downloading (\"Lidarr can't see slskd's downloads\"), because Tuna took it off slskd's list a moment before slskd moved the file into its downloads folder. Tuna now waits until the file is there and Lidarr has filed it. Copies that fail or are refused no longer pile up in slskd's list.\n- Play here after a seek on the other device carries on from where the song was, not from before the seek.\n\nTo update: the server (pull the new image); the apps don't need updating.",
+          "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.4.6/Tuna-ios.ipa",
+          "size": 4703852,
+          "sha256": "9f128ae9f8364d4090af4d9204d28ec18ece5df08d541a388bd1488777b89a97",
           "minOSVersion": "16.0"
         }
       ],
-      "version": "0.4.5",
+      "version": "0.4.6",
       "versionDate": "2026-11-26",
-      "versionDescription": "New\n- Away from home on iPhone and iPad, as in the Android, Mac and Windows apps: Tuna reaches your server through WireGuard, built in and used only by Tuna, with no VPN to switch on. Set it up in Settings → Away from home with the device's WireGuard .conf file. Needs iOS 17 or later. - Pages, songs, the songs kept ahead and downloads all go through it. Away from home, downloads carry on while Tuna is running (playing music keeps it running). - Installing with Xcode now also needs Go (brew install go).\n\nFixed\n- Away from home: the WireGuard .conf file couldn't be chosen on iPhone and iPad (it was greyed out). Any file can be chosen now, and Tuna says if it isn't a WireGuard file.\n\nTo update: the server (pull the new image) and the iPhone app.",
-      "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.4.5/Tuna-ios.ipa",
-      "size": 4703848,
+      "versionDescription": "New\n- Music on another of your devices shows in the normal player, glowing, instead of a bar: play, pause, skip, seek and the heart act on that device, and the line along the player follows the song. Now Playing says where it's playing, has Play here, and shows what's next there.\n\nFixed\n- Single songs from Soulseek: a song could be given up on just as it finished downloading (\"Lidarr can't see slskd's downloads\"), because Tuna took it off slskd's list a moment before slskd moved the file into its downloads folder. Tuna now waits until the file is there and Lidarr has filed it. Copies that fail or are refused no longer pile up in slskd's list.\n- Play here after a seek on the other device carries on from where the song was, not from before the seek.\n\nTo update: the server (pull the new image); the apps don't need updating.",
+      "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.4.6/Tuna-ios.ipa",
+      "size": 4703852,
       "appPermissions": {
         "entitlements": [],
         "privacy": {
