@@ -17,20 +17,20 @@
       "category": "entertainment",
       "versions": [
         {
-          "version": "0.4.1",
+          "version": "0.4.2",
           "buildVersion": "1",
           "date": "2026-11-26",
-          "localizedDescription": "Changed\n- Loading: while a page loads, the fish nibbles at the hook, as in the opening animation, instead of swimming.\n\nTo update: the server (pull the new image); the apps don't need updating.",
-          "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.4.1/Tuna-ios.ipa",
+          "localizedDescription": "New\n- Your devices, in sync (as Spotify Connect): every Tuna you have open on your account (phone, computer, browser) sees what the others are playing. - While music plays on another one, a bar shows where and what, with pause and Play here. - The button by the sound quality in Now Playing lists your devices: pick one and the music moves there, carrying on where it was. Starting music on one pauses the others.\n- Autoplay: when an album, a playlist or a radio is about to end, songs like the last few carry on, with a new song of the week now and then. On by default; each device can turn it off in Settings → Listening.\n\nChanged\n- Fresh catch is the week's new songs only (30 a week for each person by default; an admin can change it). What's in the library but not played yet has its own mix, Not played yet.\n- Song radio is mostly new songs: it asks for songs like the one it started from as it plays, keeping six ready ahead, with songs from the library in between until they're here.\n- Radios are 50 songs, as Spotify's (Autoplay carries on after).\n- Fresh catch's page is called Fresh catch (it said \"Mix\").\n\nTo update: the server (pull the new image); the apps don't need updating.",
+          "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.4.2/Tuna-ios.ipa",
           "size": 949658,
-          "sha256": "074aa95e951ecbb9f9bd4a615cf612062a83ba2c6c2263f624df5659e66c505f",
+          "sha256": "ce07b5355ccb83c370f3b722700280a9d8ad6153d6df967569672e6bf429fe7a",
           "minOSVersion": "16.0"
         }
       ],
-      "version": "0.4.1",
+      "version": "0.4.2",
       "versionDate": "2026-11-26",
-      "versionDescription": "Changed\n- Loading: while a page loads, the fish nibbles at the hook, as in the opening animation, instead of swimming.\n\nTo update: the server (pull the new image); the apps don't need updating.",
-      "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.4.1/Tuna-ios.ipa",
+      "versionDescription": "New\n- Your devices, in sync (as Spotify Connect): every Tuna you have open on your account (phone, computer, browser) sees what the others are playing. - While music plays on another one, a bar shows where and what, with pause and Play here. - The button by the sound quality in Now Playing lists your devices: pick one and the music moves there, carrying on where it was. Starting music on one pauses the others.\n- Autoplay: when an album, a playlist or a radio is about to end, songs like the last few carry on, with a new song of the week now and then. On by default; each device can turn it off in Settings → Listening.\n\nChanged\n- Fresh catch is the week's new songs only (30 a week for each person by default; an admin can change it). What's in the library but not played yet has its own mix, Not played yet.\n- Song radio is mostly new songs: it asks for songs like the one it started from as it plays, keeping six ready ahead, with songs from the library in between until they're here.\n- Radios are 50 songs, as Spotify's (Autoplay carries on after).\n- Fresh catch's page is called Fresh catch (it said \"Mix\").\n\nTo update: the server (pull the new image); the apps don't need updating.",
+      "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.4.2/Tuna-ios.ipa",
       "size": 949658,
       "appPermissions": {
         "entitlements": [],
