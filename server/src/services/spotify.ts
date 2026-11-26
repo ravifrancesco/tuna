@@ -5,6 +5,7 @@ import { log } from '../lib/log';
 import { HttpError } from '../lib/upstream';
 import { unzip } from '../lib/zip';
 import { findAlbum, findArtist, libraryIndex, norm, playlists, toTrack } from './library';
+import { keepImported } from './imported';
 import { addListens } from './listens';
 import { matcher, songIndex, type Song } from './matching';
 
@@ -164,17 +165,19 @@ export async function importSpotify(auth: SubsonicAuth, username: string, name: 
     return c;
   };
 
-  // Playlists: one of yours with the same name gets these songs instead.
+  // Playlists: one of yours with the same name gets these songs instead. Made even when nothing
+  // is here yet: the rest shows where it belongs and goes in as it arrives.
   const mine = (await playlists(auth)).filter((p) => p.mine);
   let made = 0;
   for (const pl of into.playlists) {
-    const ids = [...new Set(pl.songs.map(look).flatMap((c) => (c ? [c.id] : [])))];
-    if (!ids.length) continue;
-    const [first, ...rest] = chunks(ids);
+    const found = pl.songs.map(look);
+    const ids = [...new Set(found.flatMap((c) => (c ? [c.id] : [])))];
+    const [first = [], ...rest] = chunks(ids);
     const existing = mine.find((p) => p.name === pl.name);
     const r = await subsonic<{ playlist?: { id: string } }>(auth, 'createPlaylist', existing ? { playlistId: existing.id, songId: first } : { name: pl.name, songId: first });
     const id = existing?.id ?? r.playlist?.id ?? (await playlists(auth)).find((p) => p.mine && p.name === pl.name)?.id;
     for (const more of rest) if (id) await subsonic(auth, 'updatePlaylist', { playlistId: id, songIdToAdd: more });
+    if (id) keepImported(username, id, pl.name, pl.songs, found.map((c) => c?.id));
     made++;
   }
 

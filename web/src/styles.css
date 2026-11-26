@@ -980,6 +980,13 @@ html.tv .mobile-only {
 .track:focus-within {
   background: rgba(255, 255, 255, 0.06);
 }
+/* Imported from Spotify, not in the library yet. */
+.track--waiting {
+  opacity: 0.4;
+}
+.track--waiting:hover {
+  background: none;
+}
 .track.playing .track__title {
   color: var(--accent);
 }

@@ -79,6 +79,15 @@ export interface Playlist {
 
 export interface PlaylistDetail extends Playlist {
   tracks: Track[];
+  /** Imported from Spotify but not in the library yet: each shows after track `after` (-1: first). */
+  waiting?: WaitingSong[];
+}
+
+export interface WaitingSong {
+  title: string;
+  artist: string;
+  album?: string;
+  after: number;
 }
 
 /** A mix: tracks Tuna puts together (from the library) when it's played. */

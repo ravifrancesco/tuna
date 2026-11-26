@@ -11,6 +11,8 @@ import { log } from '../lib/log';
 import { writeJson } from '../lib/storage';
 import { HttpError } from '../lib/upstream';
 import { adminAuth, type Session } from '../sessions';
+import { fillImported } from './imported';
+import { forgetSongIndex } from './matching';
 import { forgetLibraryIndex } from './library';
 
 /**
@@ -70,10 +72,14 @@ async function scanNavidrome() {
         if (!s.scanStatus?.scanning) break;
       }
       forgetLibraryIndex();
+      forgetSongIndex();
     } while (scanAgain);
+    // Songs that arrived may belong in playlists brought over from Spotify.
+    void fillImported();
   } catch (err) {
     log.warn('get', "Couldn't ask Navidrome to look for new music", err);
     forgetLibraryIndex();
+    forgetSongIndex();
   } finally {
     scanning = false;
   }

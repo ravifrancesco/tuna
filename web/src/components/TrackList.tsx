@@ -1,6 +1,6 @@
 import { Link } from 'react-router';
 import { CircleArrowDown, Heart, MoreHorizontal, Pause, Play } from 'lucide-react';
-import type { Track } from '@tuna/shared';
+import type { Track, WaitingSong } from '@tuna/shared';
 import { t } from '../i18n';
 import { useLiked } from '../lib/actions';
 import { useOnDevice } from '../lib/downloads';
@@ -11,7 +11,8 @@ import { Cover } from './ui';
 
 /**
  * Songs in a list: the number (play on hover), title and artist, album, like, length, menu.
- * `numbers`: album order (track numbers) instead of covers.
+ * `numbers`: album order (track numbers) instead of covers. `waiting`: songs not in the library
+ * yet (imported from Spotify), greyed out where they belong.
  */
 export function TrackList({
   tracks,
@@ -19,18 +20,48 @@ export function TrackList({
   numbers,
   compact,
   onRemove,
+  waiting = [],
 }: {
   tracks: Track[];
   source: Source;
   numbers?: boolean;
   compact?: boolean;
   onRemove?: (index: number) => void;
+  waiting?: WaitingSong[];
 }) {
+  const after = new Map<number, WaitingSong[]>();
+  for (const w of waiting) after.set(w.after, [...(after.get(w.after) ?? []), w]);
+  const rows: React.ReactNode[] = [];
+  let n = 0;
+  const later = (i: number) => after.get(i)?.forEach((w, j) => rows.push(<WaitingRow key={`w${i}-${j}`} song={w} n={++n} showAlbum={!compact} />));
+  later(-1);
+  tracks.forEach((tr, i) => {
+    n++;
+    rows.push(<TrackRow key={`${tr.id}-${i}`} track={tr} n={numbers ? (tr.track ?? i + 1) : n} showCover={!numbers} showAlbum={!compact} onPlay={() => playTracks(tracks, i, source, { shuffle: false })} onRemove={onRemove && (() => onRemove(i))} />);
+    later(i);
+  });
   return (
     <div className={`tracks ${compact ? 'tracks--compact' : ''}`} role="list">
-      {tracks.map((tr, i) => (
-        <TrackRow key={`${tr.id}-${i}`} track={tr} n={numbers ? (tr.track ?? i + 1) : i + 1} showCover={!numbers} showAlbum={!compact} onPlay={() => playTracks(tracks, i, source, { shuffle: false })} onRemove={onRemove && (() => onRemove(i))} />
-      ))}
+      {rows}
+    </div>
+  );
+}
+
+/** A song that isn't in the library yet: where it belongs, not playable. */
+function WaitingRow({ song, n, showAlbum }: { song: WaitingSong; n: number; showAlbum: boolean }) {
+  return (
+    <div className="track track--waiting" role="listitem" aria-disabled>
+      <div className="track__n">
+        <span>{n}</span>
+      </div>
+      <div className="track__main">
+        <div className="cover" />
+        <div className="track__text">
+          <span className="track__title">{song.title}</span>
+          <span className="track__artist">{song.artist}</span>
+        </div>
+      </div>
+      {showAlbum && <div className="track__album">{song.album}</div>}
     </div>
   );
 }

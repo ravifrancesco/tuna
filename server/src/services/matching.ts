@@ -40,6 +40,8 @@ export function songIndex(auth: SubsonicAuth): Promise<SongIndex> {
   });
 }
 
+export const forgetSongIndex = () => songsCache.clear();
+
 export function matcher(idx: SongIndex) {
   const memo = new Map<string, Child | undefined>();
   return (s: Song) => {

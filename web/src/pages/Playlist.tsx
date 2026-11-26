@@ -10,7 +10,7 @@ import { Item, showMenu } from '../components/Menu';
 import { PlayButton } from '../components/PlayButton';
 import { TrackList } from '../components/TrackList';
 import { Cover, Empty, LikedCover, Sheet, Spinner, toast } from '../components/ui';
-import { t } from '../i18n';
+import { t, tn } from '../i18n';
 import { sum } from '../lib/actions';
 import { length, songs } from '../lib/format';
 import { playTracks, type Source } from '../lib/player';
@@ -61,7 +61,13 @@ export function Playlist() {
   };
   return (
     <div className="page--flush">
-      <Header kind={t('Playlist')} title={p.name} meta={`${p.owner ?? ''} · ${songs(p.songCount)}, ${length(p.duration)}`} cover={<Cover cover={p.cover} size={600} />} tint={tint} />
+      <Header
+        kind={t('Playlist')}
+        title={p.name}
+        meta={`${p.owner ?? ''} · ${songs(p.songCount)}, ${length(p.duration)}${p.waiting?.length ? ` · ${tn(p.waiting.length, '{n} not here yet', '{n} not here yet')}` : ''}`}
+        cover={<Cover cover={p.cover} size={600} />}
+        tint={tint}
+      />
       <PlayActions
         tracks={p.tracks}
         source={source}
@@ -100,9 +106,10 @@ export function Playlist() {
         }
       />
       <div className="section">
-        {p.tracks.length ? (
+        {p.tracks.length || p.waiting?.length ? (
           <TrackList
             tracks={p.tracks}
+            waiting={p.waiting}
             source={source}
             onRemove={
               p.mine

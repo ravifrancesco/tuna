@@ -154,6 +154,12 @@ export function adminAuth(): SubsonicAuth | undefined {
   return admin ? authOf(admin) : undefined;
 }
 
+/** Someone's own access, for work done for them in the background (filling imported playlists). */
+export function authFor(username: string): SubsonicAuth | undefined {
+  const s = [...sessions.values()].filter((x) => x.username === username).sort((a, b) => b.seen - a.seen)[0];
+  return s ? authOf(s) : undefined;
+}
+
 export function saveSessions() {
   save();
 }

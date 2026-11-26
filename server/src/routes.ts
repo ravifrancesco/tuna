@@ -7,6 +7,7 @@ import { HttpError } from './lib/upstream';
 import { authOf, mediaSessionOf, requireAdmin, requireUser, setCookie, signIn, signOut, sessionOf, COOKIE, type Session } from './sessions';
 import * as getting from './services/getting';
 import { home } from './services/home';
+import { waitingIn } from './services/imported';
 import { addPerson, changePerson, people, removePerson } from './services/household';
 import * as library from './services/library';
 import { listeningHistory, listeningStats } from './services/listens';
@@ -111,7 +112,11 @@ export async function apiRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/song/:id', async (req) => library.song(authOf(requireUser(req)), req.params.id));
 
   app.get('/playlists', async (req) => library.playlists(authOf(requireUser(req))));
-  app.get<{ Params: { id: string } }>('/playlist/:id', async (req) => library.playlist(authOf(requireUser(req)), req.params.id));
+  app.get<{ Params: { id: string } }>('/playlist/:id', async (req) => {
+    const s = requireUser(req);
+    const p = await library.playlist(authOf(s), req.params.id);
+    return { ...p, waiting: waitingIn(s.username, p.id, p.tracks) };
+  });
   app.post<{ Body: { name?: string; tracks?: string[] } }>('/playlists', async (req) => {
     const name = req.body?.name?.trim();
     if (!name) throw new HttpError(400, t('Give the playlist a name'));
