@@ -219,7 +219,8 @@ export function Mix() {
   if (mix.isLoading) return <Spinner />;
   const tracks = mix.data ?? [];
   const info = mixes.data?.find((m) => m.id === id);
-  const title = info?.title ?? (id === 'liked' ? t('Liked songs mix') : id === 'discover' ? t('Discover') : t('Mix'));
+  const named: Record<string, () => string> = { liked: () => t('Liked songs mix'), discover: () => t('Discover'), fresh: () => t('Fresh catch'), unplayed: () => t('Not played yet') };
+  const title = info?.title ?? named[id]?.() ?? t('Mix');
   const source = { kind: 'mix' as const, id, title };
   return (
     <div className="page--flush">

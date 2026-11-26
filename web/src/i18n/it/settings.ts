@@ -26,6 +26,8 @@ export default {
   'Navidrome has the music, Lidarr gets albums, slskd gets single songs (Lidarr files them), Last.fm finds similar artists.':
     'Navidrome ha la musica, Lidarr scarica gli album, slskd i singoli brani (Lidarr li archivia), Last.fm trova artisti simili.',
   'slskd address': 'Indirizzo di slskd',
+  Autoplay: 'Riproduzione automatica',
+  'When the music runs out, similar songs carry on. On this device.': 'Quando la musica finisce, continuano brani simili. Su questo dispositivo.',
   'New songs a week, for each person': 'Brani nuovi a settimana, per persona',
   'In their Fresh catch every Monday. Songs nobody likes or adds to a playlist go the week after.': 'Nel suo Pescato fresco ogni lunedì. I brani che nessuno mette tra i preferiti o in una playlist se ne vanno la settimana dopo.',
   'Needs slskd and Lidarr, in Connections below.': 'Servono slskd e Lidarr, in Connessioni qui sotto.',

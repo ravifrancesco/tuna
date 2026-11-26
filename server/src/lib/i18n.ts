@@ -89,6 +89,8 @@ const IT: Record<string, string> = {
   'Join the room first': 'Prima entra nella stanza',
   'Fresh catch': 'Pescato fresco',
   'New to you, every Monday': 'Nuovo per te, ogni lunedì',
+  'Not played yet': 'Non ancora ascoltati',
+  'Here, and new to you': 'Già qui, e nuovi per te',
   '{n} new song for you': '{n} brano nuovo per te',
   '{n} new songs for you': '{n} brani nuovi per te',
   'Last.fm needs a key: an admin can add it in Settings → Connections': 'Last.fm ha bisogno di una chiave: un amministratore può aggiungerla in Impostazioni → Connessioni',

@@ -11,6 +11,7 @@ import { Cover, Sheet, Switch, toast } from '../components/ui';
 import { LANGUAGES, languageSetting, locale, setLanguage, t, tn } from '../i18n';
 import { ago } from '../lib/format';
 import { QUALITIES, setQuality } from '../lib/quality';
+import { setAutoplay, useAutoplay } from '../lib/autoplay';
 import { canDownload, downloadQuality, setDownloadQuality, usage, useDownloads, type DownloadQuality } from '../lib/downloads';
 import { size } from './Downloads';
 import { app, has, hello, onEvent, type UpdateStatus } from '../lib/native';
@@ -80,6 +81,7 @@ function Listening({ prefs }: { prefs: Prefs }) {
         <small className="muted">{QUALITIES.find((q) => q.value === prefs.quality)?.detail()}</small>
       </label>
       {canDownload && <DownloadQualityField />}
+      <AutoplayField />
       {hasEq && (
         <div className="field">
           <EqualizerControls />
@@ -87,6 +89,19 @@ function Listening({ prefs }: { prefs: Prefs }) {
         </div>
       )}
     </section>
+  );
+}
+
+function AutoplayField() {
+  const on = useAutoplay();
+  return (
+    <div className="field">
+      <div className="eq__head">
+        <span>{t('Autoplay')}</span>
+        <Switch on={on} onChange={setAutoplay} label={t('Autoplay')} />
+      </div>
+      <small className="muted">{t('When the music runs out, similar songs carry on. On this device.')}</small>
+    </div>
   );
 }
 

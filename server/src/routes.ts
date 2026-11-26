@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { Me, ServerInfo, StatsPeriod, TogetherControl, Track } from '@tuna/shared';
+import type { DeviceCommand, Me, ServerInfo, StatsPeriod, TogetherControl, Track } from '@tuna/shared';
 import { config } from './config';
 import { SETUP_CODE, connections, has, saveConnections, type ConnectionsPatch } from './connections';
 import { t } from './lib/i18n';
@@ -15,11 +15,12 @@ import { listeningHistory, listeningStats, yearInReview } from './services/liste
 import { importSpotify } from './services/spotify';
 import { getMany, missedAlbums, saveStocking, stillToAsk, stocking, stopAsking } from './services/stocking';
 import { songItems, songsWaiting, stopSongs, wantSongs, withTracks } from './services/songs';
-import { arrived, discoverySettings, saveDiscovery } from './services/discovery';
+import { arrived, discoverySettings, saveDiscovery, topUpRadio } from './services/discovery';
 import * as together from './services/together';
+import * as devices from './services/devices';
 import { openLine } from './lib/sse';
 import { lyrics } from './services/lyrics';
-import { blends, dailyMixes, mixTracks } from './services/mixes';
+import { autoplay, blends, dailyMixes, mixTracks } from './services/mixes';
 import { art, countPlay, cover, stream } from './services/playback';
 import { listenbrainzOf, prefsOf, savePrefs } from './services/prefs';
 import { searchLibrary, searchWorld } from './services/search';
@@ -209,7 +210,15 @@ export async function apiRoutes(app: FastifyInstance) {
   // New songs: the weekly ones for each person (an admin sets how many), and a radio's.
   app.get('/discovery', async (req) => (requireUser(req), discoverySettings()));
   app.put<{ Body: { perWeek?: number } }>('/discovery', async (req) => saveDiscovery(requireAdmin(req), Number(req.body?.perWeek) || 0));
-  app.get<{ Querystring: { seed?: string } }>('/radio/new', async (req) => (req.query.seed ? arrived(requireUser(req).username, { radio: req.query.seed }) : []));
+  // A song's radio: its new songs that are here, keeping a handful more on the way (`heard`: how many it has played).
+  app.get<{ Querystring: { seed?: string; heard?: string } }>('/radio/new', async (req) => {
+    const s = requireUser(req);
+    if (!req.query.seed) return [];
+    topUpRadio(s.username, req.query.seed, Number(req.query.heard) || 0);
+    return arrived(s.username, { radio: req.query.seed });
+  });
+  // Autoplay: what's playing ran out; songs like its last ones, none already in the queue.
+  app.post<{ Body: { seeds?: string[]; have?: string[] } }>('/autoplay', async (req) => autoplay(authOf(requireUser(req)), req.body?.seeds ?? [], new Set(req.body?.have ?? [])));
   app.get('/get/waiting', async (req) => {
     const s = requireUser(req);
     const albums = stillToAsk(s);
@@ -227,6 +236,27 @@ export async function apiRoutes(app: FastifyInstance) {
     const albums = [...new Map(list.filter((x) => x.album).map((x) => [`${x.artist}|${x.album}`.toLowerCase(), { artist: x.artist, album: x.album! }])).values()];
     return { asked: getMany(s, albums), songs: false };
   });
+
+  // ---- Devices (as Spotify Connect) ----------------------------------------------------------------
+  // The live line: EventSource can't send the app's Bearer token, so the media key works too.
+  app.get<{ Querystring: { device?: string; name?: string; kind?: string } }>('/devices/events', async (req, reply) => {
+    const s = mediaSessionOf(req);
+    if (!s) throw new HttpError(401, t('Please sign in'));
+    const id = String(req.query.device ?? '').slice(0, 64);
+    if (!id) throw new HttpError(400, 'device');
+    const kind = (['phone', 'tablet', 'computer', 'tv', 'browser'] as const).find((k) => k === req.query.kind) ?? 'browser';
+    devices.openDevice(s, id, String(req.query.name ?? '').slice(0, 40) || 'Tuna', kind, openLine(reply));
+  });
+  app.post<{ Body: { device?: string; playing?: boolean; index?: number; position?: number; queue?: Track[]; source?: unknown } }>('/devices/state', async (req) => {
+    const b = req.body ?? {};
+    if (b.device) devices.report(requireUser(req), b.device, { playing: Boolean(b.playing), index: Number(b.index ?? -1), position: Number(b.position ?? 0), queue: b.queue, source: b.source });
+    return { ok: true };
+  });
+  app.post<{ Body: { to?: string; command?: DeviceCommand } }>('/devices/command', async (req) => {
+    if (req.body?.to && req.body.command) devices.command(requireUser(req), req.body.to, req.body.command);
+    return { ok: true };
+  });
+  app.post<{ Body: { to?: string } }>('/devices/transfer', async (req) => ({ ok: req.body?.to ? devices.transfer(requireUser(req), req.body.to) : false }));
 
   // ---- Play together -----------------------------------------------------------------------------
   app.get('/together', async (req) => {

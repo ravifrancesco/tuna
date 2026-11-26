@@ -13,6 +13,8 @@ import { useMe } from '../lib/session';
 import { useTints } from '../lib/tint';
 import { Item, showMenu, TrackMenu } from './Menu';
 import { EqualizerItem } from './Equalizer';
+import { DeviceIcon } from './Devices';
+import { deviceId, others, playOn, useDevices } from '../lib/devices';
 import { SleepChip, SleepItem } from './Sleep';
 import { hasEq } from '../lib/eq';
 import { TogetherChip, TogetherItem } from './Together';
@@ -211,16 +213,45 @@ function stopAt(el: Element): number {
 
 const OUTPUT_ICONS: Record<NativeOutput['kind'], typeof Speaker> = { phone: MonitorSpeaker, headphones: Headphones, bluetooth: Bluetooth, airplay: Airplay, cast: Cast, car: Car, tv: Tv, speaker: Speaker };
 
-/** Where it plays (the apps): the phone itself, or AirPods, a car, a speaker, named. */
+/**
+ * Where it plays: your other devices with Tuna open (the music moves there), and from the apps, the
+ * phone itself or AirPods, a car, a speaker, named.
+ */
 function OutputButton() {
   const output = usePlayer((s) => s.output);
+  const rest = others(useDevices());
   const cast = browserOutputs;
   const choose = nativeAudio?.outputs ?? (cast && (() => cast()));
-  if (!choose) return null;
+  if (!choose && !rest.length) return null;
   const Icon = OUTPUT_ICONS[output?.kind ?? 'phone'] ?? MonitorSpeaker;
   const away = output && output.kind !== 'phone';
+  const open = (e: React.MouseEvent<HTMLButtonElement>) => {
+    const at = e.currentTarget.getBoundingClientRect();
+    if (!rest.length) return choose?.(at);
+    showMenu(
+      e,
+      <>
+        <div className="menu__head">
+          <b>{t('Play on')}</b>
+        </div>
+        <Item icon={<MonitorSpeaker size={18} />} onClick={() => void playOn(deviceId)}>
+          {t('This device')}
+        </Item>
+        {rest.map((d) => (
+          <Item key={d.id} icon={<DeviceIcon kind={d.kind} />} onClick={() => void playOn(d.id)}>
+            {d.playing ? t('{name} · playing', { name: d.name }) : d.name}
+          </Item>
+        ))}
+        {choose && (
+          <Item icon={<Headphones size={18} />} onClick={() => choose(at)}>
+            {t('Speakers and headphones')}
+          </Item>
+        )}
+      </>,
+    );
+  };
   return (
-    <button className={`quality output ${away ? 'on' : ''}`} aria-label={t('Play on another device')} onClick={(e) => choose(e.currentTarget.getBoundingClientRect())}>
+    <button className={`quality output ${away ? 'on' : ''}`} aria-label={t('Play on another device')} onClick={open}>
       <Icon size={14} />
       {away && <span className="output__name">{output.name}</span>}
     </button>

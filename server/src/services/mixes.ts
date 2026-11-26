@@ -7,7 +7,7 @@ import { t } from '../lib/i18n';
 import { HttpError } from '../lib/upstream';
 import { liked, libraryIndex, norm, toTrack } from './library';
 import { nameOf } from '../sessions';
-import { arrived, radioDiscoveries } from './discovery';
+import { arrived, discoverLike, newSongsOn, startRadio } from './discovery';
 import { blendable, blendCovers, blendTracks, listeners, playedIds } from './listens';
 
 /**
@@ -96,23 +96,41 @@ export async function dailyMixes(auth: SubsonicAuth): Promise<Mix[]> {
   }));
 }
 
+/**
+ * Autoplay: what's playing ran out, so songs like its last few carry on, with a new song of the
+ * week now and then; and more new songs like the last one are asked for, for the next time.
+ */
+export async function autoplay(auth: SubsonicAuth, seeds: string[], have: Set<string>): Promise<Track[]> {
+  const songs = (await Promise.all(seeds.slice(-3).map((id) => settle(subsonic<{ song: Child }>(auth, 'getSong', { id }).then((r) => r.song), undefined)))).filter(
+    (s): s is Child => Boolean(s),
+  );
+  if (!songs.length) return [];
+  const lists = await Promise.all(songs.map((s) => radio(auth, s.id, s.artistId, s.genre)));
+  const out = spread(unique(shuffle(lists.flat()))).filter((x) => !have.has(x.id)).slice(0, 25);
+  const fresh = (await settle(arrived(auth.username, { week: weekOf() }), [])).filter((x) => !have.has(x.id) && !out.some((o) => o.id === x.id)).slice(0, 3);
+  fresh.forEach((x, i) => out.splice(Math.min(out.length, 2 + i * 6), 0, x));
+  void discoverLike(auth.username, toTrack(songs[songs.length - 1])).catch(() => undefined);
+  return out;
+}
+
 export async function mixTracks(auth: SubsonicAuth, id: string, listenbrainzUser?: string): Promise<Track[]> {
   const [kind, seed] = [id.split(':')[0], id.slice(id.indexOf(':') + 1)];
   switch (kind) {
     case 'song': {
       const r = await subsonic<{ song: Child }>(auth, 'getSong', { id: seed });
       const first = toTrack(r.song);
-      // A few new songs like it, which join the radio as they arrive (the page asks for them, /radio/new).
-      void radioDiscoveries(auth.username, first).catch(() => undefined);
-      return [first, ...spread(unique((await radio(auth, seed, r.song.artistId, r.song.genre)).filter((x) => x.id !== first.id)))].slice(0, 60);
+      // Mostly new songs: they join the radio as they arrive (the page asks for them, /radio/new); songs
+      // from the library like it play meanwhile.
+      void startRadio(auth.username, first).catch(() => undefined);
+      return [first, ...spread(unique((await radio(auth, seed, r.song.artistId, r.song.genre)).filter((x) => x.id !== first.id)))].slice(0, 50);
     }
     case 'album': {
       const r = await subsonic<{ album: AlbumID3 }>(auth, 'getAlbum', { id: seed });
-      return spread(unique(await radio(auth, seed, r.album.artistId, r.album.genre))).slice(0, 60);
+      return spread(unique(await radio(auth, seed, r.album.artistId, r.album.genre))).slice(0, 50);
     }
     case 'artist': {
       const [own, others] = await Promise.all([artistSongs(auth, seed, 20), similar(auth, seed, 40)]);
-      return spread(unique(shuffle([...own, ...others]))).slice(0, 60);
+      return spread(unique(shuffle([...own, ...others]))).slice(0, 50);
     }
     case 'daily': {
       const top = await topArtists(auth);
@@ -127,6 +145,8 @@ export async function mixTracks(auth: SubsonicAuth, id: string, listenbrainzUser
       return discoverTracks(auth, listenbrainzUser);
     case 'fresh':
       return freshCatch(auth, listenbrainzUser);
+    case 'unplayed':
+      return notPlayedYet(auth, listenbrainzUser);
     case 'blend':
       return spread(blendTracks(auth.username, seed));
     default:
@@ -177,16 +197,20 @@ export function seeded(seed: string) {
 const freshCache = new TTLCache<Track[]>(200);
 
 /**
- * Fresh catch: thirty songs someone hasn't played yet, new every Monday. First the new songs Tuna got
- * for them this week (services/discovery.ts), then ListenBrainz's picks that are here, songs by
- * artists like the ones they play most, and what came into the library lately.
+ * Fresh catch, Tuna's Discover Weekly: the new songs Tuna got for someone this week
+ * (services/discovery.ts). Without new songs (no slskd, or turned off), what "Not played yet" has.
  */
 export async function freshCatch(auth: SubsonicAuth, listenbrainzUser?: string): Promise<Track[]> {
-  const week = weekOf();
-  const fresh = await arrived(auth.username, { week });
-  const rest = await freshFromLibrary(auth, week, listenbrainzUser);
-  return unique([...fresh, ...rest]).slice(0, Math.max(30, fresh.length));
+  if (!newSongsOn()) return notPlayedYet(auth, listenbrainzUser);
+  return spread(await arrived(auth.username, { week: weekOf() }));
 }
+
+/**
+ * Not played yet: thirty songs in the library someone hasn't played, the same all week:
+ * ListenBrainz's picks that are here, songs by artists like the ones they play most, and what came
+ * into the library lately.
+ */
+export const notPlayedYet = (auth: SubsonicAuth, listenbrainzUser?: string) => freshFromLibrary(auth, weekOf(), listenbrainzUser);
 
 function freshFromLibrary(auth: SubsonicAuth, week: number, listenbrainzUser?: string): Promise<Track[]> {
   return freshCache.wrap(`${auth.username}:${week}`, 6 * HOUR, async () => {

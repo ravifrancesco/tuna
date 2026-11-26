@@ -39,6 +39,8 @@ import { Settings } from "./pages/Settings";
 import { Setup } from "./pages/Setup";
 import { WorldArtist } from "./pages/WorldArtist";
 import { WorldAlbum } from "./pages/WorldAlbum";
+import { DevicesBar } from "./components/Devices";
+import { startDevices } from "./lib/devices";
 
 function ScrollTop() {
   const { pathname } = useLocation();
@@ -50,6 +52,8 @@ function ScrollTop() {
 
 function Shell() {
   const [now, setNow] = useState<{ tab?: "lyrics" | "queue" }>();
+  // This tab (or app) joins the account's devices once someone's signed in.
+  useEffect(() => startDevices(), []);
   const close = useCallback(() => setNow(undefined), []);
   const open = (tab?: "lyrics" | "queue") => setNow({ tab });
   // Going somewhere from the sidebar shows that page.
@@ -87,6 +91,7 @@ function Shell() {
       {/* Phones: Now Playing covers the whole screen (older Android web views would draw these over it). */}
       {!now && <MiniPlayer onOpen={() => setNow({})} />}
       {!now && <Tabs />}
+      {!now && <DevicesBar />}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import type { Album, AlbumDetail, Artist, ArtistDetail, Connections, GetItem, GetState, Home, Listen, ListeningStats, Lyrics, Me, MissedAlbum, Mix, Person, Playlist, PlaylistDetail, Prefs, SearchResult, ServerInfo, SpotifyImport, StatsPeriod, Stocking, TogetherControl, TogetherRoom, TogetherSummary, Track, WaitingSong, WorldAlbum, WorldAlbumDetail, WorldArtistDetail, YearInReview } from '@tuna/shared';
+import type { Album, AlbumDetail, Artist, ArtistDetail, Connections, DeviceCommand, GetItem, GetState, Home, Listen, ListeningStats, Lyrics, Me, MissedAlbum, Mix, Person, Playlist, PlaylistDetail, Prefs, SearchResult, ServerInfo, SpotifyImport, StatsPeriod, Stocking, TogetherControl, TogetherRoom, TogetherSummary, Track, WaitingSong, WorldAlbum, WorldAlbumDetail, WorldArtistDetail, YearInReview } from '@tuna/shared';
 import { language } from './i18n';
 import { app } from './lib/native';
 
@@ -140,10 +140,17 @@ export const api = {
   /** New songs for each person every week (an admin sets how many; needs slskd), and a radio's. */
   discovery: () => call<{ perWeek: number; available: boolean }>('GET', '/discovery'),
   saveDiscovery: (perWeek: number) => call<{ perWeek: number; available: boolean }>('PUT', '/discovery', { perWeek }),
-  radioNew: (seed: string) => call<Track[]>('GET', `/radio/new?seed=${encodeURIComponent(seed)}`),
+  radioNew: (seed: string, heard = 0) => call<Track[]>('GET', `/radio/new?seed=${encodeURIComponent(seed)}&heard=${heard}`),
+  autoplay: (seeds: string[], have: string[]) => call<Track[]>('POST', '/autoplay', { seeds, have }),
   /** Albums still to ask for (Get all), a few at a time: all of them, and how many are mine. */
   stillToAsk: () => call<{ count: number; mine: number }>('GET', '/get/waiting'),
   stopAsking: () => call<{ stopped: number }>('POST', '/get/stop'),
+  /** This account's devices (as Spotify Connect): what this one plays, commands to another, handing the music on. */
+  devices: {
+    state: (body: { device: string; playing: boolean; index: number; position: number; queue?: Track[]; source?: unknown }) => call<{ ok: boolean }>('POST', '/devices/state', body),
+    command: (to: string, command: DeviceCommand) => call<{ ok: boolean }>('POST', '/devices/command', { to, command }),
+    transfer: (to: string) => call<{ ok: boolean }>('POST', '/devices/transfer', { to }),
+  },
   together: {
     list: () => call<TogetherSummary[]>('GET', '/together'),
     start: (body: { queue: Track[]; index: number; position: number; playing: boolean; title?: string }) => call<TogetherRoom>('POST', '/together', body),

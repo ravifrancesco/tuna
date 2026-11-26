@@ -7,8 +7,8 @@ import { t, tn } from '../lib/i18n';
 import { log } from '../lib/log';
 import { stateOf } from './getting';
 import { albums, artists as allArtists, findAlbum, libraryIndex, liked, playlists } from './library';
-import { arrived } from './discovery';
-import { blends, dailyMixes, freshCatch, weekOf } from './mixes';
+import { newSongsOn } from './discovery';
+import { blends, dailyMixes, freshCatch, notPlayedYet } from './mixes';
 
 /** Home: where you left off, your mixes, what's new, and what to discover (the web shows the first mix big). */
 
@@ -37,15 +37,14 @@ export async function home(auth: SubsonicAuth, name: string, listenbrainzUser?: 
   const rows: Row[] = [];
   if (recent.length) rows.push({ id: 'recent', title: t('Recently played'), kind: 'albums', items: recent });
   const madeForYou = [...mixes];
+  const coversOf = (tracks: { cover?: string }[]) => [...new Set(tracks.map((x) => x.cover).filter((c): c is string => Boolean(c)))].slice(0, 4);
   const fresh = await settle(freshCatch(auth, listenbrainzUser), [], quiet('fresh catch'));
-  const caught = await settle(arrived(auth.username, { week: weekOf() }), [], quiet('new songs'));
-  if (fresh.length >= 8 || caught.length) {
-    const covers = [...new Set([...caught, ...fresh].map((x) => x.cover).filter((c): c is string => Boolean(c)))].slice(0, 4);
-    const card = { id: 'fresh', title: t('Fresh catch'), subtitle: caught.length ? tn(caught.length, '{n} new song for you', '{n} new songs for you') : t('New to you, every Monday'), covers };
-    // With new songs, it's the big one.
-    if (caught.length) madeForYou.unshift(card);
-    else madeForYou.splice(1, 0, card);
-  }
+  if (newSongsOn()) {
+    // Fresh catch is the week's new songs (the big card while there are some); what's here but not played yet is its own mix.
+    const unplayed = await settle(notPlayedYet(auth, listenbrainzUser), [], quiet('not played yet'));
+    if (unplayed.length >= 8) madeForYou.splice(1, 0, { id: 'unplayed', title: t('Not played yet'), subtitle: t('Here, and new to you'), covers: coversOf(unplayed) });
+    if (fresh.length) madeForYou.unshift({ id: 'fresh', title: t('Fresh catch'), subtitle: tn(fresh.length, '{n} new song for you', '{n} new songs for you'), covers: coversOf(fresh) });
+  } else if (fresh.length >= 8) madeForYou.splice(1, 0, { id: 'fresh', title: t('Fresh catch'), subtitle: t('New to you, every Monday'), covers: coversOf(fresh) });
   if (likes.tracks.length >= 10) madeForYou.push({ id: 'liked', title: t('Liked songs mix'), subtitle: t('The songs you love, shuffled'), covers: likes.tracks.slice(0, 4).map((x) => x.cover).filter((c): c is string => Boolean(c)) });
   if (madeForYou.length) rows.push({ id: 'mixes', title: t('Made for you'), kind: 'mixes', items: madeForYou });
   const together = blends(auth.username, name);

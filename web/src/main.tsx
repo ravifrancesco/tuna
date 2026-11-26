@@ -8,6 +8,7 @@ import { language } from './i18n';
 import { restoreSide } from './components/Resizer';
 import { startTV } from './lib/tv';
 import './lib/radioNew';
+import './lib/autoplay';
 
 document.documentElement.lang = language;
 startTV();

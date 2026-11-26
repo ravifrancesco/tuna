@@ -13,6 +13,8 @@ export default {
   'New playlist': 'Nuova playlist',
   'Liked songs': 'Brani che ti piacciono',
   'Liked songs mix': 'Mix dei brani che ti piacciono',
+  'Fresh catch': 'Pescato fresco',
+  'Not played yet': 'Non ancora ascoltati',
   'By {name}': 'Di {name}',
   'Show all': 'Mostra tutto',
   'Show more': 'Mostra altro',

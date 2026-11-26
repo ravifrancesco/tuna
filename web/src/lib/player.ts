@@ -438,11 +438,11 @@ export function playNext(tracks: Track[]) {
   replaceQueue(q, state.index);
 }
 
-/** New songs into what's playing, a few songs apart, starting two songs ahead (a radio's new songs). */
-export function slipIn(tracks: Track[]) {
+/** New songs into what's playing: a few songs apart from two ahead, or one after another from `at`. */
+export function slipIn(tracks: Track[], at?: number) {
   if (state.index < 0 || !tracks.length) return;
   const q = [...state.queue];
-  tracks.forEach((t, i) => q.splice(Math.min(q.length, state.index + 2 + i * 3), 0, t));
+  tracks.forEach((t, i) => q.splice(Math.min(q.length, at !== undefined ? at + i : state.index + 2 + i * 3), 0, t));
   unshuffled = unshuffled ? [...unshuffled, ...tracks] : undefined;
   replaceQueue(q, state.index);
 }

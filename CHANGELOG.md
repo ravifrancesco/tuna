@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.4.2 (2026-11-26)
+
+**New**
+- **Your devices, in sync** (as Spotify Connect): every Tuna you have open on your account (phone,
+  computer, browser) sees what the others are playing.
+  - While music plays on another one, a bar shows where and what, with pause and Play here.
+  - The button by the sound quality in Now Playing lists your devices: pick one and the music moves
+    there, carrying on where it was. Starting music on one pauses the others.
+- **Autoplay**: when an album, a playlist or a radio is about to end, songs like the last few carry
+  on, with a new song of the week now and then. On by default; each device can turn it off in
+  Settings → Listening.
+
+**Changed**
+- **Fresh catch** is the week's new songs only (30 a week for each person by default; an admin can
+  change it). What's in the library but not played yet has its own mix, **Not played yet**.
+- **Song radio** is mostly new songs: it asks for songs like the one it started from as it plays,
+  keeping six ready ahead, with songs from the library in between until they're here.
+- Radios are 50 songs, as Spotify's (Autoplay carries on after).
+- Fresh catch's page is called Fresh catch (it said "Mix").
+
+To update: the server (pull the new image); the apps don't need updating.
+
 ## 0.4.1 (2026-11-26)
 
 **Changed**

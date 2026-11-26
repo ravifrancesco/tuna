@@ -448,3 +448,31 @@ export interface NativeDownload {
   /** Offline page only: an address the app serves the cover from. */
   localCover?: string;
 }
+
+/** One of someone's devices with Tuna open, as the others see it. */
+export interface Device {
+  id: string;
+  /** "iPhone", "Mac", "Chrome"… */
+  name: string;
+  kind: 'phone' | 'tablet' | 'computer' | 'tv' | 'browser';
+  playing: boolean;
+  track?: Track;
+  /** Seconds into `track`, at `at` (server time, ms). */
+  position: number;
+  at: number;
+}
+
+export type DeviceCommand =
+  | { type: 'play' }
+  | { type: 'pause' }
+  | { type: 'next' }
+  | { type: 'previous' }
+  | { type: 'seek'; position: number }
+  /** The music moves here: this queue, from this song and moment. */
+  | { type: 'take'; queue: Track[]; index: number; position: number; playing: boolean; source?: unknown };
+
+export interface DevicesEvent {
+  now: number;
+  devices?: Device[];
+  command?: DeviceCommand;
+}

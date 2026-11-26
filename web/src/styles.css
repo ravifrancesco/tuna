@@ -2766,6 +2766,46 @@ button.song-get:hover {
   }
 }
 
+/* Music on another of your devices: a slim bar above the player, with pause and Play here. */
+.devices-bar {
+  position: fixed;
+  z-index: 35;
+  left: calc(var(--side) + (100vw - var(--side)) / 2);
+  bottom: 104px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(560px, calc(100vw - var(--side) - 32px));
+  padding: 6px 6px 6px 14px;
+  border-radius: 999px;
+  background: var(--accent-2);
+  color: #fff;
+  font-size: 13px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.devices-bar__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.devices-bar__text span {
+  opacity: 0.8;
+}
+.devices-bar .btn {
+  flex: none;
+  background: #fff;
+  color: var(--accent-2);
+}
+@media (max-width: 899px) {
+  .devices-bar {
+    left: 50%;
+    bottom: calc(var(--tabs) + var(--mini) + var(--safe-bottom) + 14px);
+    max-width: calc(100vw - 24px);
+  }
+}
+
 /* ---- Sign-in and splash ------------------------------------------------------------------------------ */
 
 .center-page {
