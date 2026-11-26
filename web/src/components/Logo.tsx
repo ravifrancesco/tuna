@@ -4,7 +4,7 @@ import { useId } from 'react';
  * Tuna's mark: a music note that is a fish (the head is the note, the tail is Netfish's).
  * Geometry shared with the app icons (apps/common/mark.svg) and the loading animation.
  */
-export function Mark({ className, size, swim }: { className?: string; size?: number; swim?: boolean }) {
+export function Mark({ className, size }: { className?: string; size?: number }) {
   const id = useId().replace(/:/g, '');
   const paint = `url(#m${id})`;
   return (
@@ -16,8 +16,8 @@ export function Mark({ className, size, swim }: { className?: string; size?: num
         </linearGradient>
       </defs>
       <g transform="translate(32 32) scale(1.0957) translate(-26.625 -32.995)" fill={paint}>
-        <g className={swim ? 'swim__body' : undefined}>
-          <path className={swim ? 'swim__tail' : undefined} d="M10.94 45.31 L2.44 37.81 L2.44 52.81 Z" stroke={paint} strokeWidth="3" strokeLinejoin="round" />
+        <g>
+          <path d="M10.94 45.31 L2.44 37.81 L2.44 52.81 Z" stroke={paint} strokeWidth="3" strokeLinejoin="round" />
           <rect x="36.76" y="12" width="4.6" height="30.69" />
           <path
             d="M37.36 12.6 L41.36 12.6 C42.71 17.55 50.81 20.25 50.81 28.35 C50.81 31.5 49.91 33.75 48.56 36 C49.1 29.7 45.86 25.65 41.36 23.85 L37.36 23.85 Z"
@@ -31,19 +31,9 @@ export function Mark({ className, size, swim }: { className?: string; size?: num
           </g>
         </g>
       </g>
-      {swim && (
-        <>
-          <circle className="swim__bubble" cx="50" cy="40" r="2" />
-          <circle className="swim__bubble" cx="52" cy="38" r="1.4" />
-          <circle className="swim__bubble" cx="49" cy="41" r="1.7" />
-        </>
-      )}
     </svg>
   );
 }
-
-/** Loading: the note-fish swims on the spot, its tail going, bubbles rising (as Netfish's fish). */
-export const SwimmingNote = ({ size = 48 }: { size?: number }) => <Mark size={size} swim className="swim" />;
 
 export function Brand() {
   return (

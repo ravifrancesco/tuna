@@ -2,7 +2,8 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Heart, Music } from 'lucide-react';
 import { t } from '../i18n';
 import { coverUrl } from '../lib/session';
-import { Mark, SwimmingNote } from './Logo';
+import { Mark } from './Logo';
+import { HookFish } from './Splash';
 
 export function Cover({ cover, src, size = 300, round, className = '', alt = '' }: { cover?: string; src?: string; size?: number; round?: boolean; className?: string; alt?: string }) {
   const [failed, setFailed] = useState(false);
@@ -38,7 +39,7 @@ export function LikedCover() {
 /** Loading: the swimming note-fish, fading in after a moment so quick loads never show it. */
 export const Spinner = () => (
   <div className="spinner" role="status" aria-label={t('Loading')}>
-    <SwimmingNote />
+    <HookFish size={56} />
   </div>
 );
 

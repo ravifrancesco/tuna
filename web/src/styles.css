@@ -432,39 +432,19 @@ body.resizing .right {
 .dim {
   color: var(--dim);
 }
-/* Loading: the note-fish swims on the spot, as Netfish's fish does; quick loads never show it. */
+/* Loading: the fish nibbling at the hook, as the opening animation, its line cut short above the
+   hook; quick loads never show it. */
 .spinner {
   display: grid;
   place-items: center;
   margin: 60px auto;
   animation: fish-appear 0.4s ease-out 0.25s both;
 }
-.swim {
-  overflow: visible;
+.spinner .tl svg {
+  clip-path: inset(-12px -60% -30% -60%);
 }
-.swim__body {
-  animation: fish-bob 2.4s ease-in-out infinite;
-}
-.swim__tail {
-  transform-box: fill-box;
-  transform-origin: 100% 50%;
-  animation: fish-wag 0.7s ease-in-out infinite alternate;
-}
-.swim__bubble {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 1.4;
-  opacity: 0;
-  animation: fish-bubble 2.4s ease-out infinite;
-}
-.swim__bubble:nth-of-type(2) {
-  animation-delay: 0.8s;
-}
-.swim__bubble:nth-of-type(3) {
-  animation-delay: 1.6s;
-}
-/* Empty screens: the fish in one quiet colour, drifting. */
-/* A light silhouette, so it shows on the page and on Now Playing's coloured card alike. */
+/* Empty screens: the fish drifting, a light silhouette that shows on the page and on Now Playing's
+   coloured card alike. */
 .empty__fish {
   display: block;
   margin: 0 auto 10px;
@@ -477,36 +457,6 @@ body.resizing .right {
     opacity: 0;
   }
 }
-@keyframes fish-bob {
-  0%,
-  100% {
-    transform: translate(0, 0);
-  }
-  50% {
-    transform: translate(2px, -3px);
-  }
-}
-@keyframes fish-wag {
-  from {
-    transform: rotate(-9deg);
-  }
-  to {
-    transform: rotate(9deg);
-  }
-}
-@keyframes fish-bubble {
-  0% {
-    opacity: 0;
-    transform: translate(0, 0) scale(0.6);
-  }
-  20% {
-    opacity: 0.9;
-  }
-  100% {
-    opacity: 0;
-    transform: translate(6px, -22px) scale(1.1);
-  }
-}
 @keyframes fish-drift {
   0%,
   100% {
@@ -517,9 +467,6 @@ body.resizing .right {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .swim__body,
-  .swim__tail,
-  .swim__bubble,
   .empty__fish {
     animation: none;
   }

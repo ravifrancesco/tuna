@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1 (2026-11-26)
+
+**Changed**
+- **Loading**: while a page loads, the fish nibbles at the hook, as in the opening animation,
+  instead of swimming.
+
+To update: the server (pull the new image); the apps don't need updating.
+
 ## 0.4.0 (2026-11-26)
 
 **New**
