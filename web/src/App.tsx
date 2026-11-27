@@ -41,6 +41,7 @@ import { Setup } from "./pages/Setup";
 import { WorldArtist } from "./pages/WorldArtist";
 import { WorldAlbum } from "./pages/WorldAlbum";
 import { startDevices } from "./lib/devices";
+import { useNextReady } from "./lib/ahead";
 
 function ScrollTop() {
   const { pathname } = useLocation();
@@ -59,6 +60,7 @@ function Shell() {
   // Going somewhere from the sidebar shows that page.
   const { pathname } = useLocation();
   useEffect(() => setNow(undefined), [pathname]);
+  useNextReady();
   return (
     <div className="app">
       <Sidebar />

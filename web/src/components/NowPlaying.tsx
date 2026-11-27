@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Link } from 'react-router';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Airplay, AudioLines, Bluetooth, Car, Cast, Check, ChevronDown, GripVertical, Headphones, Maximize2, Minimize2, MonitorSpeaker, MoreHorizontal, Speaker, Tv, X } from 'lucide-react';
 import type { NativeOutput, Track } from '@tuna/shared';
 import { api } from '../api';
@@ -30,6 +30,8 @@ export function NowPlaying({ tab: firstTab, onClose }: { tab?: 'lyrics' | 'queue
   const track = useShown((s) => s.queue[s.index]);
   const source = useShown((s) => s.source);
   const remote = useRemote();
+  const extras = useRef<HTMLDivElement>(null);
+  useNamesFit(extras);
   // Lyrics, or the queue when the song has none. Picking the queue holds; picking the lyrics only
   // holds for that song.
   const [picked, setPicked] = useState(firstTab && { tab: firstTab, song: track?.id });
@@ -170,7 +172,7 @@ export function NowPlaying({ tab: firstTab, onClose }: { tab?: 'lyrics' | 'queue
         </button>
       </div>
       <div className="now__left">
-        <Cover cover={track.cover} size={1200} />
+        <Cover cover={track.cover} size={1200} steady />
         <div className="now__info">
           <div>
             <Link className="now__title" to={track.albumId ? `/album/${track.albumId}` : '#'} onClick={onClose}>
@@ -184,7 +186,7 @@ export function NowPlaying({ tab: firstTab, onClose }: { tab?: 'lyrics' | 'queue
         </div>
         <WaveProgress />
         <Controls big />
-        <div className="now__extras">
+        <div className="now__extras" ref={extras}>
           {remote ? (
             <>
               <OutputButton />
@@ -237,6 +239,34 @@ const OUTPUT_ICONS: Record<NativeOutput['kind'], typeof Speaker> = { phone: Moni
  * Where it plays: your other devices with Tuna open (the music moves there), and from the apps, the
  * phone itself or AirPods, a car, a speaker, named. Music on another of your devices: that one, lit.
  */
+/**
+ * The device's name beside the sound quality only while both fit whole; otherwise the device shows
+ * as its icon (its menu has the name), so the sound quality is never cut short.
+ */
+function useNamesFit(row: RefObject<HTMLDivElement | null>) {
+  useLayoutEffect(() => {
+    const el = row.current;
+    if (!el) return;
+    // Measured with the name shown and nothing shrunk: does it all fit?
+    const check = () => {
+      el.classList.remove('now__extras--icon');
+      el.classList.add('now__extras--measure');
+      const fits = el.scrollWidth <= el.clientWidth + 1;
+      el.classList.remove('now__extras--measure');
+      el.classList.toggle('now__extras--icon', !fits);
+    };
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    const mo = new MutationObserver(check);
+    mo.observe(el, { subtree: true, childList: true, characterData: true });
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+    };
+  }, [row]);
+}
+
 function OutputButton() {
   const output = usePlayer((s) => s.output);
   const remote = useRemote();
@@ -280,7 +310,7 @@ function OutputButton() {
     );
   }
   return (
-    <button className={`quality output ${away ? 'on' : ''}`} aria-label={t('Play on another device')} onClick={open}>
+    <button className={`quality output ${away ? 'on' : ''}`} aria-label={t('Play on another device')} title={away ? output.name : undefined} onClick={open}>
       <Icon size={14} />
       {away && <span className="output__name">{output.name}</span>}
     </button>
@@ -332,15 +362,9 @@ function LyricsView({ songId }: { songId: string }) {
   const lyrics = useQuery(lyricsOf(songId));
   const reported = useShown((s) => s.time);
   const playing = useShown((s) => s.playing && !s.buffering);
-  const nextId = useShown((s) => s.queue[s.index + 1]?.id);
-  const qc = useQueryClient();
   const box = useRef<HTMLDivElement>(null);
   const lines = lyrics.data?.lines ?? [];
   const synced = Boolean(lyrics.data?.synced);
-  // The next song's lyrics ahead, so skipping shows them at once.
-  useEffect(() => {
-    if (nextId) void qc.prefetchQuery(lyricsOf(nextId));
-  }, [nextId, qc]);
   // The apps' players say where they are about once a second: in between, the lyrics move on by themselves.
   // (Kept as it's drawn, so a new song never starts from the last one's time.)
   const said = useRef({ time: reported, at: performance.now() });
@@ -492,7 +516,7 @@ function RemoteQueue() {
     <div className="swipe" key={key}>
       <div className={`track ${isNow ? 'playing' : ''}`} onContextMenu={(e) => (e.preventDefault(), showMenu(e, <TrackMenu track={track} />))}>
         <div className="track__main">
-          <Cover cover={track.cover} size={100} />
+          <Cover cover={track.cover} size={100} steady />
           <div className="track__text">
             <span className="track__title">{track.title}</span>
             <span className="track__artist">{track.artist}</span>
@@ -547,7 +571,7 @@ function QueueRow({ trackIndex, onGrip, lift }: { trackIndex: number; onClose?: 
         onContextMenu={(e) => swipe.fromTouch(e) || (e.preventDefault(), menu(e))}
       >
         <div className="track__main">
-          <Cover cover={track.cover} size={100} />
+          <Cover cover={track.cover} size={100} steady />
           <div className="track__text">
             <button className="track__title" style={{ textAlign: 'left', maxWidth: '100%' }} onClick={() => jump(trackIndex)}>
               {track.title}

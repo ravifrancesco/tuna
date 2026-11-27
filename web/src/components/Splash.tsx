@@ -138,12 +138,20 @@ const REST = [0, 1008, NIBBLE_MS];
 const TUG_MS = 450;
 
 /**
+ * Away from home: the tunnel above the mark, taken over from the apps' loading page. The fish bites
+ * the next time it's back at rest, the logo is reeled up into the tunnel, the tunnel comes down below
+ * it, and the logo rises out of its top into place. How long each takes (ms).
+ */
+type Tunnel = 'nibble' | 'bite' | 'reel' | 'slide' | 'rise' | 'done';
+const THROUGH: Partial<Record<Tunnel, [next: Tunnel, ms: number]>> = { bite: ['reel', 700], reel: ['slide', 850], slide: ['rise', 800], rise: ['done', 800] };
+
+/**
  * The opening animation, doubling as the loading screen, as in Netfish: the fish nibbling at the
  * hook carries on in step from the apps' loading page; once Tuna is ready it bites the next time it's
- * back at rest, the tug makes the logo, the word gives a little hop, and it all fades. Away from home (#tunnel), the loading page
- * left only the tunnel, a breathing ring the mark swam into: it's taken over here at the same place,
- * size and breath, and the mark comes out of it. Click or any key: as soon as Tuna is ready.
- * `quick`: just the loop while Tuna starts (it played already this session).
+ * back at rest, the tug makes the logo, the word gives a little hop, and it all fades. Away from home
+ * (#tunnel) it goes through the tunnel first (Tunnel, above) and the word comes once Tuna is ready.
+ * Click or any key: as soon as Tuna is ready. `quick`: just the loop while Tuna starts (it played
+ * already this session).
  */
 export function Splash({ ready = false, quick = false, onDone }: { ready?: boolean; quick?: boolean; onDone?: () => void }) {
   const root = useRef<HTMLDivElement>(null);
@@ -151,6 +159,21 @@ export function Splash({ ready = false, quick = false, onDone }: { ready?: boole
   const [biting, setBiting] = useState(false);
   const [landed, setLanded] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const [tunnel, setTunnel] = useState<Tunnel>(viaTunnel && !quick && !reducedMotion() ? 'nibble' : 'done');
+
+  useEffect(() => {
+    if (!viaTunnel || tunnel === 'done') return;
+    if (hurry) return setTunnel('done');
+    let timer: number;
+    if (tunnel === 'nibble') {
+      const phase = Date.now() % NIBBLE_MS;
+      timer = window.setTimeout(() => setTunnel('bite'), Math.min(...REST.filter((at) => at >= phase)) - phase);
+    } else {
+      const [next, ms] = THROUGH[tunnel]!;
+      timer = window.setTimeout(() => setTunnel(next), ms);
+    }
+    return () => clearTimeout(timer);
+  }, [tunnel, hurry]);
 
   useLayoutEffect(() => onClock(root.current), []);
 
@@ -164,8 +187,8 @@ export function Splash({ ready = false, quick = false, onDone }: { ready?: boole
     if (!ready || landed) return;
     if (quick || hurry || reducedMotion()) return setLanded(true);
     if (viaTunnel) {
-      const timer = setTimeout(() => setLanded(true), 300);
-      return () => clearTimeout(timer);
+      if (tunnel === 'done') setLanded(true);
+      return;
     }
     if (biting) {
       const timer = setTimeout(() => setLanded(true), TUG_MS);
@@ -174,11 +197,11 @@ export function Splash({ ready = false, quick = false, onDone }: { ready?: boole
     const phase = Date.now() % NIBBLE_MS;
     const timer = setTimeout(() => setBiting(true), Math.min(...REST.filter((at) => at >= phase)) - phase);
     return () => clearTimeout(timer);
-  }, [ready, landed, biting, quick, hurry]);
+  }, [ready, landed, biting, quick, hurry, tunnel]);
 
   useEffect(() => {
     if (!landed) return;
-    const timer = setTimeout(() => setLeaving(true), quick || hurry ? 0 : viaTunnel ? 1100 : 650);
+    const timer = setTimeout(() => setLeaving(true), quick || hurry ? 0 : 650);
     return () => clearTimeout(timer);
   }, [landed, quick, hurry]);
 
@@ -191,20 +214,41 @@ export function Splash({ ready = false, quick = false, onDone }: { ready?: boole
   return (
     <div
       ref={root}
-      className={`splash${viaTunnel ? ' splash--tunnel' : ''}${landed ? ' is-landed' : ''}${leaving ? ' is-leaving' : ''}`}
+      className={`splash${viaTunnel ? ` splash--tunnel is-${tunnel}` : ''}${landed ? ' is-landed' : ''}${leaving ? ' is-leaving' : ''}`}
       onClick={() => setHurry(true)}
       role="presentation"
     >
       <div className="splash__stage">
         <div className="splash__mark">
           {viaTunnel && (
-            <span className="splash__ring" aria-hidden="true">
+            <span className="splash__ring splash__ring--back" aria-hidden="true">
               <i />
             </span>
           )}
-          {/* The logo whenever it isn't nibbling or biting: in the tunnel, when it played already this
-              session, or when it's skipped, so it never leaves on the fish and the hook apart. */}
-          <HookFish state={biting ? 'biting' : viaTunnel || quick || landed ? 'logo' : undefined} />
+          {/* The logo whenever it isn't nibbling or biting: once through the tunnel, when it played
+              already this session, or when it's skipped, so it never leaves on the fish and the hook apart. */}
+          <div className="splash__clip">
+            <HookFish
+              state={
+                viaTunnel
+                  ? tunnel === 'nibble'
+                    ? undefined
+                    : tunnel === 'bite'
+                      ? 'biting'
+                      : 'logo'
+                  : biting
+                    ? 'biting'
+                    : quick || landed
+                      ? 'logo'
+                      : undefined
+              }
+            />
+          </div>
+          {viaTunnel && (
+            <span className="splash__ring splash__ring--front" aria-hidden="true">
+              <i />
+            </span>
+          )}
         </div>
         <div className="splash__below">
           <span className="splash__word">tuna</span>

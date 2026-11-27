@@ -171,8 +171,8 @@ sealed class MainWindow : Form
             Navigate(server);
             return;
         }
-        // Away from home, through the tunnel when there is one, as in Netfish: the loading page shows
-        // a ring ahead of the mark, the mark swims in, and Tuna (#tunnel) takes the ring over.
+        // Away from home, through the tunnel when there is one: the loading page shows a tunnel above
+        // the mark, and Tuna (#tunnel) takes it over and reels the logo through it.
         if (Tunnel.Port != null)
         {
             await LoadingTunnel("connecting");

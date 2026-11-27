@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.4.13 (2026-11-27)
+
+**New**
+- **Away from home, a new opening:** the tunnel hangs above the logo, the line running up into it.
+  Once connected the fish bites, the logo is reeled up into the tunnel, the tunnel comes down below
+  it, and the logo rises out of its top into place.
+
+**Changed**
+- **The next song is ready before it plays:** its cover, colours, waveform and lyrics are fetched
+  while the song before plays, so the pill and Now Playing change all at once. Covers in lists fade
+  in as they arrive.
+- **Now Playing:** when there's no room for the device's name beside the whole sound quality, the
+  device shows as its icon (its menu has the name).
+
+**Fixed**
+- **The apps used a lot of power while playing:** Now Playing's waveform was drawn 60 times a second
+  (on a Mac, about a third of a core); now only when it changes. Fresh catch's cover moves for a
+  while when it comes on screen, then rests.
+- **"On its way"** counted songs as albums ("2638 more albums to ask for"); it now says how many
+  songs and how many albums.
+- **Phones:** long playlists showed two scroll bars.
+
+To update: the server (pull the new image) and the apps (the new opening away from home).
+
 ## 0.4.12 (2026-11-27)
 
 **Fixed**

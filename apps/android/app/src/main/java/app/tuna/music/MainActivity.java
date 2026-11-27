@@ -308,7 +308,7 @@ public class MainActivity extends Activity {
     private void start(String server) {
         web.loadUrl(LOADING);
         new Thread(() -> {
-            // Away from home, as in Netfish: a ring ahead of the mark on the loading page, then through it.
+            // Away from home: a tunnel above the mark on the loading page; Tuna (#tunnel) reels the logo through it.
             Server.Route route = Server.route(server, tunnel, () -> runOnUiThread(() -> loadingSays("connecting")));
             if (route != Server.Route.NONE && downloads != null) downloads.resume();
             runOnUiThread(() -> tunnel.applyToPage(() -> {
@@ -319,7 +319,7 @@ public class MainActivity extends Activity {
                     return;
                 }
                 forgetHistory = true; // back never lands on the loading page
-                // The mark swims into the tunnel (timed from when the page has it); Tuna (#tunnel) takes it over.
+                // Connected (timed from when the page says so); Tuna (#tunnel) takes the tunnel over.
                 if (route == Server.Route.AWAY) loadingSays("connected", () -> web.postDelayed(() -> web.loadUrl(server + "/#tunnel"), 900));
                 else web.loadUrl(server + "/");
             }));

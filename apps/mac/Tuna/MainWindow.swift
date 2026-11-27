@@ -91,8 +91,8 @@ final class MainWindow: NSWindowController, NSWindowDelegate, WKNavigationDelega
     private func start(_ server: URL) {
         web.load(URLRequest(url: LocalScheme.url("loading.html")))
         Task { @MainActor in
-            // Away from home, through the tunnel when there is one, as in Netfish: a ring ahead of
-            // the mark on the loading page, then the mark swims in and Tuna (#tunnel) takes it over.
+            // Away from home, through the tunnel when there is one: a tunnel above the mark on the
+            // loading page; once through, Tuna (#tunnel) takes it over and reels the logo through it.
             let says = { (state: String) in self.web.evaluateJavaScript("window.tunaTunnel && window.tunaTunnel('\(state)')") }
             switch await Tunnel.shared.route(server, connecting: { says("connecting") }) {
             case .home:

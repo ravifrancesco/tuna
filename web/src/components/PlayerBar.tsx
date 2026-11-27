@@ -87,7 +87,7 @@ export function MiniPlayer({ onOpen }: { onOpen: () => void }) {
   if (!track) return null;
   return (
     <div className={`mini ${remote ? 'mini--remote' : ''}`} style={{ '--tint': tint } as React.CSSProperties} onClick={onOpen} role="button" aria-label={t('Now playing')}>
-      <Cover cover={track.cover} size={100} />
+      <Cover cover={track.cover} size={100} steady />
       <div className="mini__text">
         <span className="bar__title">
           {together && !remote && <TogetherIcon size={14} />}

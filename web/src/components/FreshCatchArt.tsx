@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { t } from '../i18n';
 
 /** The same sky every time: stars at fixed places, each twinkling in its own time. */
@@ -24,15 +24,44 @@ const SCHOOL = [
   { x: 34, y: 196, size: 1.35, time: 9.5, delay: 8.2 },
 ].map((f) => ({ ...f, angle: (Math.atan2(NEBULA.y - f.y, NEBULA.x - f.x) * 180) / Math.PI }));
 
+/** How long the sky moves once it's on screen (or pointed at), before it rests as a still. */
+const LIVE_MS = 12_000;
+
 /**
  * Fresh catch's cover: a school of fish swimming through deep space towards a glowing nebula,
  * growing smaller as they go and fading into it, among twinkling stars and the odd shooting star.
+ * It moves for a while when it comes on screen (and again when pointed at), then rests: always
+ * moving, a big one kept the graphics busy the whole time.
  */
 export function FreshCatchArt({ title = true }: { title?: boolean }) {
   const id = useId().replace(/:/g, '');
   const u = (name: string) => `url(#${name}${id})`;
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = box.current;
+    if (!el || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    let rest: number | undefined;
+    const live = () => {
+      el.classList.add('is-live');
+      clearTimeout(rest);
+      rest = window.setTimeout(() => el.classList.remove('is-live'), LIVE_MS);
+    };
+    let seen = false;
+    const io = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting && !seen) live();
+      if (!e.isIntersecting) el.classList.remove('is-live');
+      seen = e.isIntersecting;
+    }, { threshold: 0.25 });
+    io.observe(el);
+    el.addEventListener('pointerenter', live);
+    return () => {
+      io.disconnect();
+      clearTimeout(rest);
+      el.removeEventListener('pointerenter', live);
+    };
+  }, []);
   return (
-    <div className="cover space-art">
+    <div className="cover space-art" ref={box}>
       <svg viewBox="0 0 200 200" aria-hidden="true">
         <defs>
           <radialGradient id={`sky${id}`} cx="68%" cy="30%" r="85%">

@@ -66,9 +66,13 @@ export function DateScroller() {
       const { top, bottom } = track();
       return top + ratio() * (bottom - top - HANDLE) + HANDLE / 2;
     };
+    // Phones, a long list: the handle is its scrollbar (iOS would draw its own beside it).
+    const own = () => touch && main.classList.toggle('main--handle', long());
+    own();
     const onScroll = () => {
       clearTimeout(idle);
       if (touch) {
+        own();
         if (!long()) return setHandle(undefined);
         const y = handleY();
         setHandle({ y, dragging });
@@ -117,6 +121,7 @@ export function DateScroller() {
     };
     return () => {
       clearTimeout(idle);
+      main.classList.remove('main--handle');
       main.removeEventListener('scroll', onScroll);
       main.removeEventListener('pointerdown', onDown);
       window.removeEventListener('pointerup', onUp);

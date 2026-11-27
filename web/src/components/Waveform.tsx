@@ -71,11 +71,11 @@ function Waveform({ peaks }: { peaks: number[] }) {
       for (let j = from; j < to; j++) sum += peaks[j] ?? 0;
       return sum / (to - from) / 255;
     });
-    let frame = 0;
-    const draw = () => {
-      const now = getShown();
-      const elapsed = now.playing ? (performance.now() - said.current.at) / 1000 : 0;
-      const at = duration ? Math.min(1, (said.current.time + elapsed) / duration) : 0;
+    // Drawn again only when a bar changes colour (every second or two), not every frame: a song
+    // playing would otherwise keep the page and the graphics busy all the time.
+    let timer = 0;
+    let shown = -1;
+    const draw = (at: number) => {
       ctx.clearRect(0, 0, width, h);
       for (let i = 0; i < count; i++) {
         const x = i * (BAR + GAP);
@@ -87,10 +87,23 @@ function Waveform({ peaks }: { peaks: number[] }) {
         else ctx.rect(x, (h - barH) / 2, BAR, barH);
         ctx.fill();
       }
-      if (now.playing) frame = requestAnimationFrame(draw);
     };
-    draw();
-    return () => cancelAnimationFrame(frame);
+    const tick = () => {
+      const now = getShown();
+      const t = said.current.time + (now.playing ? (performance.now() - said.current.at) / 1000 : 0);
+      const at = duration ? Math.min(1, t / duration) : 0;
+      // How many bars are played (a bar is once the playhead reaches its middle).
+      const played = Math.max(0, Math.min(count, Math.floor((at * width - BAR / 2) / (BAR + GAP)) + 1));
+      if (played !== shown) {
+        shown = played;
+        draw(at);
+      }
+      if (!now.playing || played >= count || !duration) return;
+      const next = ((played * (BAR + GAP) + BAR / 2) / width) * duration;
+      timer = window.setTimeout(tick, Math.min(1000, Math.max(16, (next - t) * 1000)));
+    };
+    tick();
+    return () => clearTimeout(timer);
   }, [peaks, width, duration, hover, playing, time]);
 
   const pct = duration ? Math.min(100, (time / duration) * 100) : 0;

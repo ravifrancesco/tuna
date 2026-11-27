@@ -6,13 +6,49 @@ import { Mark } from './Logo';
 import { FreshCatchArt } from './FreshCatchArt';
 import { HookFish } from './Splash';
 
-export function Cover({ cover, src, size = 300, round, className = '', alt = '' }: { cover?: string; src?: string; size?: number; round?: boolean; className?: string; alt?: string }) {
+/**
+ * A cover that fades in as it arrives (one already here shows at once). `steady` (the player's): the
+ * last picture stays until the next one is ready, so a new song changes all at once.
+ */
+export function Cover({ cover, src, size = 300, round, className = '', alt = '', steady }: { cover?: string; src?: string; size?: number; round?: boolean; className?: string; alt?: string; steady?: boolean }) {
   const [failed, setFailed] = useState(false);
   const url = src ?? coverUrl(cover, size);
-  useEffect(() => setFailed(false), [url]);
+  const [held, setHeld] = useState(url);
+  const [arrived, setArrived] = useState<string>();
+  useEffect(() => {
+    setFailed(false);
+    if (!steady || url === held) return;
+    if (!url) return setHeld(undefined);
+    let gone = false;
+    const next = new Image();
+    const swap = () => !gone && setHeld(url);
+    next.onload = swap;
+    next.onerror = swap;
+    next.src = url;
+    if (next.complete) swap();
+    return () => {
+      gone = true;
+    };
+  }, [url, steady, held]);
+  const shown = steady ? held : url;
   return (
     <div className={`cover ${round ? 'cover--round' : ''} ${className}`}>
-      {url && !failed ? <img src={url} alt={alt} loading="lazy" decoding="async" onError={() => setFailed(true)} /> : <Music size={Math.max(18, size / 8)} />}
+      {shown && !failed ? (
+        <img
+          src={shown}
+          alt={alt}
+          loading={steady ? undefined : 'lazy'}
+          decoding="async"
+          className={arrived === shown ? 'is-in' : ''}
+          ref={(el) => {
+            if (el?.complete && el.naturalWidth && arrived !== shown) setArrived(shown);
+          }}
+          onLoad={() => setArrived(shown)}
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <Music size={Math.max(18, size / 8)} />
+      )}
     </div>
   );
 }

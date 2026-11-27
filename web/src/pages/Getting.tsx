@@ -7,21 +7,25 @@ import { t, tn } from '../i18n';
 import { ago } from '../lib/format';
 import { artUrl, useMe } from '../lib/session';
 
-/** Albums Get all still has to ask for (a few at a time), with Stop for whoever asked, or an admin. */
+/** Songs and albums still to ask for (a few at a time), with Stop for whoever asked, or an admin. */
 function StillToAsk() {
   const qc = useQueryClient();
   const me = useMe();
   const left = useQuery({ queryKey: ['still-to-ask'], queryFn: api.stillToAsk, refetchInterval: 15_000 });
   if (!left.data?.count) return null;
+  // Songs (Get the missing songs, Look again) and albums (Get all) apart.
+  const songs = left.data.songs ?? 0;
+  const albums = left.data.albums ?? left.data.count;
+  const what = [songs ? tn(songs, '{n} song', '{n} songs') : '', albums ? tn(albums, '{n} album', '{n} albums') : ''].filter(Boolean).join(' · ');
   const stop = async () => {
     const { stopped } = await api.stopAsking();
-    toast(tn(stopped, 'Stopped asking for {n} album', 'Stopped asking for {n} albums'));
+    toast(tn(stopped, 'Stopped asking for {n} more', 'Stopped asking for {n} more'));
     void qc.invalidateQueries({ queryKey: ['still-to-ask'] });
   };
   return (
     <div className="list-item list-item--quiet">
       <div className="list-item__text">
-        <b>{tn(left.data.count, '{n} more album to ask for', '{n} more albums to ask for')}</b>
+        <b>{t('Still to ask for: {what}', { what })}</b>
       </div>
       {(me?.admin || left.data.mine > 0) && (
         <button className="btn btn--small" onClick={() => void stop()}>

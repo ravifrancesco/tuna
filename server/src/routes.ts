@@ -229,7 +229,7 @@ export async function apiRoutes(app: FastifyInstance) {
   app.get('/get/waiting', async (req) => {
     const s = requireUser(req);
     const albums = stillToAsk(s);
-    return { count: albums.count + songsWaiting(), mine: albums.mine + songsWaiting(s.name) };
+    return { count: albums.count + songsWaiting(), mine: albums.mine + songsWaiting(s.name), albums: albums.count, songs: songsWaiting() };
   });
   app.post('/get/stop', async (req) => {
     const s = requireUser(req);

@@ -146,7 +146,7 @@ export const api = {
   radioNew: (seed: string, heard = 0) => call<Track[]>('GET', `/radio/new?seed=${encodeURIComponent(seed)}&heard=${heard}`),
   autoplay: (seeds: string[], have: string[]) => call<Track[]>('POST', '/autoplay', { seeds, have }),
   /** Albums still to ask for (Get all), a few at a time: all of them, and how many are mine. */
-  stillToAsk: () => call<{ count: number; mine: number }>('GET', '/get/waiting'),
+  stillToAsk: () => call<{ count: number; mine: number; albums?: number; songs?: number }>('GET', '/get/waiting'),
   stopAsking: () => call<{ stopped: number }>('POST', '/get/stop'),
   /** This account's devices (as Spotify Connect): what this one plays, commands to another, handing the music on. */
   devices: {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { coverUrl } from './session';
 
 const DARK = '#3b2d63';
@@ -7,14 +7,21 @@ const BRIGHT = 'hsl(262 42% 44%)';
 /** A colour from the cover, for the background behind it. */
 export const useTint = (cover?: string): string => useTints(cover).tint;
 
-/** The same colour dark (behind the cover) and bright (the lyrics card on phones). */
-export function useTints(cover?: string): { tint: string; bright: string } {
-  const [tints, setTints] = useState({ tint: DARK, bright: BRIGHT });
-  useEffect(() => {
-    const url = coverUrl(cover, 64);
-    if (!url) return;
+type Tints = { tint: string; bright: string };
+const PLAIN: Tints = { tint: DARK, bright: BRIGHT };
+const known = new Map<string, Tints>();
+const working = new Map<string, Promise<void>>();
+
+/** Works out a cover's colours, once (the next song's ahead, so they change with it). */
+export function prepareTint(cover?: string): Promise<void> {
+  const url = coverUrl(cover, 64);
+  if (!cover || !url || known.has(cover)) return Promise.resolve();
+  const already = working.get(cover);
+  if (already) return already;
+  const done = new Promise<void>((resolve) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
+    img.onerror = () => resolve();
     img.onload = () => {
       try {
         const c = document.createElement('canvas');
@@ -32,14 +39,28 @@ export function useTints(cover?: string): { tint: string; bright: string } {
         }
         const n = d.length / 4;
         [r, g, b] = [r / n, g / n, b / n];
-        setTints({ tint: `rgb(${Math.round(r * 0.75)}, ${Math.round(g * 0.75)}, ${Math.round(b * 0.75)})`, bright: bright(r, g, b) });
+        known.set(cover, { tint: `rgb(${Math.round(r * 0.75)}, ${Math.round(g * 0.75)}, ${Math.round(b * 0.75)})`, bright: bright(r, g, b) });
       } catch {
         /* the colour is a nicety */
       }
+      resolve();
     };
     img.src = url;
+  }).finally(() => working.delete(cover));
+  working.set(cover, done);
+  return done;
+}
+
+/** The same colour dark (behind the cover) and bright (the lyrics card on phones); the last one stays until the next is ready. */
+export function useTints(cover?: string): Tints {
+  const [, redraw] = useState(0);
+  const last = useRef(PLAIN);
+  useEffect(() => {
+    if (cover && !known.has(cover)) void prepareTint(cover).then(() => redraw((n) => n + 1));
   }, [cover]);
-  return tints;
+  const now = cover ? known.get(cover) : undefined;
+  if (now) last.current = now;
+  return now ?? (cover ? last.current : PLAIN);
 }
 
 /** The cover's hue, saturated and mid-light so white text reads on it; grey covers get Tuna's purple. */

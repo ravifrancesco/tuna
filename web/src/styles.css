@@ -515,6 +515,14 @@ body.resizing .right {
   height: 100%;
   object-fit: cover;
 }
+/* A cover fades in as it arrives (one already here is simply there). */
+.cover:not(.cover--grid) > img {
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.cover:not(.cover--grid) > img.is-in {
+  opacity: 1;
+}
 .cover--round {
   border-radius: 50%;
 }
@@ -2723,6 +2731,12 @@ button.song-get:hover {
 }
 
 /* Dragging a long list's scrollbar (phones: its handle): the month each song went in, beside it. */
+.main.main--handle {
+  scrollbar-width: none;
+}
+.main.main--handle::-webkit-scrollbar {
+  display: none;
+}
 .date-bubble {
   position: fixed;
   z-index: 60;
@@ -2815,6 +2829,10 @@ button.song-get:hover {
   display: block;
   width: 100%;
   height: 100%;
+}
+/* Still unless it has just come on screen or is pointed at (FreshCatchArt). */
+.space-art:not(.is-live) * {
+  animation-play-state: paused !important;
 }
 .space-art__star {
   animation: space-twinkle 3s ease-in-out infinite alternate;
@@ -3002,17 +3020,22 @@ button.song-get:hover {
   color: #b9a3ff;
   font-size: 14px;
 }
-/* The tunnel, taken over from the loading page: centred, 1.7 times its size there, breathing. */
+/*
+ * Away from home: the tunnel, taken over from the apps' loading page at the same place, size and
+ * breath (above the mark, the line running up into it). The fish bites, the logo is reeled up into
+ * it (nothing shows above its middle: that's inside), it comes down below the logo's place, and the
+ * logo rises out of its top (nothing shows below its middle). Splash runs the steps (is-…).
+ */
 .splash__ring {
   position: absolute;
   left: 48px;
-  top: 48px;
-  width: 20px;
-  height: 46px;
-  transform: translate(-50%, -50%) scale(1.7);
+  top: -23px;
+  width: 96px;
+  height: 21px;
+  transform: translate(-50%, -50%);
   transition:
-    transform 0.8s cubic-bezier(0.3, 0, 0.2, 1),
-    opacity 0.8s ease;
+    transform 0.8s cubic-bezier(0.45, 0, 0.25, 1),
+    opacity 0.5s ease;
 }
 .splash__ring i {
   position: absolute;
@@ -3022,25 +3045,54 @@ button.song-get:hover {
   border-radius: 50%;
   animation: tl-breathe 1.6s ease-in-out infinite;
 }
-.splash--tunnel .tl {
+/* Its far half behind the mark, its near half in front. */
+.splash__ring--back {
+  clip-path: inset(-40% -10% 50% -10%);
+}
+.splash__ring--front {
+  clip-path: inset(50% -10% -40% -10%);
+}
+.splash--tunnel .splash__clip {
+  clip-path: inset(-23px -120px -400px -120px);
+}
+.splash--tunnel.is-slide .splash__clip,
+.splash--tunnel.is-rise .splash__clip,
+.splash--tunnel.is-done .splash__clip {
+  clip-path: inset(-400px -120px 8px -120px);
+}
+.splash--tunnel.is-slide .splash__ring,
+.splash--tunnel.is-rise .splash__ring,
+.splash--tunnel.is-done .splash__ring {
+  transform: translate(-50%, -50%) translateY(111px) scale(1.06);
+}
+.splash--tunnel.is-done .splash__ring {
   opacity: 0;
-  transform: scale(0.5);
+}
+.splash--tunnel .tl {
+  transition: transform 0.85s cubic-bezier(0.55, 0, 0.8, 0.45);
+}
+.splash--tunnel.is-reel .tl {
+  transform: translateY(-130px);
+}
+.splash--tunnel.is-slide .tl {
+  transform: translateY(115px);
+  opacity: 0;
+  transition: none;
+}
+.splash--tunnel.is-rise .tl,
+.splash--tunnel.is-done .tl {
+  transform: none;
+  opacity: 1;
   transition:
-    opacity 0.5s ease 0.1s,
-    transform 0.7s cubic-bezier(0.3, 1.4, 0.5, 1) 0.1s;
+    transform 0.8s cubic-bezier(0.2, 0.85, 0.3, 1.06),
+    opacity 0.3s ease;
 }
 .splash--tunnel .splash__word {
   opacity: 0;
   transition: opacity 0.4s ease 0.35s;
 }
-.splash--tunnel.is-landed .tl,
 .splash--tunnel.is-landed .splash__word {
   opacity: 1;
-  transform: none;
-}
-.splash--tunnel.is-landed .splash__ring {
-  transform: translate(-50%, -50%) scale(4.5);
-  opacity: 0;
 }
 @keyframes tl-breathe {
   0%,
@@ -3049,7 +3101,7 @@ button.song-get:hover {
     opacity: 0.7;
   }
   50% {
-    transform: scale(1.12);
+    transform: scale(1.06);
     opacity: 1;
   }
 }
@@ -3448,6 +3500,20 @@ html.tv .track:focus-within {
   align-items: center;
   gap: 8px;
   min-width: 0;
+  width: 100%;
+}
+/* Not enough room for the device's name and the whole sound quality: the device as its icon. */
+.now__extras--icon .output__name {
+  display: none;
+}
+.now__extras--measure > * {
+  flex-shrink: 0;
+}
+.now__extras--measure .quality__as {
+  overflow: visible;
+}
+.now__extras--measure .output__name {
+  max-width: none;
 }
 .output.on {
   color: var(--accent-light);

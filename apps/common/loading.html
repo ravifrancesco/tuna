@@ -22,26 +22,21 @@
   .status { min-height: 1.5em; color: #8a84a0; font-size: 14px; opacity: 0; animation: in 0.6s ease-out 1.4s forwards; }
   .tunnel .status, .through .status { color: #b9a3ff; opacity: 1; animation: none; }
 
-  /* Away from home (tunaTunnel below), as in Netfish: the tunnel, an oval ring seen from the side,
-     breathes ahead of the mark; once through, the mark swims into it and is gone past its middle,
-     and the ring comes to the centre, growing. The web page's opening animation (web Splash, with
-     #tunnel) takes over the same ring at the same place, size and breath. */
+  /* Away from home (tunaTunnel below): the tunnel, a wide ring seen from just below, hangs above the
+     mark and the line runs up into it, breathing, while the fish nibbles. The web page's opening
+     animation (web Splash, with #tunnel) takes it over at the same place, size and breath: the fish
+     bites, the logo is reeled up into the tunnel, the tunnel comes down below it and the logo rises
+     out of its top into place. Only the ring's far half is behind the mark; nothing of the mark
+     shows above the ring's middle (it's inside the tunnel). */
   .mark { position: relative; width: 96px; height: 96px; }
-  .ring { position: absolute; left: 112px; top: 48px; width: 20px; height: 46px; transform: translate(-50%, -50%); opacity: 0; transition: opacity 0.6s ease; }
+  .ring { position: absolute; left: 48px; top: -23px; width: 96px; height: 21px; transform: translate(-50%, -50%); opacity: 0; transition: opacity 0.6s ease; }
   .ring i { position: absolute; inset: 0; box-sizing: border-box; border: 2px solid #9b7bff; border-radius: 50%; }
-  .ring.back { clip-path: inset(-30% 50% -30% -30%); }
-  .ring.front { clip-path: inset(-30% -30% -30% 50%); }
+  .ring.back { clip-path: inset(-40% -10% 50% -10%); }
+  .ring.front { clip-path: inset(50% -10% -40% -10%); }
   .tunnel .ring, .through .ring { opacity: 1; }
   .tunnel .ring i, .through .ring i { animation: breathe 1.6s ease-in-out infinite; }
-  .through .ring { animation: come 0.75s cubic-bezier(0.6, 0, 0.3, 1) forwards; }
-  .through .mark svg { animation: swim-in 0.8s cubic-bezier(0.45, 0, 0.7, 0.55) forwards; }
-  .through .mark .clip { animation: hide 0.75s cubic-bezier(0.6, 0, 0.3, 1) forwards; }
-  .through .word { animation: out 0.4s ease forwards; }
-  @keyframes breathe { 0%, 100% { transform: scale(1); opacity: 0.7; } 50% { transform: scale(1.12); opacity: 1; } }
-  @keyframes come { to { left: 48px; transform: translate(-50%, -50%) scale(1.7); } }
-  @keyframes hide { from { clip-path: inset(-60% -30px -60% -60%); } to { clip-path: inset(-60% 48px -60% -60%); } }
-  @keyframes swim-in { to { transform: translateX(64px); } }
-  @keyframes out { from { opacity: 1; } to { opacity: 0; transform: translateY(-4px); } }
+  .tunnel .clip, .through .clip { clip-path: inset(-23px -120px -120px -120px); }
+  @keyframes breathe { 0%, 100% { transform: scale(1); opacity: 0.7; } 50% { transform: scale(1.06); opacity: 1; } }
 
   /* Local units, origin at the mark's own 0,0. The resting values are the logo itself. */
   .all, .hook, .fish, .tailpos { transform-box: view-box; transform-origin: 0 0; }
@@ -168,8 +163,8 @@
   const SAYS = it
     ? { connecting: 'Fuori casa, mi collego…', connected: 'Connesso tramite WireGuard' }
     : { connecting: 'Away from home, connecting…', connected: 'Connected through WireGuard' };
-  // The apps, away from home: 'connecting' (the ring appears, breathing), then 'connected' (the mark
-  // swims into it; the apps open Tuna with #tunnel once it's in).
+  // The apps, away from home: 'connecting' (the tunnel appears above, breathing), then 'connected'
+  // (it says so; the apps open Tuna with #tunnel, whose opening animation carries on from here).
   window.tunaTunnel = (state) => {
     document.body.classList.toggle('tunnel', state === 'connecting');
     document.body.classList.toggle('through', state === 'connected');

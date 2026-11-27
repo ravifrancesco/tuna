@@ -60,7 +60,7 @@ export function PillPlayer({ onOpen }: { onOpen: (tab?: 'lyrics' | 'queue') => v
     >
       <div className="capsule__left">
         <button className="capsule__cover" onClick={() => onOpen()} aria-label={t('Now playing')}>
-          <Cover cover={track.cover} size={150} round />
+          <Cover cover={track.cover} size={150} round steady />
         </button>
         <div className="capsule__text">
           <span className="bar__title">
