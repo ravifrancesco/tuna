@@ -109,7 +109,7 @@ export interface Mix {
 
 export type GetState =
   | { state: 'none' }
-  | { state: 'looking' }
+  | { state: 'looking'; /** Waiting its turn (a few songs are looked for at a time). */ queued?: boolean }
   | { state: 'downloading'; progress: number; left?: string }
   | { state: 'ready'; albumId?: string; /** A song got on its own: it, in the library (to download onto a device). */ track?: Track }
   | { state: 'notFound' };

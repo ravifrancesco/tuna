@@ -67,6 +67,7 @@ export default {
   Looking: 'In cerca',
   'Not found yet · Try again': 'Non ancora trovato · Riprova',
   'Not found yet': 'Non ancora trovato',
+  Waiting: 'In attesa',
   'Import a file': 'Importa un file',
   'Import files': 'Importa file',
   Done: 'Fatto',

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.1 (2026-11-27)
+
+**Fixed**
+- **The apps used a lot of energy on playlists with songs on their way:** each of those songs asked
+  the server where it was at by itself, every five seconds, for the whole list of what's on its way
+  (on a playlist with 77 songs waiting, over 200 requests in 15 seconds, and every one of them
+  spinning). Now one small look every five seconds covers every song on screen, and only what's
+  moving is sent. Songs far down a long list now update too.
+
+**Changed**
+- **A dot instead of a spinning circle:** faint and still while a song waits its turn, glowing while
+  it's looked for (a few at a time), then a little circle that fills up as it downloads. The button
+  lines up with the ⋯ of the songs around it.
+
+To update: the server (pull the new image). The apps need nothing new.
+
 ## 0.5.0 (2026-11-27)
 
 **New**

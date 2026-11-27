@@ -289,6 +289,13 @@ export function opened(username: string) {
  * What's been asked for (albums, and `more`: songs), newest first; what arrived shows until the visit
  * after the one it was seen on.
  */
+/** Albums on their way, and those that just arrived: for the Get buttons on screen. */
+export async function albumsMoving() {
+  await freshen();
+  const lately = Date.now() - 120_000;
+  return requests.filter((r) => !r.ready || Date.parse(r.ready) > lately).map((r) => ({ mbid: r.mbid, get: stateOf(r.mbid) }));
+}
+
 export async function list(username?: string, more: Array<GetItem & { ready?: string }> = []): Promise<GetItem[]> {
   await freshen();
   const before = username ? seen[username]?.before : undefined;

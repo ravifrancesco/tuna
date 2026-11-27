@@ -158,6 +158,8 @@ export const api = {
   worldAlbum: (mbid: string) => call<WorldAlbumDetail>('GET', `/world/album/${encodeURIComponent(mbid)}`),
   get: (album: Pick<WorldAlbum, 'mbid' | 'artistMbid' | 'title' | 'artist'>) => call<GetState>('POST', '/get', album),
   getting: () => call<GetItem[]>('GET', '/getting'),
+  /** Only what's on its way (and what just got somewhere): small, for looking often. */
+  moving: () => call<{ songs: Array<{ id: string; title: string; artist: string; get: GetState }>; albums: Array<{ mbid: string; get: GetState }> }>('GET', '/get/states'),
   /** On its way was opened: albums that were ready on the visit before go from it. */
   gettingOpened: () => call<GetItem[]>('POST', '/getting/opened'),
 

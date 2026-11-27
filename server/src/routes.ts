@@ -16,7 +16,7 @@ import * as library from './services/library';
 import { listeningHistory, listeningStats, yearInReview } from './services/listens';
 import { importSpotify } from './services/spotify';
 import { getMany, missedAlbums, saveStocking, stillToAsk, stocking, stopAsking } from './services/stocking';
-import { checkStaged, discard, importStaged, lookAgain, musicFolder, songItems, songStates, songsNotFound, songsWaiting, stage, stopSongs, takeCover, wantSongs, withTracks, type ImportRequest } from './services/songs';
+import { checkStaged, discard, importStaged, lookAgain, musicFolder, songItems, songsMoving, songStates, songsNotFound, songsWaiting, stage, stopSongs, takeCover, wantSongs, withTracks, type ImportRequest } from './services/songs';
 import { arrived, discoverySettings, saveDiscovery, topUpRadio } from './services/discovery';
 import * as together from './services/together';
 import * as devices from './services/devices';
@@ -208,6 +208,8 @@ export async function apiRoutes(app: FastifyInstance) {
     const s = requireUser(req);
     return getting.list(s.username, await withTracks(authOf(s), songItems()));
   });
+  // Only what's moving, small: what every Get button on screen looks at every few seconds.
+  app.get('/get/states', async (req) => (requireUser(req), { songs: songsMoving(), albums: await getting.albumsMoving() }));
   app.post('/getting/opened', async (req) => {
     const s = requireUser(req);
     getting.opened(s.username);

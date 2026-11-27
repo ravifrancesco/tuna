@@ -57,6 +57,8 @@ interface Song {
   after?: number;
   progress?: number;
   ready?: string;
+  /** When it wasn't found (ms). */
+  settled?: number;
   /** A file someone has for it, waiting to go into the library (in the music folder's .tuna), and its cover; who sent it. */
   upload?: { file: string; cover?: string; seconds?: number; names?: Names };
   imported?: string;
@@ -433,7 +435,7 @@ async function fetchCopy(s: Song) {
 }
 
 function notFound(s: Song, why: string) {
-  s.state = 'notFound';
+  Object.assign(s, { state: 'notFound', settled: Date.now() });
   save();
   log.info('get', `Couldn't find "${s.title}" by ${s.artist} (${why})`);
 }
@@ -569,7 +571,14 @@ function stateOf(s: Song): GetState {
   if (s.state === 'ready') return { state: 'ready' };
   if (s.state === 'notFound') return { state: 'notFound' };
   if (s.state === 'downloading') return { state: 'downloading', progress: s.progress ?? 0 };
-  return { state: 'looking' };
+  return s.state === 'waiting' ? { state: 'looking', queued: true } : { state: 'looking' };
+}
+
+/** Songs on their way, and those that just got somewhere (or weren't found): for the Get buttons on screen. */
+export function songsMoving() {
+  const lately = Date.now() - 120_000;
+  const moving = (s: Song) => s.state === 'waiting' || s.state === 'looking' || s.state === 'downloading' || (s.state === 'ready' ? Date.parse(s.ready ?? '') > lately : (s.settled ?? 0) > lately);
+  return songs.filter(moving).map((s) => ({ id: s.id, title: s.title, artist: s.artist, get: stateOf(s) }));
 }
 
 export const songItems = (): Array<GetItem & { ready?: string }> =>

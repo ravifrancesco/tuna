@@ -1438,12 +1438,17 @@ html.tv .mobile-only {
 
 /* ---- Get ------------------------------------------------------------------------------------------ */
 
-/* Get for one song: a small round button; a spinner, then a ring, as it comes; then the round arrow. */
+/*
+ * Get for one song: a small round button, as wide as the rows' other buttons (so it lines up with
+ * their ⋯). While it's on its way, a dot: faint and still while it waits its turn, glowing while
+ * it's looked for, then a little circle filling up as it downloads; then the round arrow. Only
+ * transform and opacity move, so none of it draws the page again.
+ */
 .song-get {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   color: var(--accent-light);
 }
@@ -1452,48 +1457,60 @@ button.song-get:hover {
 }
 .song-get--done {
   color: var(--good);
-  padding: 7px;
+  padding: 9px;
 }
 .song-get--kept {
   color: var(--accent);
 }
-.song-get__spin {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 2px solid rgba(220, 203, 255, 0.25);
-  border-top-color: var(--accent-light);
-  animation: spin 0.9s linear infinite;
-}
 .song-get--missing {
   color: var(--muted);
 }
-/* Being looked for: the + with its circle going round. */
-.song-get--looking {
+.song-dot {
+  display: block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent-light);
+  box-shadow: 0 0 8px 1px rgba(155, 123, 255, 0.6);
+}
+.song-dot--queued {
+  background: rgba(220, 203, 255, 0.3);
+  box-shadow: none;
+}
+.song-dot--looking {
+  animation: dot-glow 2s ease-in-out infinite;
+}
+@keyframes dot-glow {
+  0%,
+  100% {
+    transform: scale(0.75);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+}
+.song-dot--coming {
   position: relative;
+  width: 14px;
+  height: 14px;
+  overflow: hidden;
+  background: rgba(220, 203, 255, 0.2);
+  box-shadow: 0 0 8px 1px rgba(155, 123, 255, 0.4);
 }
-.song-get--looking .song-get__spin {
+.song-dot--coming > i {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 17px;
-  height: 17px;
-  margin: -8.5px 0 0 -8.5px;
-  border-width: 1.7px;
+  inset: 0;
+  background: var(--accent-light);
+  transform-origin: bottom;
+  /* Where it's at comes every 10 seconds: it fills steadily in between. */
+  transition: transform 9.5s linear;
 }
-.song-get__ring {
-  width: 20px;
-  height: 20px;
-  transform: rotate(-90deg);
-}
-.song-get__ring circle {
-  fill: none;
-  stroke-width: 2.5;
-  stroke: rgba(220, 203, 255, 0.25);
-}
-.song-get__ring circle + circle {
-  stroke: var(--accent-light);
-  stroke-linecap: round;
+@media (prefers-reduced-motion: reduce) {
+  .song-dot--looking {
+    animation: none;
+  }
 }
 
 /* A song not here yet: Get for just it, at the end of its row. */

@@ -1,6 +1,7 @@
 import { Link, NavLink, useLocation } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { Activity, Home, Library, Plus, Search, Settings } from 'lucide-react';
+import type { GetState } from '@tuna/shared';
 import { api } from '../api';
 import { t } from '../i18n';
 import { Brand } from './Logo';
@@ -9,12 +10,9 @@ import { Cover, LikedCover } from './ui';
 
 /** How many albums are being looked for or downloaded, as Netfish's count by Activity. */
 export function useOnItsWay() {
-  const { data } = useQuery({
-    queryKey: ['getting'],
-    queryFn: api.getting,
-    refetchInterval: (q) => (q.state.data?.some((x) => x.get.state === 'looking' || x.get.state === 'downloading') ? 15_000 : 60_000),
-  });
-  return (data ?? []).filter((x) => x.get.state === 'looking' || x.get.state === 'downloading').length;
+  const { data } = useQuery({ queryKey: ['moving'], queryFn: api.moving, refetchInterval: 15_000 });
+  const on = (x: { get: GetState }) => x.get.state === 'looking' || x.get.state === 'downloading';
+  return data ? data.songs.filter(on).length + data.albums.filter(on).length : 0;
 }
 
 /** Computers and TVs: the sidebar, with your playlists. */

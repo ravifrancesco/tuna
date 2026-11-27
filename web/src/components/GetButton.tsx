@@ -6,6 +6,7 @@ import type { GetState, Track, WorldAlbum } from '@tuna/shared';
 import { api, ApiError } from '../api';
 import { t } from '../i18n';
 import { canDownload, download, removeDownload, useDownload } from '../lib/downloads';
+import { arrivedSoon, idKey, songKey, useGetState } from '../lib/getting';
 import { ImportFiles, type ImportTarget } from './ImportFiles';
 import { Item, showMenu } from './Menu';
 import { toast } from './ui';
@@ -23,16 +24,12 @@ export function GetButton({ album, onAsk, importAs }: { album: WorldAlbum; onAsk
   useEffect(() => setGet(album.get), [album.get]);
 
   const pending = get.state === 'looking' || get.state === 'downloading';
+  const live = useGetState(pending ? idKey(album.mbid) : undefined);
   useEffect(() => {
-    if (!pending) return;
-    const timer = window.setInterval(async () => {
-      const list = await api.getting().catch(() => undefined);
-      const mine = list?.find((x) => x.mbid === album.mbid) ?? list?.find((x) => x.kind === 'song' && x.title === album.title && x.artist === album.artist);
-      if (mine) setGet(mine.get);
-      if (mine?.get.state === 'ready') void qc.invalidateQueries();
-    }, 5000);
-    return () => window.clearInterval(timer);
-  }, [pending, album.mbid, qc]);
+    if (!live) return;
+    setGet(live);
+    if (live.state === 'ready') arrivedSoon(() => void qc.invalidateQueries());
+  }, [live, qc]);
 
   const ask = async (e?: React.MouseEvent) => {
     e?.preventDefault();
@@ -128,18 +125,12 @@ export function SongGet({ song, get: given, album }: { song: { title: string; ar
   const [get, setGet] = useState<GetState>(given ?? { state: 'none' });
   useEffect(() => setGet(given ?? { state: 'none' }), [given]);
   const pending = get.state === 'looking' || get.state === 'downloading';
+  const live = useGetState(pending ? songKey(song.title, song.artist) : undefined);
   useEffect(() => {
-    if (!pending) return;
-    const timer = window.setInterval(async () => {
-      const list = await api.getting().catch(() => undefined);
-      const mine = list?.find((x) => x.kind === 'song' && x.title === song.title && x.artist === song.artist);
-      if (mine) setGet(mine.get);
-      if (mine?.get.state === 'ready') void qc.invalidateQueries();
-    }, 5000);
-    return () => window.clearInterval(timer);
-  }, [pending, song.title, song.artist, qc]);
-
-  const server = useQuery({ queryKey: ['server'], queryFn: api.server, staleTime: 60_000 });
+    if (!live) return;
+    setGet(live);
+    if (live.state === 'ready') arrivedSoon(() => void qc.invalidateQueries());
+  }, [live, qc]);
   const [importing, setImporting] = useState(false);
 
   const ask = async (e?: React.MouseEvent) => {
@@ -154,41 +145,44 @@ export function SongGet({ song, get: given, album }: { song: { title: string; ar
   };
 
   if (get.state === 'ready') return get.track && canDownload ? <KeepOnDevice track={get.track} /> : <Check size={18} className="song-get song-get--done" aria-label={t('In your library')} />;
+  // A dot: still while it waits its turn, glowing while it's looked for, filling up as it comes.
   if (get.state === 'looking')
     return (
-      <span className="song-get song-get--busy song-get--looking" role="status" aria-label={t('Looking')} title={t('Looking')}>
-        <Plus size={12} strokeWidth={3.3} />
-        <i className="song-get__spin" />
+      <span className="song-get" role="status" aria-label={get.queued ? t('Waiting') : t('Looking')} title={get.queued ? t('Waiting') : t('Looking')}>
+        <i className={`song-dot ${get.queued ? 'song-dot--queued' : 'song-dot--looking'}`} />
       </span>
     );
   if (get.state === 'downloading')
     return (
-      <span className="song-get song-get--busy" role="status" aria-label={`${t('On its way')} · ${Math.round(get.progress * 100)}%`}>
-        <svg viewBox="0 0 24 24" className="song-get__ring">
-          <circle cx="12" cy="12" r="9" />
-          <circle cx="12" cy="12" r="9" pathLength={100} strokeDasharray={`${Math.max(4, get.progress * 100)} 100`} />
-        </svg>
+      <span className="song-get" role="status" aria-label={`${t('On its way')} · ${Math.round(get.progress * 100)}%`} title={`${t('On its way')} · ${Math.round(get.progress * 100)}%`}>
+        <i className="song-dot song-dot--coming">
+          <i style={{ transform: `scaleY(${Math.max(0.08, Math.min(1, get.progress))})` }} />
+        </i>
       </span>
     );
-  // Not found: look again, or (where Tuna has the music folder) a file of their own.
-  const missing = (e: React.MouseEvent) =>
-    server.data?.services.music
-      ? showMenu(
-          e,
-          <>
-            <Item icon={<RotateCw size={18} />} onClick={() => void ask()}>
-              {t('Look again')}
-            </Item>
-            <Item icon={<FileUp size={18} />} onClick={() => setImporting(true)}>
-              {t('Import files')}
-            </Item>
-          </>,
-        )
-      : void ask(e);
+  // Not found: look again, or (where Tuna has the music folder) files of their own.
+  const missing = async (e: React.MouseEvent) => {
+    const at = { clientX: e.clientX, clientY: e.clientY };
+    e.preventDefault();
+    e.stopPropagation();
+    const server = await qc.fetchQuery({ queryKey: ['server'], queryFn: api.server, staleTime: 60_000 }).catch(() => undefined);
+    if (!server?.services.music) return void ask();
+    showMenu(
+      at,
+      <>
+        <Item icon={<RotateCw size={18} />} onClick={() => void ask()}>
+          {t('Look again')}
+        </Item>
+        <Item icon={<FileUp size={18} />} onClick={() => setImporting(true)}>
+          {t('Import files')}
+        </Item>
+      </>,
+    );
+  };
   const label = get.state === 'notFound' ? t('Not found yet') : t('Get');
   return (
     <>
-      <button className={`song-get ${get.state === 'notFound' ? 'song-get--missing' : ''}`} onClick={(e) => (get.state === 'notFound' ? missing(e) : void ask(e))} aria-label={label} title={label}>
+      <button className={`song-get ${get.state === 'notFound' ? 'song-get--missing' : ''}`} onClick={(e) => (get.state === 'notFound' ? void missing(e) : void ask(e))} aria-label={label} title={label}>
         <CirclePlus size={20} />
       </button>
       {importing && <ImportFiles target={{ kind: 'song', title: song.title, artist: song.artist, album }} onClose={() => setImporting(false)} onSent={setGet} />}
