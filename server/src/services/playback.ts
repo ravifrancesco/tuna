@@ -154,7 +154,7 @@ export async function cover(req: FastifyRequest<{ Params: { id: string }; Querys
 
 /** Covers of music that isn't here yet: only from the services Tuna uses. */
 function allowedArt(u: URL): boolean {
-  if (u.href.startsWith(`${config.coverArtUrl}/`)) return true;
+  if (u.href.startsWith(`${config.coverArtUrl}/`) || u.href.startsWith(`${config.deezerUrl}/album/`)) return true;
   return u.protocol === 'https:' && /(^|\.)(coverartarchive\.org|archive\.org|lastfm\.freetls\.fastly\.net|fastly\.net)$/.test(u.hostname);
 }
 

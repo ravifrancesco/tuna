@@ -12,7 +12,7 @@ import { writeJson } from '../lib/storage';
 import { ensureArtist, scanNavidrome } from './getting';
 import type { SubsonicAuth } from '../clients/navidrome';
 import { norm, toTrack } from './library';
-import { alike, artistsOf, cleanAlbum, matcher, releaseGroups, songIndex } from './matching';
+import { alike, artistsOf, cleanAlbum, firstArtist, matcher, releaseGroups, songIndex } from './matching';
 import { resolve } from './stocking';
 
 /**
@@ -213,7 +213,7 @@ async function place(s: Song): Promise<string | undefined> {
 
 /** The albums, singles and EPs the song came out on (soundtracks after; no compilations, live albums or mixes), albums first. */
 async function releasesOf(s: Song): Promise<Album[]> {
-  const first = s.artist.split(/\s*;\s*/)[0] || s.artist;
+  const first = firstArtist(s.artist);
   const query = `recording:"${cleanTitle(s.title).replace(/"/g, '')}" AND artist:"${first.replace(/"/g, '')}"`;
   const want = cleanTitle(s.title);
   const recs: MbRecording[] = [];
@@ -345,7 +345,7 @@ async function start(s: Song) {
 
 /** Searches Soulseek and asks slskd for the best copy not tried yet. */
 async function fetchCopy(s: Song) {
-  const first = s.artist.split(/\s*;\s*/)[0] || s.artist;
+  const first = firstArtist(s.artist);
   const query = (artist: string, title: string) => `${artist} ${cleanTitle(title)}`.replace(/[^\p{L}\p{N}' ]+/gu, ' ');
   let found = await slskd.search(query(first, s.title));
   // Nobody has it under Spotify's names: under MusicBrainz's.

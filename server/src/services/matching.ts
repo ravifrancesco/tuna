@@ -93,6 +93,13 @@ export function releaseGroups(recs: MbRecording[]): MbAlbum[] {
 
 /** "Song - Remastered 2011" is "Song"; "A, B & C" is any of them. */
 const titles = (s: string) => [...new Set([norm(s), norm(s.replace(/\s+-\s+.*$/, ''))])].filter(Boolean);
+/**
+ * The main artist of a song's list: Spotify's files write "Gorillaz;Black Thought", Exportify's
+ * "Kanye West, Chance the Rapper, Kelly Price". Searches use just this one (Soulseek finds only files
+ * with every word asked for).
+ */
+export const firstArtist = (s: string) => s.split(/\s*;\s*|,\s+/)[0]?.trim() || s;
+
 export const artistsOf = (s: string) =>
   [...new Set([norm(s), ...s.split(/\s*(?:,|;|\/|&|\bfeat\.?|\bft\.?|\bfeaturing)\s*/i).map(norm)])].filter(Boolean);
 

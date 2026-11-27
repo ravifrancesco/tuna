@@ -10,6 +10,8 @@
  *   MOCK_EMPTY_LIBRARY=1: nothing in the library yet, as a new install.
  *   MOCK_SLSKD_EMPTY=1: Soulseek finds nothing. MOCK_SLSKD_FAIL=<user>: that peer's downloads fail.
  *   MOCK_SLSKD_REFUSE=<user,…>: those peers refuse to send. MOCK_SLSKD_STUCK=<user,…>: their queues never move.
+ *   MOCK_SLSKD_SAVE_MS (default 1500): how long after a search says it's complete its results are saved
+ *   (slskd saves them last; slower on a Raspberry Pi).
  *   MOCK_SLSKD_MOVE_SECONDS (default 2): how long after a download succeeds its file is in slskd's
  *   downloads folder (taken off slskd's list before then, it never gets there, as in slskd).
  *   MOCK_LIDARR_LOOKUP_FAIL=<word,…>: Lidarr's search fails for names with those words ("Invalid response
@@ -17,6 +19,9 @@
  *   MOCK_MB_CROWDED=<word,…>: songs with those words are famous in MusicBrainz: 150 recordings on
  *   compilations, live albums and DJ mixes come before the one on their album, and their artists have
  *   a greatest hits ("The Hits") that Lidarr doesn't keep.
+ *   MOCK_DEEZER=1: Lidarr also knows albums from Deezer, as with Tubifarry's Deezer metadata source:
+ *   "Canzoni Sparse" by Valle Nera only there ("900001@deezer"; Lidarr finds Deezer artists by
+ *   "deezer:<id>"), and a Deezer copy of Coral Avenue's first album beside MusicBrainz's.
  *   MOCK_COVER_MS (default 0): how long each cover takes, as Navidrome resizing pictures on a Raspberry Pi.
  *   ListenBrainz token for Settings: mock-lb.
  */
@@ -33,10 +38,13 @@ const SLSKD_FAIL = process.env.MOCK_SLSKD_FAIL;
 const SLSKD_REFUSE = (process.env.MOCK_SLSKD_REFUSE ?? '').split(',').filter(Boolean);
 const SLSKD_STUCK = (process.env.MOCK_SLSKD_STUCK ?? '').split(',').filter(Boolean);
 const SLSKD_MOVE_SECONDS = Number(process.env.MOCK_SLSKD_MOVE_SECONDS ?? 2);
+const SLSKD_SAVE_MS = Number(process.env.MOCK_SLSKD_SAVE_MS ?? 1500);
 const COVER_MS = Number(process.env.MOCK_COVER_MS ?? 0);
 const LOOKUP_FAIL = (process.env.MOCK_LIDARR_LOOKUP_FAIL ?? '').toLowerCase().split(',').filter(Boolean);
 const CROWDED = (process.env.MOCK_MB_CROWDED ?? '').toLowerCase().split(',').filter(Boolean);
 const crowded = (title: string) => CROWDED.some((w) => title.toLowerCase().includes(w));
+const DEEZER = process.env.MOCK_DEEZER === '1';
+const fromDeezer = (id: string) => id.endsWith('@deezer');
 const lookupFails = (name: string) => LOOKUP_FAIL.some((w) => name.toLowerCase().includes(w));
 
 // ---- A made-up world, the same every time ------------------------------------------------------
@@ -151,6 +159,7 @@ interface MArtist {
 const artists: MArtist[] = [];
 const albums = new Map<string, MAlbum>();
 const tracks = new Map<string, MTrack>();
+const [everyArtist, everyAlbum, everyTrack] = [artists, albums, tracks];
 // Lidarr's ids are kept apart (albums from 1, releases from 1001, songs from 10001, files from
 // 50001), so mixing them up shows.
 let nextLidarrAlbum = 1;
@@ -210,6 +219,30 @@ for (const [ai, a] of ARTISTS.entries()) {
     albums.set(id, album);
   }
   artists.push(artist);
+}
+
+// Albums only Deezer has (MOCK_DEEZER): Lidarr knows them, MusicBrainz doesn't.
+if (DEEZER) {
+  const deezerAlbum = (artist: MArtist, name: string, n: number, songs: string[]) => {
+    const id = `dz${n}`;
+    const album: MAlbum = { id, name, artistId: artist.id, artist: artist.name, year: 2024, genre: artist.genre, mbid: `${900000 + n}@deezer`, type: 'Album', inLibrary: false, created: new Date().toISOString(), tracks: [], lidarrId: nextLidarrAlbum++ };
+    songs.forEach((title, i) => {
+      const t: MTrack = { id: `${id}-t${i + 1}`, title, albumId: id, album: name, artistId: artist.id, artist: artist.name, track: i + 1, disc: 1, year: 2024, genre: artist.genre, duration: 150 + i * 17, mbid: `${910000 + n * 100 + i}@deezer`, hasLyrics: false, lidarrId: nextLidarrTrack++ };
+      album.tracks.push(t);
+      tracks.set(t.id, t);
+    });
+    artist.albums.push(album);
+    albums.set(id, album);
+  };
+  const valle: MArtist = { id: 'ardz1', name: 'Valle Nera', genre: 'Indie', mbid: '700001@deezer', inLibrary: false, albums: [] };
+  deezerAlbum(valle, 'Canzoni Sparse', 1, ['Luce di Marzo', 'Strade Vuote', 'Il Mare Dentro', 'Ancora Qui', 'Notte Lunga']);
+  artists.push(valle);
+  const coral = artists.find((a) => a.name === 'Coral Avenue');
+  if (coral) {
+    const twin: MArtist = { id: 'ardz2', name: coral.name, genre: coral.genre, mbid: '700002@deezer', inLibrary: false, albums: [] };
+    deezerAlbum(twin, coral.albums[0].name, 2, coral.albums[0].tracks.map((t) => t.title));
+    artists.push(twin);
+  }
 }
 
 /** What Navidrome has of an album: all of it, or the songs got one at a time that it has scanned. */
@@ -680,10 +713,10 @@ const words = (s: string) =>
     .split(/[^a-z0-9]+/)
     .filter(Boolean);
 
-/** Who on Soulseek has the songs a search names: 2–4 people for each song whose artist and title it has. */
+/** Who on Soulseek has the songs a search names: 2–4 people for each song with every word asked for in its path, as Soulseek. */
 function peersFor(text: string) {
-  const asked = new Set(words(text));
-  const found = SLSKD_EMPTY ? [] : [...tracks.values()].filter((t) => words(`${t.artist} ${t.title}`).every((w) => asked.has(w)));
+  const asked = words(text);
+  const found = SLSKD_EMPTY || !asked.length ? [] : [...tracks.values()].filter((t) => asked.every((w) => words(`${t.artist} ${t.album} ${t.title}`).includes(w)));
   const byUser = new Map<string, Array<Record<string, unknown>>>();
   for (const t of found) {
     const r = rng(`peers:${t.id}`);
@@ -720,9 +753,13 @@ function peersFor(text: string) {
   });
 }
 
-/** A search is "in progress" for a moment and then has found what it found. */
+/**
+ * A search is "in progress" for a moment and then has found what it found. As slskd: it says it's
+ * complete (with its counts) a moment before what came back is saved; `endedAt` marks that.
+ */
 function searchView(s: Search, withResponses = false) {
   const done = Date.now() - s.started >= 1500;
+  const saved = Date.now() - s.started >= 1500 + SLSKD_SAVE_MS;
   const responses = done ? peersFor(s.searchText) : [];
   return {
     id: s.id,
@@ -731,11 +768,11 @@ function searchView(s: Search, withResponses = false) {
     state: done ? 'Completed, TimedOut' : 'InProgress',
     isComplete: done,
     startedAt: new Date(s.started).toISOString(),
-    endedAt: done ? new Date(s.started + 1500).toISOString() : undefined,
+    endedAt: saved ? new Date(s.started + 1500 + SLSKD_SAVE_MS).toISOString() : undefined,
     responseCount: responses.length,
     fileCount: responses.reduce((n, x) => n + x.fileCount, 0),
     lockedFileCount: 0,
-    responses: withResponses ? responses : [],
+    responses: withResponses && saved ? responses : [],
   };
 }
 
@@ -1129,7 +1166,13 @@ async function lidarr(path: string, q: URLSearchParams, req: http.IncomingMessag
   const lookupFailed = (term: string) => json(res, 500, { message: `Search for '${term}' failed. Invalid response received from LidarrAPI.` });
   if (p === '/artist/lookup') {
     const term = q.get('term') ?? '';
+    // Deezer's artists by "deezer:<id>" (Tubifarry); "lidarr:" goes to Lidarr's own server, which doesn't know them.
+    if (term.startsWith('deezer:')) {
+      const a = artists.find((x) => x.mbid === `${term.slice(7)}@deezer`);
+      return json(res, 200, a ? [{ ...lidarrArtist(a), id: undefined }] : []);
+    }
     if (term.startsWith('lidarr:')) {
+      if (fromDeezer(term)) return json(res, 200, []);
       const a = artists.find((x) => x.mbid === term.slice(7));
       if (a && lookupFails(a.name)) return lookupFailed(term);
       return json(res, 200, a ? [{ ...lidarrArtist(a), id: undefined }] : []);
@@ -1142,8 +1185,11 @@ async function lidarr(path: string, q: URLSearchParams, req: http.IncomingMessag
   }
   if (p === '/album/lookup') {
     if (lookupFails(q.get('term') ?? '')) return lookupFailed(q.get('term') ?? '');
+    const byId = (q.get('term') ?? '').match(/^deezer:(\d+)$/);
+    if (byId) return json(res, 200, [...albums.values()].filter((a) => a.mbid === `${byId[1]}@deezer`).map((a) => ({ ...lidarrAlbum(a), id: undefined, secondaryTypes: [] })));
     const query = cleanQuery(q.get('term') ?? '');
-    const rank = (a: MAlbum) => Math.max(score(a.name, query), score(a.artist, query));
+    // By its name, its artist's, or both ("Coral Avenue Paper Oceans"), as Lidarr's search.
+    const rank = (a: MAlbum) => Math.max(score(a.name, query), score(a.artist, query), score(`${a.artist} ${a.name}`, query));
     const found = [...albums.values()].filter((a) => rank(a) > 0).sort((x, y) => rank(y) - rank(x) || y.year - x.year);
     return json(res, 200, found.slice(0, 20).map((a) => ({ ...lidarrAlbum(a), id: undefined, secondaryTypes: [] })));
   }
@@ -1318,6 +1364,10 @@ async function slskd(path: string, q: URLSearchParams, req: http.IncomingMessage
 }
 
 function musicbrainz(path: string, q: URLSearchParams, res: http.ServerResponse) {
+  // MusicBrainz doesn't know what only Deezer has (MOCK_DEEZER).
+  const artists = everyArtist.filter((a) => !fromDeezer(a.mbid));
+  const albums = new Map([...everyAlbum].filter(([, a]) => !fromDeezer(a.mbid)));
+  const tracks = new Map([...everyTrack].filter(([, t]) => !fromDeezer(t.mbid)));
   const p = path.replace(/^\/ws\/2/, '');
   if (p === '/artist') {
     // `artist:"…" OR alias:"…"` as Tuna asks, or any words.
@@ -1529,6 +1579,11 @@ http
         if (path.startsWith('/lidarr/')) return await lidarr(path.slice(7), q, req, res);
         if (path.startsWith('/slskd/')) return await slskd(path.slice(6), q, req, res);
         if (path.startsWith('/mb/')) return musicbrainz(path.slice(3), q, res);
+        const deezerCover = path.match(/^\/deezer\/album\/(\d+)\/image$/);
+        if (deezerCover) {
+          if (![...albums.values()].some((a) => a.mbid === `${deezerCover[1]}@deezer`)) return json(res, 404, {});
+          return png(res, coverPng(`${deezerCover[1]}@deezer`, 500));
+        }
         const caa = path.match(/^\/caa\/release-group\/([\w-]+)\/front/);
         if (caa) {
           if (![...albums.values()].some((a) => a.mbid === caa[1])) return json(res, 404, {});

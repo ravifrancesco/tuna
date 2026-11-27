@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Coverage, Stocking, StockingWhy } from '@tuna/shared';
 import type { SubsonicAuth } from '../clients/navidrome';
-import { coverArtFor, lastfmRecent, lastfmTopAlbums, lastfmTopArtists, lbListens, lbRecommendations, mbArtistAlbums, mbSearchAlbums, mbSearchArtists, mbSearchRecordings, type OutsideListen } from '../clients/public';
+import { coverArtFor, isDeezer, lastfmRecent, lastfmTopAlbums, lastfmTopArtists, lbListens, lbRecommendations, mbArtistAlbums, mbSearchAlbums, mbSearchArtists, mbSearchRecordings, type OutsideListen } from '../clients/public';
 import { config } from '../config';
 import { has } from '../connections';
 import { settle } from '../lib/async';
@@ -16,7 +16,7 @@ import { asked, getAs, onTheWay } from './getting';
 import { artists as allArtists, findAlbum, libraryIndex, norm } from './library';
 import { listeners, listensSince } from './listens';
 import * as lidarr from '../clients/lidarr';
-import { alike, artistsOf, cleanAlbum, isSoundtrack, matcher, releaseGroups, songIndex } from './matching';
+import { alike, artistsOf, cleanAlbum, firstArtist, isSoundtrack, matcher, releaseGroups, songIndex } from './matching';
 import { everyone } from './prefs';
 
 /**
@@ -101,7 +101,7 @@ type Resolved = { mbid: string; artistMbid?: string; title: string; artist: stri
  */
 export async function resolve(artist: string, title: string, isrc?: string): Promise<Resolved | undefined> {
   const name = cleanAlbum(title);
-  const first = artist.split(/\s*;\s*/)[0] || artist;
+  const first = firstArtist(artist);
   const credited = (n: string | undefined) => Boolean(n) && artistsOf(artist).some((a) => artistsOf(n!).some((b) => b === a || alike(a, b)));
   const same = (t: string) => norm(t) === norm(name) || norm(cleanAlbum(t)) === norm(name) || alike(cleanAlbum(t), name);
   let failed: unknown;
@@ -112,10 +112,14 @@ export async function resolve(artist: string, title: string, isrc?: string): Pro
     const g = on.find((x) => same(x.title)) ?? on[0];
     if (g) return { mbid: g.mbid, artistMbid: g.artistMbid, title: g.title, artist: g.artist };
   }
+  // Lidarr may know it from Deezer too (Tubifarry's metadata source): MusicBrainz's first, Deezer's if that's all there is.
+  let deezer: Resolved | undefined;
   if (has.lidarr()) {
-    const found = (await ask(lidarr.findAlbums(`${first} ${name}`))).filter((a) => credited(a.artist?.artistName));
-    const hit = found.find((a) => same(a.title));
-    if (hit) return { mbid: hit.foreignAlbumId, artistMbid: hit.artist?.foreignArtistId, title: hit.title, artist: hit.artist?.artistName ?? first };
+    const found = (await ask(lidarr.findAlbums(`${first} ${name}`))).filter((a) => credited(a.artist?.artistName) && same(a.title));
+    const hit = found.find((a) => !isDeezer(a.foreignAlbumId)) ?? found[0];
+    const it = hit && { mbid: hit.foreignAlbumId, artistMbid: hit.artist?.foreignArtistId, title: hit.title, artist: hit.artist?.artistName ?? first };
+    if (it && !isDeezer(it.mbid)) return it;
+    deezer = it;
   }
   const groups = await ask(mbSearchAlbums(`releasegroup:${quote(name)} AND artist:${quote(first)}`));
   const byArtist = (g: (typeof groups)[number]) => (g['artist-credit'] ?? []).some((c) => credited(c.name) || credited(c.artist.name));
@@ -128,6 +132,7 @@ export async function resolve(artist: string, title: string, isrc?: string): Pro
   const who = people.find((a) => credited(a.name)) ?? people.find((a) => (a.score ?? 0) >= 95);
   const own = who && (await ask(mbArtistAlbums(who.id))).find((x) => same(x.title));
   if (who && own) return { mbid: own.id, artistMbid: who.id, title: own.title, artist: who.name };
+  if (deezer) return deezer;
   if (failed) throw failed;
   return undefined;
 }

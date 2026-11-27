@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.12 (2026-11-27)
+
+**Fixed**
+- **Songs said "nobody on Soulseek has it" when plenty of people did** (Ultralight Beam, say). slskd
+  says a search is done a moment before it has saved what came back, longer on a Raspberry Pi, and
+  Tuna read it too soon. It now waits until everything is there.
+- **Songs with several artists from Exportify** ("Kanye West, Chance the Rapper, …") were searched
+  with all of them at once, and Soulseek found nothing. Now with the main artist.
+
+**New**
+- **Albums Lidarr knows from Deezer** (Tubifarry's Deezer metadata source, if you turn it on) can be
+  got too, with their covers; MusicBrainz's version is still used when both have an album. Without
+  it, nothing changes.
+
+To update: the server (pull the new image); the apps don't need updating.
+
 ## 0.4.11 (2026-11-27)
 
 **Changed**

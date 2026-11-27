@@ -105,7 +105,8 @@ function readCsv(file: string, text: string, into: Found) {
   if (titleAt < 0 || artistAt < 0) return;
   const songs = rows.flatMap((r) =>
     r[titleAt]?.trim() && r[artistAt]?.trim()
-      ? [{ title: r[titleAt].trim(), artist: r[artistAt].trim(), album: r[albumAt]?.trim() || undefined, added: Date.parse(r[addedAt] ?? '') || 0, isrc: r[isrcAt]?.trim().toUpperCase() || undefined }]
+      ? // Exportify writes a comma inside a name as "\," ("Tyler\, The Creator, Kali Uchis").
+        [{ title: r[titleAt].trim(), artist: r[artistAt].trim().replace(/\\,/g, ','), album: r[albumAt]?.trim() || undefined, added: Date.parse(r[addedAt] ?? '') || 0, isrc: r[isrcAt]?.trim().toUpperCase() || undefined }]
       : [],
   );
   const name = file.replace(/\.csv$/i, '').replace(/_/g, ' ').trim();

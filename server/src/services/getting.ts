@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { GetItem, GetState } from '@tuna/shared';
 import * as lidarr from '../clients/lidarr';
 import { subsonic } from '../clients/navidrome';
-import { coverArtFor, mbReleaseGroup } from '../clients/public';
+import { coverArtFor, deezerId, isDeezer, mbReleaseGroup } from '../clients/public';
 import { config } from '../config';
 import { has } from '../connections';
 import { t } from '../lib/i18n';
@@ -231,6 +231,13 @@ export async function getAs(by: string, q: { mbid: string; artistMbid?: string; 
   if (existing && stateOf(q.mbid).state !== 'notFound') return stateOf(q.mbid);
 
   let { artistMbid, artist, title } = q;
+  if (!artistMbid && isDeezer(q.mbid)) {
+    // Known from Deezer (Tubifarry): its artist as Lidarr has it.
+    const [found] = await lidarr.findAlbums(`deezer:${deezerId(q.mbid)}`);
+    artistMbid = found?.artist?.foreignArtistId;
+    artist ||= found?.artist?.artistName ?? '';
+    title ||= found?.title ?? '';
+  }
   if (!artistMbid) {
     const group = await mbReleaseGroup(q.mbid);
     artistMbid = group['artist-credit']?.[0]?.artist.id;

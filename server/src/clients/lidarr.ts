@@ -78,7 +78,9 @@ export const rootFolders = () => call<Array<{ id: number; path: string }>>('/roo
 export const qualityProfiles = () => call<Array<{ id: number; name: string }>>('/qualityprofile');
 export const metadataProfiles = () => call<Array<{ id: number; name: string }>>('/metadataprofile');
 
-export const lookupArtist = (mbid: string) => call<LArtist[]>('/artist/lookup', { query: { term: `lidarr:${mbid}` } });
+/** An artist by its id: MusicBrainz's, or Deezer's ("1234@deezer", Tubifarry's metadata source, which answers to "deezer:1234"). */
+export const lookupArtist = (id: string) =>
+  call<LArtist[]>('/artist/lookup', { query: { term: id.endsWith('@deezer') ? `deezer:${id.slice(0, -'@deezer'.length)}` : `lidarr:${id}` } });
 
 /** Lidarr's own search by name (its metadata server, not MusicBrainz directly), as its "Add new" page. */
 export interface LFoundArtist {

@@ -46,15 +46,25 @@ export interface STransfer {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Who has it: everyone that answered within the search's ten seconds. */
+/**
+ * What Soulseek has for `text`. slskd says a search is complete (with how many answered) a moment
+ * before it has saved what came back, longer on a Raspberry Pi: read too soon, it's nothing. So
+ * until `endedAt` says it's saved, and the answers are all there.
+ */
 export async function search(text: string): Promise<SResponse[]> {
   const id = crypto.randomUUID();
   await call('/searches', { method: 'POST', body: { id, searchText: text, searchTimeout: 10_000, responseLimit: 100, fileLimit: 2000, filterResponses: true } });
   try {
-    for (let i = 0; i < 20; i++) {
+    let s: { isComplete?: boolean; endedAt?: string; responseCount?: number } = {};
+    for (let i = 0; i < 30 && !s.endedAt; i++) {
       await sleep(1000);
-      if ((await call<{ isComplete?: boolean }>(`/searches/${id}`)).isComplete) break;
+      s = await call<typeof s>(`/searches/${id}`);
     }
-    return await call<SResponse[]>(`/searches/${id}/responses`);
+    for (let i = 0; ; i++) {
+      const responses = await call<SResponse[]>(`/searches/${id}/responses`);
+      if (responses.length >= (s.responseCount ?? 0) || i >= 10) return responses;
+      await sleep(500);
+    }
   } finally {
     await call(`/searches/${id}`, { method: 'DELETE' }).catch(() => undefined);
   }

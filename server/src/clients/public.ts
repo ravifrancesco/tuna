@@ -108,7 +108,13 @@ export const mbReleaseGroup = (mbid: string) =>
   cached(`g:${mbid}`, () => mb<MbReleaseGroup>(`/release-group/${mbid}`, { inc: 'artist-credits' }));
 
 /** The front cover of an album that isn't in the library (small; Tuna keeps a copy). */
-export const coverArtFor = (releaseGroupMbid: string) => `${config.coverArtUrl}/release-group/${releaseGroupMbid}/front-250`;
+/** An album's cover: MusicBrainz's from the Cover Art Archive; one Lidarr knows from Deezer ("302127@deezer", Tubifarry's) from Deezer. */
+export const coverArtFor = (albumId: string) =>
+  isDeezer(albumId) ? `${config.deezerUrl}/album/${deezerId(albumId)}/image?size=big` : `${config.coverArtUrl}/release-group/${albumId}/front-250`;
+
+/** Albums and artists Lidarr knows from Deezer rather than MusicBrainz (Tubifarry's Deezer metadata source). */
+export const isDeezer = (id: string | undefined) => Boolean(id?.endsWith('@deezer'));
+export const deezerId = (id: string) => id.replace(/@deezer$/, '');
 
 // ---- LRCLIB ------------------------------------------------------------------------------------
 
