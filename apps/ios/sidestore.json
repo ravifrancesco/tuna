@@ -17,21 +17,21 @@
       "category": "entertainment",
       "versions": [
         {
-          "version": "0.4.10",
+          "version": "0.4.11",
           "buildVersion": "1",
-          "date": "2026-11-26",
-          "localizedDescription": "Fixed\n- Famous songs weren't found. Tuna read only MusicBrainz's first 10 matches for a song, and for a famous one those are mostly compilations, live albums and DJ mixes, so it said \"not in MusicBrainz\". It now reads up to 300, until it finds the song on an album. A song a playlist lists on a greatest hits now comes from the album it's on (Lidarr doesn't keep greatest hits).\n- Automatic played Original on mobile data on the iPhone, after the app came back from the background or when you left Wi-Fi with the screen off. The iPhone app now follows the network itself, and the page asks again as soon as it's opened.\n- Lyrics: going back to a song showed its lyrics from where the other song had been; they now start at the top. They also keep time between the apps' once-a-second updates, and the next song's lyrics are ready before you skip.\n- The sound quality badge in Now Playing stays on one line.\n\nNew\n- Settings → Couldn't find (admins): how many songs and albums people asked for weren't found, and Look again, which looks for all of them once more.\n\nTo update: the server (pull the new image) and the iPhone app; the other apps don't need updating.",
-          "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.4.10/Tuna-ios.ipa",
-          "size": 4705835,
-          "sha256": "0ec32466a58908c33872d26f26946a3e3086060961a910a58d41869f109f6072",
+          "date": "2026-11-27",
+          "localizedDescription": "Changed\n- Songs found by their code. Playlists brought in from Exportify carry each song's ISRC, and Tuna now looks songs and albums up by it first, so they're found whatever Spotify calls them. Spotify's own data export has no codes: bring playlists in again from Exportify, then Look again.\n- Names that differ a little still match: spacing, punctuation, accents or a letter here and there (\"De I Cani\" is \"dei cani\"); a soundtrack is found under its composer; and an album the search doesn't find is looked for among the artist's own albums.\n- Soulseek: when MusicBrainz names a song or its artist differently from Spotify, Tuna searches for both.\n\nTo update: the server (pull the new image); the apps don't need updating.",
+          "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.4.11/Tuna-ios.ipa",
+          "size": 4705832,
+          "sha256": "c6d94dde33df1b68a86fe87aea2a49f23537d171337aa425147ba92c0cd499e1",
           "minOSVersion": "16.0"
         }
       ],
-      "version": "0.4.10",
-      "versionDate": "2026-11-26",
-      "versionDescription": "Fixed\n- Famous songs weren't found. Tuna read only MusicBrainz's first 10 matches for a song, and for a famous one those are mostly compilations, live albums and DJ mixes, so it said \"not in MusicBrainz\". It now reads up to 300, until it finds the song on an album. A song a playlist lists on a greatest hits now comes from the album it's on (Lidarr doesn't keep greatest hits).\n- Automatic played Original on mobile data on the iPhone, after the app came back from the background or when you left Wi-Fi with the screen off. The iPhone app now follows the network itself, and the page asks again as soon as it's opened.\n- Lyrics: going back to a song showed its lyrics from where the other song had been; they now start at the top. They also keep time between the apps' once-a-second updates, and the next song's lyrics are ready before you skip.\n- The sound quality badge in Now Playing stays on one line.\n\nNew\n- Settings → Couldn't find (admins): how many songs and albums people asked for weren't found, and Look again, which looks for all of them once more.\n\nTo update: the server (pull the new image) and the iPhone app; the other apps don't need updating.",
-      "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.4.10/Tuna-ios.ipa",
-      "size": 4705835,
+      "version": "0.4.11",
+      "versionDate": "2026-11-27",
+      "versionDescription": "Changed\n- Songs found by their code. Playlists brought in from Exportify carry each song's ISRC, and Tuna now looks songs and albums up by it first, so they're found whatever Spotify calls them. Spotify's own data export has no codes: bring playlists in again from Exportify, then Look again.\n- Names that differ a little still match: spacing, punctuation, accents or a letter here and there (\"De I Cani\" is \"dei cani\"); a soundtrack is found under its composer; and an album the search doesn't find is looked for among the artist's own albums.\n- Soulseek: when MusicBrainz names a song or its artist differently from Spotify, Tuna searches for both.\n\nTo update: the server (pull the new image); the apps don't need updating.",
+      "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.4.11/Tuna-ios.ipa",
+      "size": 4705832,
       "appPermissions": {
         "entitlements": [],
         "privacy": {
