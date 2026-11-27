@@ -9,6 +9,8 @@ person, synced lyrics, and apps for every screen. It's the sister of
 - **Search everything**: your library first, then all the music that exists (MusicBrainz).
   Albums you don't have get a **Get** button: Lidarr finds them through Prowlarr, qBittorrent
   downloads them, and they're in your library a few minutes later.
+- **Your own files**: a song Get couldn't find, or a whole album from a folder. Tuna fills in the
+  names (from what was asked for, MusicBrainz and the files' tags) for you to check, then files them.
 - **Artists** with their popular songs, every album, what you're missing, and similar artists.
 - **Radio** from any song, album or artist; liked songs, playlists, shuffle and repeat.
 - **Lyrics** that follow the song (from the file, or LRCLIB).
@@ -34,7 +36,7 @@ In Portainer: **Stacks → Add stack**, paste [`docker-compose.yml`](docker-comp
 `http://<your-server>:7778`: Tuna asks for Navidrome's address (and Lidarr's), with the setup code
 from its log. Then sign in with your Navidrome account. More in [docs/install/server.md](docs/install/server.md).
 
-Image: `ghcr.io/ravifrancesco/tuna:0.4.13` (amd64 and arm64).
+Image: `ghcr.io/ravifrancesco/tuna:0.5.0` (amd64 and arm64).
 
 ## The apps
 

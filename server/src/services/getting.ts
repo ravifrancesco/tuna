@@ -170,6 +170,14 @@ export function stateOf(mbid: string): GetState {
   return { state: 'looking' };
 }
 
+/** Someone sent files of an album asked for: it's in (as much of it as they had). */
+export function albumSent(album: { mbid?: string; artist: string; title: string }) {
+  const same = (r: Request) => r.mbid === album.mbid || (r.artist.toLowerCase() === album.artist.toLowerCase() && r.title.toLowerCase() === album.title.toLowerCase());
+  const open = requests.filter((r) => !r.ready && same(r));
+  for (const r of open) r.ready = new Date().toISOString();
+  if (open.length) save();
+}
+
 /** How many albums are being looked for or downloaded right now. */
 export const onTheWay = () =>
   requests.filter((r) => {

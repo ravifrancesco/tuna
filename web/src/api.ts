@@ -79,6 +79,40 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   return data as T;
 }
 
+/** A file sent, kept aside until it's put in: what it seems to be (by its tags, else its folders and name). */
+export interface StagedFile {
+  id: string;
+  seconds?: number;
+  guess: { title: string; artist?: string; albumArtist?: string; album?: string; year?: string; number?: number; disc?: number };
+}
+
+/** A file sent as it is, with how much of it has gone (0–1) as it goes. */
+function send<T>(path: string, file: Blob, onProgress?: (part: number) => void): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open('POST', `/api${path}`);
+    x.withCredentials = true;
+    x.setRequestHeader('x-tuna', '1');
+    x.setRequestHeader('x-tuna-lang', language);
+    x.setRequestHeader('content-type', 'application/x-tuna-file');
+    if (bearer) x.setRequestHeader('authorization', `Bearer ${bearer}`);
+    x.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total);
+    x.onload = () => {
+      let data: unknown;
+      try {
+        data = x.responseText ? JSON.parse(x.responseText) : undefined;
+      } catch {
+        data = x.responseText;
+      }
+      if (x.status >= 200 && x.status < 300) return resolve(data as T);
+      if (x.status === 401) listeners.forEach((fn) => fn());
+      reject(new ApiError(x.status, (data as { error?: string } | undefined)?.error ?? `${x.status}`));
+    };
+    x.onerror = () => reject(new Error('network'));
+    x.send(file);
+  });
+}
+
 const q = (params: Record<string, string | number | undefined>) => {
   const s = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== '') s.set(k, String(v));
@@ -136,6 +170,18 @@ export const api = {
   getMany: (albums: Array<{ artist: string; album: string; isrc?: string }>) => call<{ asked: number }>('POST', '/get/many', { albums }),
   /** Single songs (through slskd, filed by Lidarr); `songs: false`: the server got their albums instead. */
   getSongs: (songs: Array<{ artist: string; title: string; album?: string; isrc?: string }>) => call<{ asked: number; songs: boolean }>('POST', '/get/songs', { songs }),
+  /** Files someone has, into the library: a cover for those that follow (the same `batch`), a file for one song, or one of an album's. */
+  sendCover: (batch: string, file: Blob) => send<{ ok: boolean }>(`/get/files/cover${q({ batch })}`, file),
+  stageFile: (f: { batch: string; name: string; path?: string }, file: File, onProgress?: (part: number) => void) => send<StagedFile>(`/get/files${q(f)}`, file, onProgress),
+  checkFiles: (body: { artist: string; album: string; mbid?: string; files: Array<{ id: string; title: string; number?: number; disc?: number }> }) =>
+    call<{ album?: { title: string; artist: string; year?: string; mbid: string }; files: Array<{ id: string; title?: string; number?: number; disc?: number; why?: string }> }>('POST', '/get/files/check', body),
+  importFiles: (body: {
+    batch: string;
+    song?: { artist: string; title: string };
+    album: { artist: string; title: string; year?: string; mbid?: string };
+    files: Array<{ id: string; title: string; artist?: string; number?: number; disc?: number }>;
+  }) => call<{ files: Array<{ id: string; why?: string }> }>('POST', '/get/files/import', body),
+  discardFiles: (batch: string) => call('DELETE', `/get/files${q({ batch })}`),
   missed: () => call<MissedAlbum[]>('GET', '/get/missed'),
   /** Songs and albums people asked for that couldn't be found (an admin's), and looking for them again. */
   notFound: () => call<{ songs: number; albums: number }>('GET', '/get/again'),

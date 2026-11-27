@@ -1,5 +1,7 @@
+import { Readable } from 'node:stream';
 import type { FastifyInstance } from 'fastify';
 import type { DeviceCommand, Me, ServerInfo, StatsPeriod, TogetherControl, Track } from '@tuna/shared';
+import * as lidarr from './clients/lidarr';
 import { config } from './config';
 import { SETUP_CODE, connections, has, saveConnections, type ConnectionsPatch } from './connections';
 import { t } from './lib/i18n';
@@ -14,7 +16,7 @@ import * as library from './services/library';
 import { listeningHistory, listeningStats, yearInReview } from './services/listens';
 import { importSpotify } from './services/spotify';
 import { getMany, missedAlbums, saveStocking, stillToAsk, stocking, stopAsking } from './services/stocking';
-import { lookAgain, songItems, songsNotFound, songsWaiting, stopSongs, wantSongs, withTracks } from './services/songs';
+import { checkStaged, discard, importStaged, lookAgain, musicFolder, songItems, songStates, songsNotFound, songsWaiting, stage, stopSongs, takeCover, wantSongs, withTracks, type ImportRequest } from './services/songs';
 import { arrived, discoverySettings, saveDiscovery, topUpRadio } from './services/discovery';
 import * as together from './services/together';
 import * as devices from './services/devices';
@@ -30,6 +32,12 @@ import { artistDetail, worldAlbum, worldArtist } from './services/world';
 
 const me = (s: Session): Me => ({ id: s.userId, username: s.username, name: s.name, admin: s.admin, mediaKey: s.mediaKey, prefs: prefsOf(s.username) });
 
+/** Each song not here yet with where it's at, if it was asked for on its own. */
+function withStates<T extends { artist: string; title: string }>(waiting: T[]): T[] {
+  const state = songStates();
+  return waiting.map((w) => ({ ...w, get: state(w) }));
+}
+
 export async function apiRoutes(app: FastifyInstance) {
   // The apps check an address with this before keeping it.
   app.get('/health', async () => ({ ok: true, name: 'tuna', version: config.version }));
@@ -37,7 +45,7 @@ export async function apiRoutes(app: FastifyInstance) {
   app.get('/server', async (): Promise<ServerInfo> => ({
     version: config.version,
     ready: has.navidrome(),
-    services: { navidrome: has.navidrome(), lidarr: has.lidarr(), slskd: has.slskd(), lastfm: has.lastfm() },
+    services: { navidrome: has.navidrome(), lidarr: has.lidarr(), slskd: has.slskd(), lastfm: has.lastfm(), music: Boolean(await musicFolder()) },
   }));
 
   // ---- First run: where Navidrome (and Lidarr) are, with the code from the server's log ----------
@@ -123,7 +131,7 @@ export async function apiRoutes(app: FastifyInstance) {
     // When each song went in: added here, else Spotify's date (the importer's own playlists).
     const ours = addedDates(p.id);
     const theirs = importedSongs(p.mine ? s.username : (p.owner ?? ''), p.id);
-    return { ...p, added: p.tracks.map((tr) => ours[tr.id] ?? theirs.get(tr.id) ?? null), waiting: waitingIn(s.username, p.id, p.tracks) };
+    return { ...p, added: p.tracks.map((tr) => ours[tr.id] ?? theirs.get(tr.id) ?? null), waiting: withStates(waitingIn(s.username, p.id, p.tracks)) };
   });
   app.post<{ Body: { name?: string; tracks?: string[] } }>('/playlists', async (req) => {
     const name = req.body?.name?.trim();
@@ -150,7 +158,7 @@ export async function apiRoutes(app: FastifyInstance) {
     // When each was liked: Spotify's date for likes brought over (unknown in its library file), else when it was liked here.
     const imported = importedSongs(s.username, LIKED);
     const added = tracks.map((tr) => (imported.has(tr.id) ? (imported.get(tr.id) ?? null) : (starred[tr.id] ?? null)));
-    return { ...l, tracks, added, waiting: waitingIn(s.username, LIKED, tracks) };
+    return { ...l, tracks, added, waiting: withStates(waitingIn(s.username, LIKED, tracks)) };
   });
   app.post<{ Body: { kind: 'track' | 'album' | 'artist'; id: string; on: boolean } }>('/like', async (req) => {
     const { kind, id, on } = req.body ?? ({} as never);
@@ -244,6 +252,34 @@ export async function apiRoutes(app: FastifyInstance) {
     return { asked: getMany(s, albums), songs: false };
   });
 
+  // Files people have themselves, each as it is (a cover first, if they have one): into the library.
+  app.addContentTypeParser('application/x-tuna-file', (_req, payload, done) => done(null, payload));
+  const sent = (body: unknown) => (Buffer.isBuffer(body) ? Readable.from([body]) : (body as Readable));
+  app.post<{ Querystring: { batch?: string } }>('/get/files/cover', async (req) => {
+    requireUser(req);
+    if (!req.query.batch || !req.body) throw new HttpError(400, 'batch and the picture');
+    await takeCover(req.query.batch, sent(req.body));
+    return { ok: true };
+  });
+  // Each file as it comes (kept aside, with what it seems to be), then put in as the person named them.
+  app.post<{ Querystring: { batch?: string; name?: string; path?: string } }>('/get/files', async (req) => {
+    const s = requireUser(req);
+    const { batch, name, path } = req.query;
+    if (!batch || !name || !req.body) throw new HttpError(400, 'batch, name and the file');
+    return stage(s.name, batch, name, path, sent(req.body));
+  });
+  app.post<{ Body: Parameters<typeof checkStaged>[1] }>('/get/files/check', async (req) => checkStaged(requireUser(req).name, req.body ?? {}));
+  app.post<{ Body: ImportRequest }>('/get/files/import', async (req) => {
+    const s = requireUser(req);
+    if (!req.body?.batch) throw new HttpError(400, 'batch');
+    return { files: await importStaged(s.name, req.body) };
+  });
+  app.delete<{ Querystring: { batch?: string } }>('/get/files', async (req) => {
+    const s = requireUser(req);
+    if (req.query.batch) await discard(s.name, req.query.batch);
+    return { ok: true };
+  });
+
   // ---- Devices (as Spotify Connect) ----------------------------------------------------------------
   // The live line: EventSource can't send the app's Bearer token, so the media key works too.
   app.get<{ Querystring: { device?: string; name?: string; kind?: string } }>('/devices/events', async (req, reply) => {
@@ -297,7 +333,9 @@ export async function apiRoutes(app: FastifyInstance) {
   // ---- Admins ------------------------------------------------------------------------------------
   app.get('/connections', async (req) => {
     requireAdmin(req);
-    return connections();
+    const c = connections();
+    const folder = has.lidarr() ? (await lidarr.rootFolders().catch(() => []))[0]?.path : undefined;
+    return { ...c, lidarr: { ...c.lidarr, folder, reachable: Boolean(await musicFolder()) } };
   });
   app.put<{ Body: ConnectionsPatch }>('/connections', async (req) => {
     requireAdmin(req);

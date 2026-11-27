@@ -29,6 +29,7 @@ services:
       - LASTFM_API_KEY=${LASTFM_API_KEY:-}
     volumes:
       - /docker-data-volumes/tuna-data:/config # Settings, sessions and listening history
+      - ${DATA_BASE_PATH}:/data # As Lidarr has it: files people import go into its music folder
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:

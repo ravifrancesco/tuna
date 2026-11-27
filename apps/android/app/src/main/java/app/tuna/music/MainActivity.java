@@ -3,6 +3,7 @@ package app.tuna.music;
 import android.app.Activity;
 import android.app.UiModeManager;
 import android.content.ActivityNotFoundException;
+import android.content.ClipData;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -221,7 +222,9 @@ public class MainActivity extends Activity {
                 if (chosen != null) chosen.onReceiveValue(null);
                 chosen = callback;
                 try {
-                    startActivityForResult(new Intent(Intent.ACTION_GET_CONTENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"), CHOOSE_FILE);
+                    // Several at once (an album's songs), where the page asks for that.
+                    boolean many = params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE;
+                    startActivityForResult(new Intent(Intent.ACTION_GET_CONTENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*").putExtra(Intent.EXTRA_ALLOW_MULTIPLE, many), CHOOSE_FILE);
                 } catch (ActivityNotFoundException e) {
                     // (A TV without a file picker: pasting is the way there.)
                     chosen.onReceiveValue(null);
@@ -355,7 +358,13 @@ public class MainActivity extends Activity {
     protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
         if (request != CHOOSE_FILE || chosen == null) return;
-        chosen.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result, data));
+        Uri[] files = WebChromeClient.FileChooserParams.parseResult(result, data);
+        ClipData several = result == RESULT_OK && data != null ? data.getClipData() : null;
+        if (several != null) {
+            files = new Uri[several.getItemCount()];
+            for (int i = 0; i < files.length; i++) files[i] = several.getItemAt(i).getUri();
+        }
+        chosen.onReceiveValue(files);
         chosen = null;
     }
 

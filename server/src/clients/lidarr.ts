@@ -40,6 +40,8 @@ export interface LTrack {
   /** MusicBrainz's recording. */
   foreignRecordingId?: string;
   title: string;
+  absoluteTrackNumber?: number;
+  mediumNumber?: number;
   /** Milliseconds. */
   duration?: number;
   hasFile: boolean;

@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.5.0 (2026-11-27)
+
+**New**
+- **Import your own files:** a song Get couldn't find, an album, or anything you have. On a song or
+  album that wasn't found, its button now offers **Look again** or **Import files**; Your library
+  has **Import files** for anything. Choose the files (on a computer, a whole folder) and a cover if
+  you like (a folder's cover.jpg is used by itself). The files are sent, then shown with their names
+  filled in, from the song or album asked for, what MusicBrainz knows (titles, track numbers, year)
+  and their tags, for you to change: artist, album, year, and each song's number, title and artist.
+  Then Lidarr files them into the album when it knows it, or Tuna puts them straight into the music
+  folder. Files that don't play are turned away, and so are songs whose length is more than 10
+  seconds off the album's, or that are in the library already, each with why.
+- **Songs Soulseek seems not to have are looked for again in other ways:** some names (Kanye West's,
+  for one) get no answer at all on Soulseek, so when the first search finds nothing that fits, Tuna
+  searches by the title and the album, then by the title and one word of the artist's name.
+
+**Changed**
+- **Playlists show where each missing song is at:** the + with its circle going round while it's
+  looked for, then a quiet + when it wasn't found.
+- **The log says why a song wasn't found on Soulseek:** how many people answered and why none fit
+  (without the title, without the artist, the wrong length).
+
+**Fixed**
+- Missing songs in playlists always showed **Get**, even while being looked for or after they
+  weren't found.
+
+To update: the server (pull the new image), and in Tuna's stack add the data folder as Lidarr has it,
+`- ${DATA_BASE_PATH}:/data`, to its volumes (Importing files needs it; Settings → Connections says if
+Tuna can't reach Lidarr's music folder). The apps: on a Mac a whole folder can be chosen, on Android
+several files at once.
+
 ## 0.4.13 (2026-11-27)
 
 **New**

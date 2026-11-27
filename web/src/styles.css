@@ -1465,6 +1465,22 @@ button.song-get:hover {
   border-top-color: var(--accent-light);
   animation: spin 0.9s linear infinite;
 }
+.song-get--missing {
+  color: var(--muted);
+}
+/* Being looked for: the + with its circle going round. */
+.song-get--looking {
+  position: relative;
+}
+.song-get--looking .song-get__spin {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 17px;
+  height: 17px;
+  margin: -8.5px 0 0 -8.5px;
+  border-width: 1.7px;
+}
 .song-get__ring {
   width: 20px;
   height: 20px;
@@ -2300,6 +2316,156 @@ button.song-get:hover {
 .sheet h2 {
   font-size: 20px;
   margin-bottom: 14px;
+}
+/* Import files: the cover and the album's names, then each song's (number, title, artist, length). */
+.sheet--wide {
+  width: min(640px, 100%);
+}
+.import {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.import__cover {
+  flex: none;
+  width: 132px;
+  height: 132px;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  color: var(--muted);
+  font-size: 12px;
+}
+.import__cover:hover:not(:disabled) {
+  background: rgba(155, 123, 255, 0.14);
+  color: var(--text);
+}
+.import__cover img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.import__cover img + span {
+  position: absolute;
+  bottom: 6px;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+}
+.import__fields {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+.import__fields .field {
+  margin: 0;
+}
+.import__row {
+  display: flex;
+  gap: 8px;
+}
+.import__row .field:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.import__year {
+  width: 76px;
+  flex: none;
+}
+.import__pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.import__songs {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  max-height: min(40vh, 320px);
+  overflow-y: auto;
+  display: grid;
+  gap: 6px;
+}
+.import__songs li {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  gap: 8px;
+  align-items: start;
+}
+.import__songs .input {
+  padding: 7px 9px;
+  font-size: 14px;
+}
+.import__n {
+  text-align: center;
+}
+.import__song {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 6px;
+  min-width: 0;
+}
+.import__why {
+  grid-column: 1 / -1;
+  color: var(--bad);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.import__len {
+  min-width: 40px;
+  padding-top: 8px;
+  text-align: right;
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.import__songs li.is-in .import__len {
+  color: var(--good);
+}
+.import__songs li.is-out .input {
+  opacity: 0.6;
+}
+@media (max-width: 560px) {
+  .import {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .import__cover {
+    width: 96px;
+    height: 96px;
+  }
+  .import__song {
+    grid-template-columns: 1fr;
+  }
+}
+.import__bar {
+  margin-top: 16px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.import__bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent-light);
+  transition: width 0.2s linear;
+}
+.sheet .btn:disabled {
+  opacity: 0.45;
+  transform: none;
 }
 .sheet__buttons {
   display: flex;
@@ -3690,7 +3856,12 @@ html.tv .track:focus-within {
     width: 34px;
     padding: 0;
   }
-  .library__downloads span {
+  .library__downloads span,
+  .library__import span {
     display: none;
+  }
+  .library__import {
+    width: 34px;
+    padding: 0;
   }
 }

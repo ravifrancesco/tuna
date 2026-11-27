@@ -309,7 +309,7 @@ export interface ServerInfo {
   version: string;
   /** Navidrome is set up: people can sign in. */
   ready: boolean;
-  services: { navidrome: boolean; lidarr: boolean; slskd: boolean; lastfm: boolean };
+  services: { navidrome: boolean; lidarr: boolean; slskd: boolean; lastfm: boolean; /** Tuna has Lidarr's music folder: people can send files of their own. */ music: boolean };
 }
 
 /** Which copies of a song to get from Soulseek: lossless up to CD quality, any lossless (hi-res too), or MP3 320. */
@@ -317,7 +317,8 @@ export type SoulseekFiles = 'cd' | 'lossless' | 'mp3';
 
 export interface Connections {
   navidrome: { url?: string };
-  lidarr: { url?: string; apiKey?: boolean };
+  /** `folder`: Lidarr's music folder; `reachable`: Tuna has it too, at the same path. */
+  lidarr: { url?: string; apiKey?: boolean; folder?: string; reachable?: boolean };
   slskd: { url?: string; apiKey?: boolean; files: SoulseekFiles };
   lastfm: { apiKey?: boolean };
 }

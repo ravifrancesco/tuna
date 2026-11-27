@@ -10,6 +10,9 @@
  *   MOCK_EMPTY_LIBRARY=1: nothing in the library yet, as a new install.
  *   MOCK_SLSKD_EMPTY=1: Soulseek finds nothing. MOCK_SLSKD_FAIL=<user>: that peer's downloads fail.
  *   MOCK_SLSKD_REFUSE=<user,…>: those peers refuse to send. MOCK_SLSKD_STUCK=<user,…>: their queues never move.
+ *   MOCK_MUSIC_DIR (default tuna-mock-music in the temp folder): Lidarr's music folder, a real one: files
+ *   people import go there (through Lidarr's manual import, or straight in), and Navidrome finds them.
+ *   MOCK_SLSKD_BLOCK=<phrase,…>: nobody answers searches with those phrases (Soulseek's server drops some).
  *   MOCK_SLSKD_SAVE_MS (default 1500): how long after a search says it's complete its results are saved
  *   (slskd saves them last; slower on a Raspberry Pi).
  *   MOCK_SLSKD_MOVE_SECONDS (default 2): how long after a download succeeds its file is in slskd's
@@ -25,8 +28,12 @@
  *   MOCK_COVER_MS (default 0): how long each cover takes, as Navidrome resizing pictures on a Raspberry Pi.
  *   ListenBrainz token for Settings: mock-lb.
  */
+import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import http from 'node:http';
+import os from 'node:os';
+import nodePath from 'node:path';
 import zlib from 'node:zlib';
 
 const PORT = Number(process.env.MOCK_PORT ?? 7701);
@@ -39,6 +46,11 @@ const SLSKD_REFUSE = (process.env.MOCK_SLSKD_REFUSE ?? '').split(',').filter(Boo
 const SLSKD_STUCK = (process.env.MOCK_SLSKD_STUCK ?? '').split(',').filter(Boolean);
 const SLSKD_MOVE_SECONDS = Number(process.env.MOCK_SLSKD_MOVE_SECONDS ?? 2);
 const SLSKD_SAVE_MS = Number(process.env.MOCK_SLSKD_SAVE_MS ?? 1500);
+const SLSKD_BLOCK = (process.env.MOCK_SLSKD_BLOCK ?? '').split(',').filter(Boolean);
+const MUSIC_DIR = process.env.MOCK_MUSIC_DIR ?? nodePath.join(os.tmpdir(), 'tuna-mock-music');
+fs.mkdirSync(MUSIC_DIR, { recursive: true });
+const SONG_FILE = /\.(flac|mp3|m4a|aac|ogg|oga|opus|wav|aiff?|wma)$/i;
+const FILE_TYPES: Record<string, string> = { '.flac': 'audio/flac', '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.aac': 'audio/aac', '.ogg': 'audio/ogg', '.oga': 'audio/ogg', '.opus': 'audio/ogg', '.wav': 'audio/wav', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
 const COVER_MS = Number(process.env.MOCK_COVER_MS ?? 0);
 const LOOKUP_FAIL = (process.env.MOCK_LIDARR_LOOKUP_FAIL ?? '').toLowerCase().split(',').filter(Boolean);
 const CROWDED = (process.env.MOCK_MB_CROWDED ?? '').toLowerCase().split(',').filter(Boolean);
@@ -129,6 +141,8 @@ interface MTrack {
   scanned?: boolean;
   /** Lidarr added or removed its file; Navidrome hasn't scanned since. */
   changed?: number;
+  /** A real file in the music folder (one someone imported): played as it is. */
+  file?: string;
 }
 interface MAlbum {
   id: string;
@@ -145,6 +159,8 @@ interface MAlbum {
   created: string;
   tracks: MTrack[];
   lidarrId: number;
+  /** A real cover next to its files (cover.jpg). */
+  cover?: string;
 }
 interface MArtist {
   id: string;
@@ -323,10 +339,10 @@ const child = (u: User, t: MTrack) => ({
   genre: t.genre,
   coverArt: `al-${t.albumId}`,
   duration: t.duration,
-  bitRate: 352,
-  suffix: 'wav',
-  contentType: 'audio/wav',
-  size: 44 + t.duration * RATE * 2,
+  bitRate: t.file ? Math.round((fs.statSync(t.file, { throwIfNoEntry: false })?.size ?? 0) / Math.max(1, t.duration) / 125) : 352,
+  suffix: t.file ? nodePath.extname(t.file).slice(1) : 'wav',
+  contentType: t.file ? (FILE_TYPES[nodePath.extname(t.file).toLowerCase()] ?? 'application/octet-stream') : 'audio/wav',
+  size: t.file ? (fs.statSync(t.file, { throwIfNoEntry: false })?.size ?? 0) : 44 + t.duration * RATE * 2,
   playCount: u.plays.get(t.id) ?? 0,
   starred: u.starred.get(t.id),
   musicBrainzId: t.mbid,
@@ -426,7 +442,19 @@ function tune(t: MTrack) {
   };
 }
 
+/** A real file, as it is (with ranges, as Navidrome). */
+function streamFile(file: string, req: http.IncomingMessage, res: http.ServerResponse) {
+  const total = fs.statSync(file).size;
+  const type = FILE_TYPES[nodePath.extname(file).toLowerCase()] ?? 'application/octet-stream';
+  const m = req.headers.range?.match(/bytes=(\d*)-(\d*)/);
+  const start = m ? (m[1] ? Number(m[1]) : total - Number(m[2])) : 0;
+  const end = m && m[1] && m[2] ? Math.min(Number(m[2]), total - 1) : total - 1;
+  res.writeHead(m ? 206 : 200, { 'content-type': type, 'content-length': end - start + 1, 'accept-ranges': 'bytes', ...(m ? { 'content-range': `bytes ${start}-${end}/${total}` } : {}) });
+  fs.createReadStream(file, { start, end }).pipe(res);
+}
+
 function streamSong(t: MTrack, req: http.IncomingMessage, res: http.ServerResponse) {
+  if (t.file && fs.existsSync(t.file)) return streamFile(t.file, req, res);
   const dataBytes = t.duration * RATE * 2;
   const total = 44 + dataBytes;
   const m = req.headers.range?.match(/bytes=(\d*)-(\d*)/);
@@ -577,6 +605,48 @@ function scannedSong(t: MTrack) {
 function scan() {
   for (const a of albums.values()) if (a.filed) scanned(a);
   for (const t of tracks.values()) if (t.changed) scannedSong(t);
+  scanFolder();
+}
+
+/** Files put straight into the music folder (not through Lidarr): Navidrome finds them by their tags. */
+function scanFolder() {
+  const known = new Set([...tracks.values()].map((t) => t.file).filter(Boolean));
+  const walk = (dir: string): string[] =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.name.startsWith('.') ? [] : d.isDirectory() ? walk(nodePath.join(dir, d.name)) : SONG_FILE.test(d.name) ? [nodePath.join(dir, d.name)] : []));
+  for (const file of walk(MUSIC_DIR)) {
+    if (known.has(file)) continue;
+    let tags: Record<string, string> = {};
+    let duration = 0;
+    try {
+      const probe = JSON.parse(execFileSync('ffprobe', ['-v', 'quiet', '-print_format', 'json', '-show_format', file], { encoding: 'utf8' })) as { format?: { duration?: string; tags?: Record<string, string> } };
+      tags = Object.fromEntries(Object.entries(probe.format?.tags ?? {}).map(([k, v]) => [k.toLowerCase(), String(v)]));
+      duration = Math.round(Number(probe.format?.duration) || 0);
+    } catch {
+      /* no ffprobe: by its folders */
+    }
+    const parts = nodePath.relative(MUSIC_DIR, file).split(nodePath.sep);
+    const title = tags.title ?? nodePath.basename(file).replace(/\.[^.]+$/, '');
+    const artistName = tags.album_artist ?? tags.artist ?? parts.at(-3) ?? 'Unknown artist';
+    const albumName = tags.album ?? parts.at(-2) ?? title;
+    let artist = artists.find((x) => x.name.toLowerCase() === artistName.toLowerCase());
+    if (!artist) artists.push((artist = { id: `arf${artists.length + 1}`, name: artistName, genre: 'Other', mbid: uuid(`artist:${artistName}`), inLibrary: true, albums: [] }));
+    let album = artist.albums.find((x) => x.name.toLowerCase() === albumName.toLowerCase());
+    if (!album) {
+      album = { id: `alf${albums.size + 1}`, name: albumName, artistId: artist.id, artist: artist.name, year: new Date().getFullYear(), genre: artist.genre, mbid: uuid(`album:${artist.name}:${albumName}`), type: 'Album', inLibrary: false, created: new Date().toISOString(), tracks: [], lidarrId: nextLidarrAlbum++ };
+      artist.albums.push(album);
+      albums.set(album.id, album);
+    }
+    const cover = fs.readdirSync(nodePath.dirname(file)).find((f) => /^(cover|folder)\.(jpe?g|png|webp)$/i.test(f));
+    if (cover) album.cover = nodePath.join(nodePath.dirname(file), cover);
+    let t = album.tracks.find((x) => x.title.toLowerCase() === title.toLowerCase());
+    if (!t) {
+      t = { id: `${album.id}-t${album.tracks.length + 1}`, title, albumId: album.id, album: album.name, artistId: artist.id, artist: tags.artist ?? artist.name, track: album.tracks.length + 1, disc: 1, year: album.year, genre: album.genre, duration: duration || 180, mbid: uuid(`rec:${file}`), hasLyrics: false, lidarrId: nextLidarrTrack++ };
+      album.tracks.push(t);
+      tracks.set(t.id, t);
+    }
+    Object.assign(t, { file, fileId: t.fileId ?? nextTrackFile++, scanned: true, changed: undefined, duration: duration || t.duration });
+    console.log(`mock navidrome: "${t.title}" by ${t.artist} (a file in the music folder) is in the library now`);
+  }
 }
 /** Lidarr deletes one song's file: from then on Navidrome sees its album song by song. */
 function unfile(t: MTrack) {
@@ -660,14 +730,23 @@ function manualImport(files: Array<{ path?: string; artistId?: number; albumId?:
     const a = [...albums.values()].find((x) => x.lidarrId === f.albumId);
     const artist = a && artists.find((x) => x.id === a.artistId);
     const songs = (f.trackIds ?? []).map((id) => a?.tracks.find((t) => t.lidarrId === id));
-    if (!onDisk().some((x) => localPath(x) === f.path)) problems.push(`Not a finished download: ${f.path}`);
+    const real = Boolean(f.path?.startsWith(`${MUSIC_DIR}/`) && fs.existsSync(f.path));
+    if (!real && !onDisk().some((x) => localPath(x) === f.path)) problems.push(`Not a finished download: ${f.path}`);
     else if (!a || !artist) problems.push(`Album ${f.albumId} not found`);
     else if (!artist.lidarrId || artist.lidarrId !== f.artistId) problems.push(`Artist ${f.artistId} not found (add ${artist.name} to Lidarr first)`);
     else if (f.albumReleaseId !== releaseId(a)) problems.push(`Release ${f.albumReleaseId} is not one of "${a.name}"`);
     else if (!songs.length || songs.some((t) => !t)) problems.push(`Tracks ${f.trackIds} are not all on "${a.name}"`);
     else {
       for (const x of transfers) if (localPath(x) === f.path) x.imported = true;
-      for (const t of songs as MTrack[]) Object.assign(t, { fileId: nextTrackFile++, changed: Date.now() });
+      // A real file: moved into the artist's folder, as Lidarr does.
+      let file: string | undefined;
+      if (real) {
+        const dir = nodePath.join(MUSIC_DIR, artist.name, `${a.name} (${a.year})`);
+        fs.mkdirSync(dir, { recursive: true });
+        file = nodePath.join(dir, `${String(songs[0]!.track).padStart(2, '0')} - ${songs[0]!.title}${nodePath.extname(f.path!)}`);
+        fs.renameSync(f.path!, file);
+      }
+      for (const t of songs as MTrack[]) Object.assign(t, { fileId: nextTrackFile++, changed: Date.now(), file });
       console.log(`mock lidarr: imported ${f.path} into "${a.name}" by ${a.artist}; Navidrome sees it when it scans`);
     }
   }
@@ -716,7 +795,8 @@ const words = (s: string) =>
 /** Who on Soulseek has the songs a search names: 2–4 people for each song with every word asked for in its path, as Soulseek. */
 function peersFor(text: string) {
   const asked = words(text);
-  const found = SLSKD_EMPTY || !asked.length ? [] : [...tracks.values()].filter((t) => asked.every((w) => words(`${t.artist} ${t.album} ${t.title}`).includes(w)));
+  const blocked = SLSKD_BLOCK.some((p) => ` ${asked.join(' ')} `.includes(` ${words(p).join(' ')} `));
+  const found = SLSKD_EMPTY || blocked || !asked.length ? [] : [...tracks.values()].filter((t) => asked.every((w) => words(`${t.artist} ${t.album} ${t.title}`).includes(w)));
   const byUser = new Map<string, Array<Record<string, unknown>>>();
   for (const t of found) {
     const r = rng(`peers:${t.id}`);
@@ -1077,6 +1157,8 @@ function navidrome(method: string, q: URLSearchParams, req: http.IncomingMessage
       const id = (q.get('id') ?? '').replace(/_[0-9a-f]+$/, '');
       const s = Math.min(600, Math.max(32, Number(q.get('size') ?? 300)));
       const albumOf = id.startsWith('al-') ? id.slice(3) : id.startsWith('mf-') ? tracks.get(id.slice(3))?.albumId : albums.has(id) ? id : tracks.get(id)?.albumId;
+      const real = albumOf ? albums.get(albumOf)?.cover : undefined;
+      if (real && fs.existsSync(real)) return streamFile(real, req, res);
       const image =
         albumOf && albums.has(albumOf)
           ? coverPng(albums.get(albumOf)!.mbid, s)
@@ -1159,7 +1241,7 @@ async function lidarr(path: string, q: URLSearchParams, req: http.IncomingMessag
   if (req.headers['x-api-key'] !== 'mock-lidarr-key') return json(res, 401, { message: 'Unauthorized' });
   const p = path.replace(/^\/api\/v1/, '');
   if (p === '/system/status') return json(res, 200, { version: '2.9.0.0 (mock)', appName: 'Lidarr' });
-  if (p === '/rootfolder') return json(res, 200, [{ id: 1, path: '/music' }]);
+  if (p === '/rootfolder') return json(res, 200, [{ id: 1, path: MUSIC_DIR }]);
   if (p === '/qualityprofile') return json(res, 200, [{ id: 1, name: 'Any' }, { id: 2, name: 'Lossless' }]);
   if (p === '/metadataprofile') return json(res, 200, [{ id: 1, name: 'Standard' }]);
   if (p === '/artist' && req.method === 'GET') return json(res, 200, artists.filter((a) => a.lidarrId).map(lidarrArtist));
@@ -1202,7 +1284,8 @@ async function lidarr(path: string, q: URLSearchParams, req: http.IncomingMessag
   }
   if (p === '/album' && req.method === 'GET') {
     const artist = artists.find((x) => x.lidarrId === Number(q.get('artistId')));
-    if (q.get('foreignAlbumId')) return json(res, 200, [...albums.values()].filter((a) => a.mbid === q.get('foreignAlbumId')).map(lidarrAlbum));
+    // Only albums of artists in Lidarr, as Lidarr.
+    if (q.get('foreignAlbumId')) return json(res, 200, [...albums.values()].filter((a) => a.mbid === q.get('foreignAlbumId') && artists.find((x) => x.id === a.artistId)?.lidarrId).map(lidarrAlbum));
     return json(res, 200, artist ? artist.albums.map(lidarrAlbum) : []);
   }
   const one = p.match(/^\/album\/(\d+)$/);
@@ -1232,7 +1315,12 @@ async function lidarr(path: string, q: URLSearchParams, req: http.IncomingMessag
   if (p === '/remotepathmapping') return json(res, 200, []);
   if (p === '/manualimport') {
     const folder = (q.get('folder') ?? '').replace(/\/+$/, '');
-    const found = new Map(onDisk().map((x) => [localPath(x), x]));
+    const found = new Map(onDisk().map((x) => [localPath(x), { n: x.n, size: x.size }]));
+    // Real files in the music folder (ones someone imported).
+    if (folder.startsWith(`${MUSIC_DIR}/`) && fs.existsSync(folder))
+      fs.readdirSync(folder)
+        .filter((f) => SONG_FILE.test(f))
+        .forEach((f, i) => found.set(nodePath.join(folder, f), { n: 900_000 + i, size: fs.statSync(nodePath.join(folder, f)).size }));
     return json(
       res,
       200,
@@ -1315,6 +1403,7 @@ async function slskd(path: string, q: URLSearchParams, req: http.IncomingMessage
     const b = await body(req);
     const s: Search = { id: typeof b.id === 'string' && b.id ? b.id : uuid(`search:${nextSearch}`), searchText: String(b.searchText ?? ''), token: nextSearch++, started: Date.now() };
     searches.set(s.id, s);
+    console.log(`mock slskd: "${s.searchText}" (${peersFor(s.searchText).length} answered)`);
     return json(res, 200, searchView(s));
   }
   const search = p.match(/^\/searches\/([^/]+)(\/responses)?$/);

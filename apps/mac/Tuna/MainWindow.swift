@@ -187,7 +187,8 @@ final class MainWindow: NSWindowController, NSWindowDelegate, WKNavigationDelega
     func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void) {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = parameters.allowsMultipleSelection
-        panel.canChooseDirectories = false
+        // A whole folder (an album's), where the page asks for one.
+        panel.canChooseDirectories = parameters.allowsDirectories
         guard let window else { return completionHandler(nil) }
         panel.beginSheetModal(for: window) { completionHandler($0 == .OK ? panel.urls : nil) }
     }

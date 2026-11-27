@@ -147,6 +147,9 @@ function missed(w: Wanted, found: boolean) {
 /** What couldn't be found when asked for by name (Get all, a playlist's missing songs). */
 export const missedAlbums = () => saved.missed ?? [];
 
+/** Someone sent files of an album that couldn't be found: it's in. */
+export const missedSent = (artist: string, album: string) => missed({ artist, title: album } as Wanted, true);
+
 function enqueue(items: Wanted[]) {
   queue.push(...items);
   keepQueue();

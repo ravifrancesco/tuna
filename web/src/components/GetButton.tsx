@@ -1,21 +1,25 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { useQueryClient } from '@tanstack/react-query';
-import { Check, CircleArrowDown, CirclePlus, Plus, RotateCw, Search as SearchIcon } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Check, CircleArrowDown, CirclePlus, FileUp, Plus, RotateCw, Search as SearchIcon } from 'lucide-react';
 import type { GetState, Track, WorldAlbum } from '@tuna/shared';
 import { api, ApiError } from '../api';
 import { t } from '../i18n';
 import { canDownload, download, removeDownload, useDownload } from '../lib/downloads';
+import { ImportFiles, type ImportTarget } from './ImportFiles';
+import { Item, showMenu } from './Menu';
 import { toast } from './ui';
 
 /**
  * Get, for an album that isn't in the library: then where it's at ("Looking", "On its way · 40%",
  * "In your library"). It checks again by itself while something is on its way.
  */
-export function GetButton({ album, onAsk }: { album: WorldAlbum; onAsk?: () => Promise<GetState> }) {
+export function GetButton({ album, onAsk, importAs }: { album: WorldAlbum; onAsk?: () => Promise<GetState>; importAs?: ImportTarget }) {
   const qc = useQueryClient();
   const [get, setGet] = useState<GetState>(album.get);
   const [busy, setBusy] = useState(false);
+  const server = useQuery({ queryKey: ['server'], queryFn: api.server, staleTime: 60_000 });
+  const [importing, setImporting] = useState(false);
   useEffect(() => setGet(album.get), [album.get]);
 
   const pending = get.state === 'looking' || get.state === 'downloading';
@@ -30,9 +34,9 @@ export function GetButton({ album, onAsk }: { album: WorldAlbum; onAsk?: () => P
     return () => window.clearInterval(timer);
   }, [pending, album.mbid, qc]);
 
-  const ask = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const ask = async (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
     setBusy(true);
     try {
       setGet(await (onAsk ? onAsk() : api.get(album)));
@@ -74,11 +78,39 @@ export function GetButton({ album, onAsk }: { album: WorldAlbum; onAsk?: () => P
         {t('On its way')} · {Math.round(get.progress * 100)}%
       </span>
     );
+  // Not found: look again, or (where Tuna has the music folder) files of their own.
   if (get.state === 'notFound')
     return (
-      <button className="get get--missing" onClick={ask} disabled={busy}>
-        {t('Not found yet · Try again')}
-      </button>
+      <>
+        <button
+          className="get get--missing"
+          disabled={busy}
+          onClick={(e) =>
+            server.data?.services.music
+              ? showMenu(
+                  e,
+                  <>
+                    <Item icon={<RotateCw size={18} />} onClick={() => void ask()}>
+                      {t('Look again')}
+                    </Item>
+                    <Item icon={<FileUp size={18} />} onClick={() => setImporting(true)}>
+                      {t('Import files')}
+                    </Item>
+                  </>,
+                )
+              : void ask(e)
+          }
+        >
+          {server.data?.services.music ? t('Not found yet') : t('Not found yet · Try again')}
+        </button>
+        {importing && (
+          <ImportFiles
+            target={importAs ?? { kind: 'album', artist: album.artist, album: album.title, mbid: album.mbid }}
+            onClose={() => setImporting(false)}
+            onSent={() => (setGet({ state: 'looking' }), void qc.invalidateQueries())}
+          />
+        )}
+      </>
     );
   return (
     <button className="get" onClick={ask} disabled={busy}>
@@ -107,8 +139,11 @@ export function SongGet({ song, get: given, album }: { song: { title: string; ar
     return () => window.clearInterval(timer);
   }, [pending, song.title, song.artist, qc]);
 
-  const ask = async (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const server = useQuery({ queryKey: ['server'], queryFn: api.server, staleTime: 60_000 });
+  const [importing, setImporting] = useState(false);
+
+  const ask = async (e?: React.MouseEvent) => {
+    e?.stopPropagation();
     setGet({ state: 'looking' });
     try {
       await api.getSongs([{ artist: song.artist, title: song.title, album }]);
@@ -121,7 +156,8 @@ export function SongGet({ song, get: given, album }: { song: { title: string; ar
   if (get.state === 'ready') return get.track && canDownload ? <KeepOnDevice track={get.track} /> : <Check size={18} className="song-get song-get--done" aria-label={t('In your library')} />;
   if (get.state === 'looking')
     return (
-      <span className="song-get song-get--busy" role="status" aria-label={t('Looking')}>
+      <span className="song-get song-get--busy song-get--looking" role="status" aria-label={t('Looking')} title={t('Looking')}>
+        <Plus size={12} strokeWidth={3.3} />
         <i className="song-get__spin" />
       </span>
     );
@@ -134,10 +170,29 @@ export function SongGet({ song, get: given, album }: { song: { title: string; ar
         </svg>
       </span>
     );
+  // Not found: look again, or (where Tuna has the music folder) a file of their own.
+  const missing = (e: React.MouseEvent) =>
+    server.data?.services.music
+      ? showMenu(
+          e,
+          <>
+            <Item icon={<RotateCw size={18} />} onClick={() => void ask()}>
+              {t('Look again')}
+            </Item>
+            <Item icon={<FileUp size={18} />} onClick={() => setImporting(true)}>
+              {t('Import files')}
+            </Item>
+          </>,
+        )
+      : void ask(e);
+  const label = get.state === 'notFound' ? t('Not found yet') : t('Get');
   return (
-    <button className="song-get" onClick={(e) => void ask(e)} aria-label={get.state === 'notFound' ? t('Not found yet · Try again') : t('Get')} title={get.state === 'notFound' ? t('Not found yet · Try again') : t('Get')}>
-      {get.state === 'notFound' ? <RotateCw size={18} /> : <CirclePlus size={20} />}
-    </button>
+    <>
+      <button className={`song-get ${get.state === 'notFound' ? 'song-get--missing' : ''}`} onClick={(e) => (get.state === 'notFound' ? missing(e) : void ask(e))} aria-label={label} title={label}>
+        <CirclePlus size={20} />
+      </button>
+      {importing && <ImportFiles target={{ kind: 'song', title: song.title, artist: song.artist, album }} onClose={() => setImporting(false)} onSent={setGet} />}
+    </>
   );
 }
 

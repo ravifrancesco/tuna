@@ -62,6 +62,14 @@ Sign in with your Navidrome account. Add the rest of the household in **Settings
   quality (the default: no hi-res files of 100 MB or more a song), any lossless, or MP3 320. Sharing
   a folder in slskd (your music, read-only) means fewer people refuse to send you files.
 
+## Importing your own files
+
+A song Soulseek doesn't have, or a whole album you have in a folder: **Import files** (on a song or
+album that wasn't found, and in Your library). Tuna puts them into Lidarr's music folder, so it needs
+the data folder at the same path as Lidarr: `${DATA_BASE_PATH}:/data` in Tuna's volumes (already in
+the stack file). If Lidarr is in another stack, add that line to Tuna's with the folder Lidarr has as
+`/data`. Settings → Connections says when Tuna can't reach it.
+
 ## Updating
 
 Portainer → Stacks → tuna → **Pull and redeploy**.

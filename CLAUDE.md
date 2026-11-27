@@ -79,13 +79,16 @@ Notes for anyone (person or AI assistant) working on Tuna's code.
   The fake slskd: `MOCK_SLSKD_EMPTY=1` (every search finds nothing), `MOCK_SLSKD_FAIL=<peer>` (that
   peer's downloads fail), `MOCK_SLSKD_MOVE_SECONDS` (2: how long a finished download takes to reach
   slskd's downloads folder, as in slskd), `MOCK_SLSKD_REFUSE=<peer,…>` (they refuse to send),
-  `MOCK_SLSKD_STUCK=<peer,…>` (their queues never move). `MOCK_LIDARR_LOOKUP_FAIL=<word,…>` makes Lidarr's
+  `MOCK_SLSKD_STUCK=<peer,…>` (their queues never move), `MOCK_SLSKD_BLOCK=<phrase,…>` (nobody answers
+  searches with those phrases, as Soulseek's server drops some). `MOCK_LIDARR_LOOKUP_FAIL=<word,…>` makes Lidarr's
   search fail for names with those words, as its metadata server does for some. `MOCK_MB_CROWDED=<word,…>`
   makes songs with those words famous in MusicBrainz (150 compilation and live recordings before the
   album's, and a greatest hits Lidarr doesn't keep). `MOCK_DEEZER=1` makes Lidarr know albums from Deezer
   too, as Tubifarry's Deezer source (`…@deezer` ids). `MOCK_SLSKD_SAVE_MS` (1500): how long after a search says
   it's complete slskd saves its results. `MOCK_COVER_MS` makes each cover that slow, as Navidrome
-  on a Raspberry Pi. ListenBrainz token for Settings: `mock-lb`.
+  on a Raspberry Pi. `MOCK_MUSIC_DIR` (tuna-mock-music in the temp folder) is Lidarr's music folder,
+  a real one: imported files go there (through Lidarr's manual import, or straight in) and the fake
+  Navidrome finds them by their tags (ffprobe). ListenBrainz token for Settings: `mock-lb`.
 - `npm run typecheck` checks server and web; `npm run check:i18n` the Italian.
 - **Develop against the mock**, never against a real household's server.
 - A running server serves the web files from `web/dist` as they are: `npm run build -w web` to

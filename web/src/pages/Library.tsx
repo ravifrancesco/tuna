@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowUpDown, Check, CircleArrowDown, Plus } from 'lucide-react';
+import { ArrowUpDown, Check, CircleArrowDown, FileUp, Plus } from 'lucide-react';
 import { api } from '../api';
 import { AlbumCard, ArtistCard, PlaylistCard } from '../components/Cards';
+import { ImportFiles } from '../components/ImportFiles';
 import { Item, pickPlaylist, showMenu } from '../components/Menu';
 import { Empty, LikedCover, Spinner } from '../components/ui';
 import { locale, t, tn } from '../i18n';
@@ -43,6 +44,8 @@ const remembered = (show: Show) => {
 export function Library() {
   const [params, setParams] = useSearchParams();
   const show = (params.get('show') as Show) ?? 'playlists';
+  const server = useQuery({ queryKey: ['server'], queryFn: api.server, staleTime: 60_000 });
+  const [importing, setImporting] = useState(false);
   const [sorts, setSorts] = useState(() => ({ playlists: remembered('playlists'), albums: remembered('albums'), artists: remembered('artists') }));
   const sort = sorts[show];
   const setSort = (value: string) => {
@@ -87,11 +90,17 @@ export function Library() {
               <CircleArrowDown size={16} /> <span>{t('Downloads')}</span>
             </Link>
           )}
+          {server.data?.services.music && (
+            <button className="btn btn--small library__import" onClick={() => setImporting(true)} aria-label={t('Import files')}>
+              <FileUp size={16} /> <span>{t('Import files')}</span>
+            </button>
+          )}
           <button className="btn btn--small" onClick={() => pickPlaylist([])}>
             <Plus size={16} /> {t('New playlist')}
           </button>
         </span>
       </div>
+      {importing && <ImportFiles target={{ kind: 'any' }} onClose={() => setImporting(false)} />}
       <div className="library__bar">
         <div className="segments" role="tablist">
           {view('playlists', t('Playlists'))}

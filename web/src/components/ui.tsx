@@ -93,7 +93,7 @@ export const Empty = ({ children }: { children: ReactNode }) => (
   </div>
 );
 
-export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Sheet({ title, onClose, children, wide }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
   useEffect(() => {
     const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', key);
@@ -101,7 +101,7 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
   }, [onClose]);
   return (
     <div className="sheet-layer" data-layer="top" onClick={onClose}>
-      <div className="sheet" role="dialog" aria-label={title} onClick={(e) => e.stopPropagation()}>
+      <div className={`sheet ${wide ? 'sheet--wide' : ''}`} role="dialog" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <h2>{title}</h2>
         {children}
       </div>

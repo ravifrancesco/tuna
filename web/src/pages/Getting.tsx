@@ -1,7 +1,9 @@
 import { useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { FileUp } from 'lucide-react';
 import { api } from '../api';
 import { GetButton } from '../components/GetButton';
+import { ImportFiles, type ImportTarget } from '../components/ImportFiles';
 import { Cover, Empty, Spinner, toast } from '../components/ui';
 import { t, tn } from '../i18n';
 import { ago } from '../lib/format';
@@ -41,7 +43,9 @@ function StillToAsk() {
 function Missed() {
   const qc = useQueryClient();
   const missed = useQuery({ queryKey: ['missed'], queryFn: api.missed, refetchInterval: 30_000 });
+  const server = useQuery({ queryKey: ['server'], queryFn: api.server, staleTime: 60_000 });
   const [retried, setRetried] = useState(false);
+  const [importing, setImporting] = useState<ImportTarget>();
   if (!missed.data?.length) return null;
   const retry = async () => {
     setRetried(true);
@@ -64,8 +68,14 @@ function Missed() {
               {m.artist} · {t('{name}, {when}', { name: m.by, when: ago(new Date(m.at).toISOString()) })}
             </small>
           </div>
+          {server.data?.services.music && (
+            <button className="icon-btn" aria-label={t('Import files')} title={t('Import files')} onClick={() => setImporting({ kind: 'album', artist: m.artist, album: m.album })}>
+              <FileUp size={18} />
+            </button>
+          )}
         </div>
       ))}
+      {importing && <ImportFiles target={importing} onClose={() => (setImporting(undefined), void qc.invalidateQueries({ queryKey: ['missed'] }))} />}
     </section>
   );
 }
@@ -96,6 +106,7 @@ export function Getting() {
           </div>
           <GetButton
             album={{ mbid: x.mbid, title: x.title, artist: x.artist, get: x.get }}
+            importAs={x.kind === 'song' ? { kind: 'song', title: x.title, artist: x.artist, album: x.album } : undefined}
             onAsk={x.kind === 'song' ? () => api.getSongs([{ artist: x.artist, title: x.title, album: x.album }]).then(() => ({ state: 'looking' as const })) : undefined}
           />
         </div>

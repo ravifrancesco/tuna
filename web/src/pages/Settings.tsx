@@ -634,6 +634,9 @@ function ConnectionsSection() {
           <input className="input" value={lidarrKey} onChange={(e) => setLidarrKey(e.target.value)} placeholder={conn.data?.lidarr.apiKey ? t('Saved (type to replace)') : ''} />
         </label>
       </div>
+      {conn.data?.lidarr.folder && !conn.data.lidarr.reachable && (
+        <p className="muted small">{t("To import files, Tuna needs Lidarr's music folder ({folder}) at the same path.", { folder: conn.data.lidarr.folder })}</p>
+      )}
       <div className="field-row">
         <label className="field">
           <span>{t('slskd address')}</span>
