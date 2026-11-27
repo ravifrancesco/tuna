@@ -101,9 +101,12 @@ function readCsv(file: string, text: string, into: Found) {
   const artistAt = head.findIndex((h) => h.startsWith('artist name'));
   const albumAt = head.indexOf('album name');
   const addedAt = head.indexOf('added at');
+  const isrcAt = head.indexOf('isrc');
   if (titleAt < 0 || artistAt < 0) return;
   const songs = rows.flatMap((r) =>
-    r[titleAt]?.trim() && r[artistAt]?.trim() ? [{ title: r[titleAt].trim(), artist: r[artistAt].trim(), album: r[albumAt]?.trim() || undefined, added: Date.parse(r[addedAt] ?? '') || 0 }] : [],
+    r[titleAt]?.trim() && r[artistAt]?.trim()
+      ? [{ title: r[titleAt].trim(), artist: r[artistAt].trim(), album: r[albumAt]?.trim() || undefined, added: Date.parse(r[addedAt] ?? '') || 0, isrc: r[isrcAt]?.trim().toUpperCase() || undefined }]
+      : [],
   );
   const name = file.replace(/\.csv$/i, '').replace(/_/g, ' ').trim();
   const dated = ({ added, ...s }: (typeof songs)[number]) => ({ ...s, added: added ? new Date(added).toISOString() : undefined });
@@ -154,8 +157,8 @@ export async function importSpotify(auth: SubsonicAuth, username: string, name: 
   }
 
   const find = matcher(await songIndex(auth));
-  const missing = new Map<string, { artist: string; album: string; songs: Set<string>; plays: number }>();
-  const missingSongs = new Map<string, { artist: string; title: string; album?: string; plays: number }>();
+  const missing = new Map<string, { artist: string; album: string; songs: Set<string>; plays: number; isrc?: string }>();
+  const missingSongs = new Map<string, { artist: string; title: string; album?: string; plays: number; isrc?: string }>();
   const seen = new Map<string, boolean>();
   const look = (s: Song) => {
     const c = find(s);
@@ -164,6 +167,7 @@ export async function importSpotify(auth: SubsonicAuth, username: string, name: 
     if (!c) {
       const m = missingSongs.get(key) ?? { artist: s.artist, title: s.title, album: s.album, plays: 0 };
       m.album ??= s.album;
+      m.isrc ??= s.isrc;
       m.plays++;
       missingSongs.set(key, m);
     }
@@ -172,6 +176,7 @@ export async function importSpotify(auth: SubsonicAuth, username: string, name: 
       const k = `${norm(s.artist)}|${norm(cleanAlbum(s.album))}`;
       const m = missing.get(k) ?? { artist: s.artist, album: cleanAlbum(s.album), songs: new Set<string>(), plays: 0 };
       m.songs.add(norm(s.title));
+      m.isrc ??= s.isrc;
       m.plays++;
       missing.set(k, m);
     }
@@ -225,7 +230,7 @@ export async function importSpotify(auth: SubsonicAuth, username: string, name: 
     missingAlbums: [...missing.values()]
       .sort((a, b) => b.plays - a.plays || b.songs.size - a.songs.size)
       .slice(0, 2000)
-      .map((m) => ({ artist: m.artist, album: m.album, songs: m.songs.size, plays: m.plays })),
+      .map((m) => ({ artist: m.artist, album: m.album, songs: m.songs.size, plays: m.plays, isrc: m.isrc })),
     missingSongs: [...missingSongs.values()].sort((a, b) => b.plays - a.plays).slice(0, 5000),
   };
   log.info(

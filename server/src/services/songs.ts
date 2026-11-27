@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { GetItem, GetState } from '@tuna/shared';
 import * as lidarr from '../clients/lidarr';
-import { coverArtFor, mbSearchRecordings } from '../clients/public';
+import { coverArtFor, mbSearchRecordings, type MbRecording } from '../clients/public';
 import * as slskd from '../clients/slskd';
 import { config } from '../config';
 import { has, slskd as slskdConnection, soulseekFiles } from '../connections';
@@ -12,7 +12,7 @@ import { writeJson } from '../lib/storage';
 import { ensureArtist, scanNavidrome } from './getting';
 import type { SubsonicAuth } from '../clients/navidrome';
 import { norm, toTrack } from './library';
-import { artistsOf, matcher, songIndex } from './matching';
+import { alike, artistsOf, cleanAlbum, matcher, releaseGroups, songIndex } from './matching';
 import { resolve } from './stocking';
 
 /**
@@ -27,6 +27,10 @@ interface Song {
   artist: string;
   title: string;
   album?: string;
+  /** Its code, where Spotify's files had it. */
+  isrc?: string;
+  /** Its title and album artist as MusicBrainz has them, where they differ from Spotify's (Soulseek is searched for both). */
+  mb?: { title: string; artist: string };
   by: string;
   at: string;
   state: 'waiting' | 'looking' | 'downloading' | 'ready' | 'notFound';
@@ -96,10 +100,11 @@ const words = (s: string) => norm(s).split(' ').filter((w) => w.length > 1);
 const key = (s: { artist: string; title: string }) => `${norm(s.artist)}|${norm(cleanTitle(s.title))}`;
 
 /** Asks for songs; `discovery`: Tuna's own picks for someone (a song's radio, or the week's new songs). */
-export function wantSongs(by: string, list: Array<{ artist: string; title: string; album?: string }>, discovery?: { for: string; week: number; radio?: string }): number {
+export function wantSongs(by: string, list: Array<{ artist: string; title: string; album?: string; isrc?: string }>, discovery?: { for: string; week: number; radio?: string }): number {
   const known = new Map(songs.filter((s) => s.state !== 'notFound').map((s) => [key(s), s]));
   for (const s of list) {
     const k = known.get(key(s));
+    if (k && s.isrc) k.isrc ??= s.isrc;
     // Wanted by a person now: kept for good. Another person's discovery too: theirs as well.
     if (k && !discovery) Object.assign(k, { for: undefined, week: undefined, by: k.by === 'Tuna' ? by : k.by });
     else if (k?.for && discovery && !k.for.includes(discovery.for)) k.for.push(discovery.for);
@@ -114,6 +119,7 @@ export function wantSongs(by: string, list: Array<{ artist: string; title: strin
       artist: s.artist,
       title: s.title,
       album: s.album,
+      isrc: s.isrc || undefined,
       by,
       at,
       state: 'waiting' as const,
@@ -183,45 +189,44 @@ export async function letGo(id: string) {
 
 // ---- Finding its place in Lidarr ---------------------------------------------------------------------
 
-type Album = { mbid: string; artistMbid?: string; title: string; artist: string };
+type Album = { mbid: string; artistMbid?: string; title: string; artist: string; recordings?: string[] };
 
 /**
- * Its album (as Lidarr knows it) and its track there; Lidarr adds the artist, watching nothing. The
- * album the playlist names, else one the song came out on: a greatest hits isn't one Lidarr keeps.
- * Why not, when it can't be placed.
+ * Its album (as Lidarr knows it) and its track there; Lidarr adds the artist, watching nothing. By its
+ * code when Spotify's files had one (exactly the albums it's on, whatever the names); else the album
+ * the playlist names, else one the song came out on: a greatest hits isn't one Lidarr keeps. Why not,
+ * when it can't be placed.
  */
 async function place(s: Song): Promise<string | undefined> {
+  const coded = s.isrc ? releaseGroups(await mbSearchRecordings(`isrc:${s.isrc}`).catch(() => [])) : [];
+  if (coded.length) {
+    const named = s.album ? coded.filter((a) => alike(cleanAlbum(a.title), cleanAlbum(s.album!))) : [];
+    if (await placeOn(s, [...named, ...coded.filter((a) => !named.includes(a))])) return;
+  }
   // Lidarr's search fails for some names (its metadata server): then the song's own way, below.
   const named = s.album ? await resolve(s.artist, s.album).catch(() => undefined) : undefined;
   if (named && (await placeOn(s, [named]))) return;
   const own = (await releasesOf(s)).filter((a) => a.mbid !== named?.mbid);
-  if (!named && !own.length) return 'not in MusicBrainz';
+  if (!coded.length && !named && !own.length) return 'not in MusicBrainz';
   if (!(await placeOn(s, own))) return 'not on an album Lidarr has';
 }
 
-/** The albums, singles and EPs the song came out on (no compilations, live albums or mixes), albums first. */
+/** The albums, singles and EPs the song came out on (soundtracks after; no compilations, live albums or mixes), albums first. */
 async function releasesOf(s: Song): Promise<Album[]> {
   const first = s.artist.split(/\s*;\s*/)[0] || s.artist;
   const query = `recording:"${cleanTitle(s.title).replace(/"/g, '')}" AND artist:"${first.replace(/"/g, '')}"`;
-  const want = norm(cleanTitle(s.title));
-  const rank = (t?: string) => (t === 'Album' ? 0 : t === 'Single' ? 1 : t === 'EP' ? 2 : 3);
-  const found = new Map<string, Album & { rank: number }>();
+  const want = cleanTitle(s.title);
+  const recs: MbRecording[] = [];
   // A famous song has dozens of recordings, most of them on compilations: a few pages, until one is on an album.
-  for (let page = 0; page < 3 && ![...found.values()].some((a) => a.rank === 0); page++) {
-    const recs = await mbSearchRecordings(query, page * 100);
-    for (const r of recs) {
-      const artist = r['artist-credit']?.[0];
-      if (!artist || norm(cleanTitle(r.title)) !== want) continue;
-      for (const { 'release-group': g } of r.releases ?? []) {
-        if (g && !g['secondary-types']?.length && !found.has(g.id)) found.set(g.id, { mbid: g.id, artistMbid: artist.artist.id, title: g.title, artist: artist.name, rank: rank(g['primary-type']) });
-      }
-    }
-    if (recs.length < 100) break;
+  for (let page = 0; page < 3 && !releaseGroups(recs).some((a) => a.rank === 0); page++) {
+    const more = await mbSearchRecordings(query, page * 100);
+    recs.push(...more.filter((r) => r['artist-credit']?.length && (norm(cleanTitle(r.title)) === norm(want) || alike(cleanTitle(r.title), want))));
+    if (more.length < 100) break;
   }
-  return [...found.values()].sort((a, b) => a.rank - b.rank);
+  return releaseGroups(recs);
 }
 
-/** The song's track on the first of these albums that Lidarr has. */
+/** The song's track on the first of these albums that Lidarr has: its recording, else its name. */
 async function placeOn(s: Song, albums: Album[]): Promise<boolean> {
   const artists = new Map<string, { id: number; albums: lidarr.LAlbum[] }>();
   const want = norm(cleanTitle(s.title));
@@ -237,9 +242,22 @@ async function placeOn(s: Song, albums: Album[]): Promise<boolean> {
     const full = found.releases ? found : await lidarr.album(found.id);
     const release = full.releases?.find((r) => r.monitored) ?? full.releases?.[0];
     const tracks = (await lidarr.tracks(found.id)).filter((t) => !release || !t.albumReleaseId || t.albumReleaseId === release.id);
-    const track = tracks.find((t) => norm(cleanTitle(t.title)) === want) ?? tracks.find((t) => norm(t.title).includes(want) || want.includes(norm(cleanTitle(t.title))));
+    const track =
+      tracks.find((t) => t.foreignRecordingId && album.recordings?.includes(t.foreignRecordingId)) ??
+      tracks.find((t) => norm(cleanTitle(t.title)) === want) ??
+      tracks.find((t) => alike(cleanTitle(t.title), s.title)) ??
+      tracks.find((t) => norm(t.title).includes(want) || want.includes(norm(cleanTitle(t.title))));
     if (!track || !release) continue;
-    Object.assign(s, { albumMbid: album.mbid, artistId: artist.id, albumId: found.id, releaseId: release.id, trackId: track.id, length: track.duration ? Math.round(track.duration / 1000) : undefined });
+    const differs = norm(cleanTitle(track.title)) !== want || !artistsOf(s.artist).some((a) => artistsOf(album.artist).includes(a));
+    Object.assign(s, {
+      albumMbid: album.mbid,
+      artistId: artist.id,
+      albumId: found.id,
+      releaseId: release.id,
+      trackId: track.id,
+      length: track.duration ? Math.round(track.duration / 1000) : undefined,
+      mb: differs ? { title: track.title, artist: album.artist } : undefined,
+    });
     if (track.hasFile) Object.assign(s, { state: 'ready', ready: new Date().toISOString() });
     return true;
   }
@@ -270,8 +288,8 @@ const UNWANTED = ['live', 'remix', 'instrumental', 'karaoke', 'cover', 'acapella
  * someone sending Tuna another song when someone else has it too.
  */
 function best(s: Song, responses: slskd.SResponse[], anyone = false) {
-  const title = words(cleanTitle(s.title));
-  const artist = artistsOf(s.artist).map(words);
+  const titles = [s.title, s.mb?.title].filter(Boolean).map((x) => words(cleanTitle(x!)));
+  const artist = [...artistsOf(s.artist), ...(s.mb ? artistsOf(s.mb.artist) : [])].map(words);
   const unwanted = UNWANTED.filter((u) => !norm(s.title).includes(u));
   const files = soulseekFiles();
   const sending = new Set(songs.filter((x) => x !== s && x.state === 'downloading').map((x) => x.from!.username));
@@ -282,7 +300,7 @@ function best(s: Song, responses: slskd.SResponse[], anyone = false) {
       if (f.isLocked || !AUDIO.test(f.filename) || s.tried?.includes(`${r.username}|${f.filename}`)) continue;
       const file = norm(f.filename.split(/[\\/]/).pop() ?? '');
       const full = norm(f.filename);
-      if (!title.every((w) => file.includes(w))) continue;
+      if (!titles.some((title) => title.every((w) => file.includes(w)))) continue;
       if (!artist.some((a) => a.length && a.every((w) => full.includes(w)))) continue;
       if (unwanted.some((u) => file.includes(u))) continue;
       if (s.length && f.length && Math.abs(f.length - s.length) > 6) continue;
@@ -328,7 +346,10 @@ async function start(s: Song) {
 /** Searches Soulseek and asks slskd for the best copy not tried yet. */
 async function fetchCopy(s: Song) {
   const first = s.artist.split(/\s*;\s*/)[0] || s.artist;
-  const found = await slskd.search(`${first} ${cleanTitle(s.title)}`.replace(/[^\p{L}\p{N}' ]+/gu, ' '));
+  const query = (artist: string, title: string) => `${artist} ${cleanTitle(title)}`.replace(/[^\p{L}\p{N}' ]+/gu, ' ');
+  let found = await slskd.search(query(first, s.title));
+  // Nobody has it under Spotify's names: under MusicBrainz's.
+  if (s.mb && !best(s, found, true)) found = [...found, ...(await slskd.search(query(s.mb.artist, s.mb.title)))];
   const pick = best(s, found);
   if (!pick) {
     // Only people who refused lately have it: again once they may send.

@@ -67,7 +67,13 @@ export interface MbRecording {
   id: string;
   title: string;
   'artist-credit'?: MbArtistCredit[];
-  releases?: Array<{ id: string; title: string; status?: string; 'release-group'?: { id: string; title: string; 'primary-type'?: string; 'secondary-types'?: string[] } }>;
+  releases?: Array<{
+    id: string;
+    title: string;
+    status?: string;
+    'artist-credit'?: MbArtistCredit[];
+    'release-group'?: { id: string; title: string; 'primary-type'?: string; 'secondary-types'?: string[] };
+  }>;
   score?: number;
 }
 /** Songs by name (title, artist and album at once, as typed in a search box). */

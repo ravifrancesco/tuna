@@ -43,7 +43,7 @@ function GetMissing({ waiting }: { waiting: WaitingSong[] }) {
       disabled={asked !== undefined}
       onClick={() =>
         void api
-          .getSongs(waiting.map((w) => ({ artist: w.artist, title: w.title, album: w.album })))
+          .getSongs(waiting.map((w) => ({ artist: w.artist, title: w.title, album: w.album, isrc: w.isrc })))
           .then((r) => (setAsked(said(r)), toast(said(r))))
           .catch((err: Error) => toast(err.message))
       }

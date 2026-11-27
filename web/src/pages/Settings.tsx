@@ -234,7 +234,7 @@ function Spotify() {
       if (done!.missingSongs?.length) {
         const r = await api.getSongs(done!.missingSongs);
         setAsked({ n: r.asked, songs: r.songs });
-      } else setAsked({ n: (await api.getMany(done!.missingAlbums.map((a) => ({ artist: a.artist, album: a.album })))).asked, songs: false });
+      } else setAsked({ n: (await api.getMany(done!.missingAlbums.map((a) => ({ artist: a.artist, album: a.album, isrc: a.isrc })))).asked, songs: false });
     } catch (err) {
       setError(failed(err));
     }

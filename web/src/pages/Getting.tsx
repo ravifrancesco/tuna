@@ -41,7 +41,7 @@ function Missed() {
   if (!missed.data?.length) return null;
   const retry = async () => {
     setRetried(true);
-    await api.getMany(missed.data.map((m) => ({ artist: m.artist, album: m.album })));
+    await api.getMany(missed.data.map((m) => ({ artist: m.artist, album: m.album, isrc: m.isrc })));
     void qc.invalidateQueries({ queryKey: ['still-to-ask'] });
   };
   return (

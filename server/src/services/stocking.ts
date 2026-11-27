@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Coverage, Stocking, StockingWhy } from '@tuna/shared';
 import type { SubsonicAuth } from '../clients/navidrome';
-import { coverArtFor, lastfmRecent, lastfmTopAlbums, lastfmTopArtists, lbListens, lbRecommendations, mbArtistAlbums, mbSearchAlbums, type OutsideListen } from '../clients/public';
+import { coverArtFor, lastfmRecent, lastfmTopAlbums, lastfmTopArtists, lbListens, lbRecommendations, mbArtistAlbums, mbSearchAlbums, mbSearchArtists, mbSearchRecordings, type OutsideListen } from '../clients/public';
 import { config } from '../config';
 import { has } from '../connections';
 import { settle } from '../lib/async';
@@ -16,7 +16,7 @@ import { asked, getAs, onTheWay } from './getting';
 import { artists as allArtists, findAlbum, libraryIndex, norm } from './library';
 import { listeners, listensSince } from './listens';
 import * as lidarr from '../clients/lidarr';
-import { artistsOf, cleanAlbum, matcher, songIndex } from './matching';
+import { alike, artistsOf, cleanAlbum, isSoundtrack, matcher, releaseGroups, songIndex } from './matching';
 import { everyone } from './prefs';
 
 /**
@@ -42,6 +42,8 @@ interface Missed {
   album: string;
   by: string;
   at: number;
+  /** One of its songs' codes, where Spotify's files had it. */
+  isrc?: string;
 }
 interface Saved {
   perWeek: number;
@@ -69,6 +71,8 @@ interface Wanted {
   title: string;
   mbid?: string;
   artistMbid?: string;
+  /** One of its songs' codes, where Spotify's files had it. */
+  isrc?: string;
   why?: StockingWhy;
   /** Times Lidarr or MusicBrainz didn't answer when it was looked up. */
   tries?: number;
@@ -85,19 +89,29 @@ const AT_ONCE = 5;
 
 const quote = (s: string) => `"${s.replace(/(["\\])/g, '\\$1')}"`;
 
+type Resolved = { mbid: string; artistMbid?: string; title: string; artist: string };
+
 /**
- * An album known only by its names (as Spotify writes them): through Lidarr's own search first (what
- * Get can fetch), then MusicBrainz; "Currents (Deluxe Edition)" is looked for as "Currents", and
- * "Gorillaz;Black Thought" (Spotify's way of listing artists) by its first. Throws when neither
- * answered, so it's looked up again later rather than called missing.
+ * An album known by its names (as Spotify writes them), and maybe one of its songs' codes: by the
+ * code first (exactly that album, whatever either side calls it), then Lidarr's own search (what Get
+ * can fetch), then MusicBrainz's, then the artist's own albums. "Currents (Deluxe Edition)" is looked
+ * for as "Currents", "Gorillaz;Black Thought" (Spotify's way of listing artists) by its first, and
+ * names may differ a little ("De I Cani", "dei cani"). Throws when nothing answered, so it's looked up
+ * again later rather than called missing.
  */
-export async function resolve(artist: string, title: string): Promise<{ mbid: string; artistMbid?: string; title: string; artist: string } | undefined> {
+export async function resolve(artist: string, title: string, isrc?: string): Promise<Resolved | undefined> {
   const name = cleanAlbum(title);
   const first = artist.split(/\s*;\s*/)[0] || artist;
-  const credited = (n: string | undefined) => Boolean(n) && artistsOf(artist).some((a) => artistsOf(n!).includes(a));
-  const same = (t: string) => norm(t) === norm(name) || norm(cleanAlbum(t)) === norm(name);
+  const credited = (n: string | undefined) => Boolean(n) && artistsOf(artist).some((a) => artistsOf(n!).some((b) => b === a || alike(a, b)));
+  const same = (t: string) => norm(t) === norm(name) || norm(cleanAlbum(t)) === norm(name) || alike(cleanAlbum(t), name);
   let failed: unknown;
   const ask = <T>(p: Promise<T[]>) => p.catch((err: unknown) => ((failed = err), [] as T[]));
+  if (isrc) {
+    const on = releaseGroups(await ask(mbSearchRecordings(`isrc:${isrc}`)));
+    // The one named, if the song is on it; else the album it came out on.
+    const g = on.find((x) => same(x.title)) ?? on[0];
+    if (g) return { mbid: g.mbid, artistMbid: g.artistMbid, title: g.title, artist: g.artist };
+  }
   if (has.lidarr()) {
     const found = (await ask(lidarr.findAlbums(`${first} ${name}`))).filter((a) => credited(a.artist?.artistName));
     const hit = found.find((a) => same(a.title));
@@ -105,14 +119,22 @@ export async function resolve(artist: string, title: string): Promise<{ mbid: st
   }
   const groups = await ask(mbSearchAlbums(`releasegroup:${quote(name)} AND artist:${quote(first)}`));
   const byArtist = (g: (typeof groups)[number]) => (g['artist-credit'] ?? []).some((c) => credited(c.name) || credited(c.artist.name));
-  const g = groups.find((x) => same(x.title) && byArtist(x)) ?? groups.find((x) => (x.score ?? 0) >= 95 && byArtist(x));
-  if (!g && failed) throw failed;
-  return g && { mbid: g.id, artistMbid: g['artist-credit']?.[0]?.artist.id, title: g.title, artist: g['artist-credit']?.[0]?.name ?? first };
+  let g = groups.find((x) => same(x.title) && byArtist(x)) ?? groups.find((x) => (x.score ?? 0) >= 95 && byArtist(x));
+  // A soundtrack is its composer's, whoever plays the song (Whiplash's is Justin Hurwitz's, not John Wasson's).
+  if (!g && isSoundtrack(title)) g = (await ask(mbSearchAlbums(`releasegroup:${quote(name)} AND secondarytype:soundtrack`))).find((x) => same(x.title));
+  if (g) return { mbid: g.id, artistMbid: g['artist-credit']?.[0]?.artist.id, title: g.title, artist: g['artist-credit']?.[0]?.name ?? first };
+  // Named a little differently from MusicBrainz: among the artist's own albums.
+  const people = await ask(mbSearchArtists(`artist:${quote(first)} OR alias:${quote(first)}`));
+  const who = people.find((a) => credited(a.name)) ?? people.find((a) => (a.score ?? 0) >= 95);
+  const own = who && (await ask(mbArtistAlbums(who.id))).find((x) => same(x.title));
+  if (who && own) return { mbid: own.id, artistMbid: who.id, title: own.title, artist: who.name };
+  if (failed) throw failed;
+  return undefined;
 }
 
 function missed(w: Wanted, found: boolean) {
   const others = (saved.missed ?? []).filter((m) => !(norm(m.artist) === norm(w.artist) && norm(m.album) === norm(w.title)));
-  saved = { ...saved, missed: found ? others : [{ artist: w.artist, album: w.title, by: w.by, at: Date.now() }, ...others].slice(0, 300) };
+  saved = { ...saved, missed: found ? others : [{ artist: w.artist, album: w.title, by: w.by, at: Date.now(), isrc: w.isrc }, ...others].slice(0, 300) };
   save();
   if (!found) log.info('get', `Couldn't find "${w.title}" by ${w.artist}`);
 }
@@ -136,7 +158,7 @@ async function work() {
     try {
       let { mbid, artistMbid, title, artist } = w;
       if (!mbid) {
-        const g = await resolve(artist, title);
+        const g = await resolve(artist, title, w.isrc);
         if (!g) {
           missed(w, false);
           continue;
@@ -166,11 +188,11 @@ async function work() {
 }
 
 /** "Get all" and a playlist's missing songs: albums by their names, in the order given (most wanted first). */
-export function getMany(session: Session, albums: Array<{ artist: string; album: string }>): number {
+export function getMany(session: Session, albums: Array<{ artist: string; album: string; isrc?: string }>): number {
   if (!has.lidarr()) throw new HttpError(409, t('Getting music needs Lidarr: an admin can add it in Settings → Connections'));
   const waiting = new Set(queue.map((w) => `${norm(w.artist)}|${norm(cleanAlbum(w.title))}`));
   const list = albums.filter((a) => a.artist && a.album && !waiting.has(`${norm(a.artist)}|${norm(cleanAlbum(a.album))}`)).slice(0, 2000);
-  enqueue(list.map((a) => ({ by: session.name, artist: a.artist, title: a.album })));
+  enqueue(list.map((a) => ({ by: session.name, artist: a.artist, title: a.album, isrc: a.isrc || undefined })));
   log.info('get', `${session.name} asked for ${list.length} album${list.length === 1 ? '' : 's'}, to get ${AT_ONCE} at a time`);
   return list.length;
 }

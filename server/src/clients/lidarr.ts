@@ -37,6 +37,8 @@ export interface LTrack {
   id: number;
   albumId: number;
   albumReleaseId?: number;
+  /** MusicBrainz's recording. */
+  foreignRecordingId?: string;
   title: string;
   /** Milliseconds. */
   duration?: number;

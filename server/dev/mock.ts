@@ -812,6 +812,9 @@ const mbGroup = (a: MAlbum, score?: number) => ({
   ...(score !== undefined ? { score } : {}),
 });
 
+/** A song's code (ISRC), made up from its id: what Exportify's files and MusicBrainz have. */
+const isrcOf = (t: MTrack) => `QZMCK${String(parseInt(crypto.createHash('md5').update(t.mbid).digest('hex').slice(0, 8), 16) % 10_000_000).padStart(7, '0')}`;
+
 /** A famous artist's greatest hits (MOCK_MB_CROWDED): in MusicBrainz, not in Lidarr. */
 const theHits = (a: MAlbum) => ({ id: uuid(`hits:${a.artist}`), title: 'The Hits', 'primary-type': 'Album', 'secondary-types': ['Compilation'] });
 
@@ -1317,7 +1320,9 @@ async function slskd(path: string, q: URLSearchParams, req: http.IncomingMessage
 function musicbrainz(path: string, q: URLSearchParams, res: http.ServerResponse) {
   const p = path.replace(/^\/ws\/2/, '');
   if (p === '/artist') {
-    const query = cleanQuery(q.get('query') ?? '');
+    // `artist:"…" OR alias:"…"` as Tuna asks, or any words.
+    const named = (q.get('query') ?? '').match(/^artist:"((?:[^"\\]|\\.)*)"/)?.[1];
+    const query = named ? named.replace(/\\(.)/g, '$1').toLowerCase() : cleanQuery(q.get('query') ?? '');
     const found = artists
       .map((a) => ({ a, s: score(a.name, query) }))
       .filter((x) => x.s > 0)
@@ -1358,10 +1363,12 @@ function musicbrainz(path: string, q: URLSearchParams, res: http.ServerResponse)
   }
   if (p === '/recording') {
     // A song by name, `recording:"…" AND artist:"…"` as Tuna asks, or any words of its title.
+    // Or by its code: `isrc:…`.
     const exact = (q.get('query') ?? '').match(/recording:"((?:[^"\\]|\\.)*)"(?:\s+AND\s+artist:"((?:[^"\\]|\\.)*)")?/);
+    const code = (q.get('query') ?? '').match(/^isrc:(\w+)$/i)?.[1]?.toUpperCase();
     const same = (a: string, b = '') => words(a).join(' ') === words(b.replace(/\\(.)/g, '$1')).join(' ');
     const query = cleanQuery(q.get('query') ?? '');
-    const rank = (t: MTrack) => (exact ? (same(t.title, exact[1]) && (!exact[2] || same(t.artist, exact[2])) ? 100 : 0) : score(t.title, query));
+    const rank = (t: MTrack) => (code ? (isrcOf(t) === code ? 100 : 0) : exact ? (same(t.title, exact[1]) && (!exact[2] || same(t.artist, exact[2])) ? 100 : 0) : score(t.title, query));
     const found = [...tracks.values()].filter((t) => rank(t) > 0).sort((x, y) => rank(y) - rank(x));
     const recording = (t: MTrack, group: { id: string; title: string; 'primary-type': string; 'secondary-types': string[] }, id = t.mbid) => ({
       id,
@@ -1369,7 +1376,8 @@ function musicbrainz(path: string, q: URLSearchParams, res: http.ServerResponse)
       length: t.duration * 1000,
       score: rank(t),
       'artist-credit': mbGroup(albums.get(t.albumId)!)['artist-credit'],
-      releases: [{ id: uuid(`release:${group.id}`), title: group.title, status: 'Official', 'release-group': group }],
+      isrcs: [isrcOf(t)],
+      releases: [{ id: uuid(`release:${group.id}`), title: group.title, status: 'Official', 'artist-credit': mbGroup(albums.get(t.albumId)!)['artist-credit'], 'release-group': group }],
     });
     const all = found.flatMap((t) => {
       const a = albums.get(t.albumId)!;

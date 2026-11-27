@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.11 (2026-11-27)
+
+**Changed**
+- **Songs found by their code.** Playlists brought in from Exportify carry each song's ISRC, and Tuna
+  now looks songs and albums up by it first, so they're found whatever Spotify calls them. Spotify's
+  own data export has no codes: bring playlists in again from Exportify, then Look again.
+- **Names that differ a little still match:** spacing, punctuation, accents or a letter here and there
+  ("De I Cani" is "dei cani"); a soundtrack is found under its composer; and an album the search
+  doesn't find is looked for among the artist's own albums.
+- **Soulseek:** when MusicBrainz names a song or its artist differently from Spotify, Tuna searches
+  for both.
+
+To update: the server (pull the new image); the apps don't need updating.
+
 ## 0.4.10 (2026-11-26)
 
 **Fixed**

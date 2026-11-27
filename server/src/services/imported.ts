@@ -89,7 +89,7 @@ export function waitingIn(username: string, playlistId: string, tracks: Track[])
   let after = first ? at.get(first.id!)! - 1 : playlistId === LIKED ? tracks.length - 1 : -1;
   for (const s of kept.songs) {
     if (s.id && at.has(s.id)) after = at.get(s.id)!;
-    else if (!(s.id && removed.has(s.id))) out.push({ title: s.title, artist: s.artist, album: s.album, added: s.added, after });
+    else if (!(s.id && removed.has(s.id))) out.push({ title: s.title, artist: s.artist, album: s.album, added: s.added, isrc: s.isrc, after });
   }
   return out;
 }

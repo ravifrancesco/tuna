@@ -93,6 +93,8 @@ export interface WaitingSong {
   get?: GetState;
   /** When it went into the playlist on Spotify (ISO). */
   added?: string;
+  /** Its code, where Spotify's files had it. */
+  isrc?: string;
   after: number;
 }
 
@@ -178,6 +180,8 @@ export interface MissedAlbum {
   by: string;
   /** When (ms since 1970). */
   at: number;
+  /** One of its songs' codes, where Spotify's files had it. */
+  isrc?: string;
 }
 
 /** Someone's year in music, from the plays Tuna counted. */
@@ -208,9 +212,9 @@ export interface SpotifyImport {
   /** Songs that aren't in the library. */
   missing: number;
   /** The albums of the songs that aren't here, most played first. */
-  missingAlbums: { artist: string; album: string; songs: number; plays: number }[];
+  missingAlbums: { artist: string; album: string; songs: number; plays: number; isrc?: string }[];
   /** The songs that aren't here, most played first. */
-  missingSongs?: { artist: string; title: string; album?: string; plays: number }[];
+  missingSongs?: { artist: string; title: string; album?: string; plays: number; isrc?: string }[];
 }
 
 /** Why the weekly picks chose an album. */

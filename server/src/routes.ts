@@ -205,13 +205,13 @@ export async function apiRoutes(app: FastifyInstance) {
     getting.opened(s.username);
     return getting.list(s.username, songItems());
   });
-  app.post<{ Body: { albums?: Array<{ artist: string; album: string }> } }>('/get/many', async (req) => ({ asked: getMany(requireUser(req), req.body?.albums ?? []) }));
+  app.post<{ Body: { albums?: Array<{ artist: string; album: string; isrc?: string }> } }>('/get/many', async (req) => ({ asked: getMany(requireUser(req), req.body?.albums ?? []) }));
   app.get('/get/missed', async (req) => (requireUser(req), missedAlbums()));
   // Everything people asked for that couldn't be found, looked for again (Settings).
   app.get('/get/again', async (req) => (requireAdmin(req), { songs: songsNotFound().length, albums: missedAlbums().length }));
   app.post('/get/again', async (req) => {
     const s = requireAdmin(req);
-    const missed = missedAlbums().map((m) => ({ artist: m.artist, album: m.album }));
+    const missed = missedAlbums().map((m) => ({ artist: m.artist, album: m.album, isrc: m.isrc }));
     return { songs: has.slskd() && has.lidarr() ? lookAgain(s.name) : 0, albums: missed.length && has.lidarr() ? getMany(s, missed) : 0 };
   });
   // New songs: the weekly ones for each person (an admin sets how many), and a radio's.
@@ -236,11 +236,11 @@ export async function apiRoutes(app: FastifyInstance) {
     return { stopped: stopAsking(s) + stopSongs(s.admin ? undefined : s.name) };
   });
   // Single songs (a playlist's missing songs, Get all): through slskd, filed by Lidarr; without slskd, their albums.
-  app.post<{ Body: { songs?: Array<{ artist: string; title: string; album?: string }> } }>('/get/songs', async (req) => {
+  app.post<{ Body: { songs?: Array<{ artist: string; title: string; album?: string; isrc?: string }> } }>('/get/songs', async (req) => {
     const s = requireUser(req);
     const list = (req.body?.songs ?? []).filter((x) => x.artist && x.title).slice(0, 5000);
     if (has.slskd() && has.lidarr()) return { asked: wantSongs(s.name, list), songs: true };
-    const albums = [...new Map(list.filter((x) => x.album).map((x) => [`${x.artist}|${x.album}`.toLowerCase(), { artist: x.artist, album: x.album! }])).values()];
+    const albums = [...new Map(list.filter((x) => x.album).map((x) => [`${x.artist}|${x.album}`.toLowerCase(), { artist: x.artist, album: x.album!, isrc: x.isrc }])).values()];
     return { asked: getMany(s, albums), songs: false };
   });
 

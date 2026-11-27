@@ -133,9 +133,9 @@ export const api = {
   waves: () => call<NightWaves>('GET', '/waves'),
   stocking: () => call<Stocking>('GET', '/stocking'),
   saveStocking: (perWeek: number) => call<Stocking>('PUT', '/stocking', { perWeek }),
-  getMany: (albums: Array<{ artist: string; album: string }>) => call<{ asked: number }>('POST', '/get/many', { albums }),
+  getMany: (albums: Array<{ artist: string; album: string; isrc?: string }>) => call<{ asked: number }>('POST', '/get/many', { albums }),
   /** Single songs (through slskd, filed by Lidarr); `songs: false`: the server got their albums instead. */
-  getSongs: (songs: Array<{ artist: string; title: string; album?: string }>) => call<{ asked: number; songs: boolean }>('POST', '/get/songs', { songs }),
+  getSongs: (songs: Array<{ artist: string; title: string; album?: string; isrc?: string }>) => call<{ asked: number; songs: boolean }>('POST', '/get/songs', { songs }),
   missed: () => call<MissedAlbum[]>('GET', '/get/missed'),
   /** Songs and albums people asked for that couldn't be found (an admin's), and looking for them again. */
   notFound: () => call<{ songs: number; albums: number }>('GET', '/get/again'),
