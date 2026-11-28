@@ -106,17 +106,20 @@ export const artistsOf = (s: string) =>
 export interface SongIndex {
   byArtist: Map<string, Child>;
   byAlbum: Map<string, Child>;
+  /** Each artist's songs, for names that differ a little ("Chico Pisco", "Chicopisco"). */
+  songsOf: Map<string, Child[]>;
 }
 const songsCache = new TTLCache<SongIndex>(1);
 
 /** Every song in the library (Navidrome lists them all for an empty search). */
 export function songIndex(auth: SubsonicAuth): Promise<SongIndex> {
   return songsCache.wrap('songs', 10 * MINUTE, async () => {
-    const idx: SongIndex = { byArtist: new Map(), byAlbum: new Map() };
+    const idx: SongIndex = { byArtist: new Map(), byAlbum: new Map(), songsOf: new Map() };
     for (let offset = 0; offset < 1_000_000; offset += 500) {
       const r = await subsonic<{ searchResult3?: { song?: Child[] } }>(auth, 'search3', { query: '""', songCount: 500, songOffset: offset, albumCount: 0, artistCount: 0 });
       const songs = r.searchResult3?.song ?? [];
       for (const c of songs) {
+        for (const a of artistsOf(c.artist ?? '')) idx.songsOf.set(a, [...(idx.songsOf.get(a) ?? []), c]);
         for (const title of titles(c.title)) {
           for (const a of artistsOf(c.artist ?? '')) if (!idx.byArtist.has(`${a}|${title}`)) idx.byArtist.set(`${a}|${title}`, c);
           if (c.album && !idx.byAlbum.has(`${norm(c.album)}|${title}`)) idx.byAlbum.set(`${norm(c.album)}|${title}`, c);
@@ -140,6 +143,10 @@ export function matcher(idx: SongIndex) {
       for (const a of artistsOf(s.artist)) hit ??= idx.byArtist.get(`${a}|${title}`);
       if (s.album) hit ??= idx.byAlbum.get(`${norm(s.album)}|${title}`);
     }
+    // Names a little different (a letter, a space): the same artist's song with nearly the same title.
+    if (!hit)
+      for (const a of artistsOf(s.artist))
+        hit ??= idx.songsOf.get(a)?.find((c) => titles(c.title).some((t) => titles(s.title).some((w) => alike(t, w))));
     memo.set(key, hit);
     return hit;
   };

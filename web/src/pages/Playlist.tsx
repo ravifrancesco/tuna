@@ -33,7 +33,7 @@ function Header({ kind, title, meta, cover, tint }: { kind: string; title: strin
 }
 
 /** A playlist's songs that aren't here yet, in its order: the songs themselves (or, without slskd, their albums). */
-function GetMissing({ waiting }: { waiting: WaitingSong[] }) {
+export function GetMissing({ waiting }: { waiting: WaitingSong[] }) {
   const [asked, setAsked] = useState<string>();
   if (!waiting.length) return null;
   const said = (r: { asked: number; songs: boolean }) => (r.songs ? tn(r.asked, 'Asked for {n} song', 'Asked for {n} songs') : tn(r.asked, 'Asked for {n} album', 'Asked for {n} albums'));

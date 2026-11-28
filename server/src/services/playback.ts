@@ -1,9 +1,11 @@
 import fs from 'node:fs';
 import { Readable, Transform, pipeline } from 'node:stream';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import * as lidarr from '../clients/lidarr';
 import { subsonic, subsonicUrl } from '../clients/navidrome';
 import { lbSubmit } from '../clients/public';
 import { config } from '../config';
+import { has } from '../connections';
 import { cachedImage } from '../lib/imageCache';
 import { t } from '../lib/i18n';
 import { log } from '../lib/log';
@@ -153,8 +155,17 @@ export async function cover(req: FastifyRequest<{ Params: { id: string }; Querys
 }
 
 /** Covers of music that isn't here yet: only from the services Tuna uses. */
+/** The cover Lidarr has for an album (by its id from any source), where it has one. */
+async function lidarrCover(id: string): Promise<string | undefined> {
+  if (!has.lidarr()) return;
+  const album = await lidarr.albumByMbid(id).catch(() => undefined);
+  const cover = album?.images?.find((i) => i.coverType.toLowerCase() === 'cover') ?? album?.images?.[0];
+  const url = cover?.remoteUrl;
+  return url && /^https?:\/\//.test(url) ? url : undefined;
+}
+
 function allowedArt(u: URL): boolean {
-  if (u.href.startsWith(`${config.coverArtUrl}/`) || u.href.startsWith(`${config.deezerUrl}/album/`)) return true;
+  if (u.href.startsWith(`${config.coverArtUrl}/`)) return true;
   return u.protocol === 'https:' && /(^|\.)(coverartarchive\.org|archive\.org|lastfm\.freetls\.fastly\.net|fastly\.net)$/.test(u.hostname);
 }
 
@@ -166,8 +177,10 @@ export async function art(req: FastifyRequest<{ Querystring: { u?: string } }>, 
   } catch {
     throw new HttpError(400, 'Bad address');
   }
-  if (!allowedArt(u)) throw new HttpError(400, 'Not an image Tuna fetches');
-  const image = await cachedImage(`art:${u.href}`, u.href);
+  // An album Lidarr knows from another source (Deezer, Discogs…): the cover Lidarr has for it.
+  const from = u.protocol === 'lidarr-album:' ? await lidarrCover(u.pathname) : allowedArt(u) ? u.href : undefined;
+  if (from === undefined && u.protocol !== 'lidarr-album:') throw new HttpError(400, 'Not an image Tuna fetches');
+  const image = from ? await cachedImage(`art:${u.href}`, from) : undefined;
   if (!image) return reply.code(404).header('cache-control', 'public, max-age=86400').send();
   reply.header('content-type', image.type).header('cache-control', 'public, max-age=2592000');
   return reply.send(fs.createReadStream(image.file));

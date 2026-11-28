@@ -43,8 +43,6 @@ export const config = {
   /** Public services. Changeable so development never touches the real ones (dev/mock.env). */
   musicbrainzUrl: url('MUSICBRAINZ_URL') ?? 'https://musicbrainz.org/ws/2',
   coverArtUrl: url('COVERART_URL') ?? 'https://coverartarchive.org',
-  /** Covers of albums Lidarr knows from Deezer (Tubifarry's Deezer metadata source). */
-  deezerUrl: url('DEEZER_URL') ?? 'https://api.deezer.com',
   lrclibUrl: url('LRCLIB_URL') ?? 'https://lrclib.net/api',
   listenbrainzUrl: url('LISTENBRAINZ_URL') ?? 'https://api.listenbrainz.org/1',
   lastfmUrl: url('LASTFM_URL') ?? 'https://ws.audioscrobbler.com/2.0',

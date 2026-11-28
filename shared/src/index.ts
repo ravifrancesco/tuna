@@ -96,6 +96,14 @@ export interface WaitingSong {
   /** Its code, where Spotify's files had it. */
   isrc?: string;
   after: number;
+  /** Its number on its album (an album's songs that aren't here). */
+  track?: number;
+}
+
+/** The rest of an album in the library, where it's known: its kind, and its songs that aren't here. */
+export interface AlbumWhole {
+  kind?: 'Album' | 'EP' | 'Single' | 'Other';
+  missing: WaitingSong[];
 }
 
 /** A mix: tracks Tuna puts together (from the library) when it's played. */

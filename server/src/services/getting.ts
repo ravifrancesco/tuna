@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { GetItem, GetState } from '@tuna/shared';
 import * as lidarr from '../clients/lidarr';
 import { subsonic } from '../clients/navidrome';
-import { coverArtFor, deezerId, isDeezer, mbReleaseGroup } from '../clients/public';
+import { coverArtFor, mbReleaseGroup } from '../clients/public';
 import { config } from '../config';
 import { has } from '../connections';
 import { t } from '../lib/i18n';
@@ -204,7 +204,7 @@ async function profiles() {
 export async function ensureArtist(artistMbid: string, name: string): Promise<number> {
   const existing = (await lidarr.artists()).find((a) => a.foreignArtistId === artistMbid);
   if (existing) return existing.id;
-  const [found] = await lidarr.lookupArtist(artistMbid);
+  const [found] = await lidarr.lookupArtist(artistMbid, name);
   if (!found) throw new HttpError(404, t("Lidarr doesn't know this artist"));
   const added = await lidarr.addArtist({
     ...found,
@@ -239,9 +239,9 @@ export async function getAs(by: string, q: { mbid: string; artistMbid?: string; 
   if (existing && stateOf(q.mbid).state !== 'notFound') return stateOf(q.mbid);
 
   let { artistMbid, artist, title } = q;
-  if (!artistMbid && isDeezer(q.mbid)) {
-    // Known from Deezer (Tubifarry): its artist as Lidarr has it.
-    const [found] = await lidarr.findAlbums(`deezer:${deezerId(q.mbid)}`);
+  if (!artistMbid && !lidarr.isMbid(q.mbid) && (artist || title)) {
+    // Known from another source (Deezer, Discogs…): its artist as Lidarr's search has it.
+    const found = (await lidarr.findAlbums(`${artist} ${title}`.trim()).catch(() => [])).find((a) => a.foreignAlbumId === q.mbid);
     artistMbid = found?.artist?.foreignArtistId;
     artist ||= found?.artist?.artistName ?? '';
     title ||= found?.title ?? '';

@@ -7,32 +7,38 @@ import { Item, pickPlaylist, showMenu } from '../components/Menu';
 import { PlayButton } from '../components/PlayButton';
 import { TrackList } from '../components/TrackList';
 import { Cover, Empty, Spinner, toast } from '../components/ui';
-import { t } from '../i18n';
+import { t, tn } from '../i18n';
 import { useLiked } from '../lib/actions';
 import { DownloadButton } from '../components/DownloadButton';
 import { length, songs } from '../lib/format';
 import { addToQueue, playNext, playTracks } from '../lib/player';
 import { useTint } from '../lib/tint';
+import { GetMissing } from './Playlist';
 
 export function Album() {
   const { id = '' } = useParams();
   const album = useQuery({ queryKey: ['album', id], queryFn: () => api.album(id) });
+  // The rest of the album (its kind, and its songs that aren't here), once it's known.
+  const whole = useQuery({ queryKey: ['album-whole', id], queryFn: () => api.albumWhole(id), staleTime: 5 * 60_000 });
   const [liked, toggleLike] = useLiked('album', id, album.data?.liked);
   const tint = useTint(album.data?.cover);
   if (album.isLoading) return <Spinner />;
   const a = album.data;
   if (!a) return <Empty>{t("Couldn't find this album")}</Empty>;
   const source = { kind: 'album' as const, id: a.id, title: a.name };
+  const missing = whole.data?.missing ?? [];
+  const kind = whole.data?.kind ? { Album: t('Album'), EP: t('EP'), Single: t('Single'), Other: t('Album') }[whole.data.kind] : whole.isFetched ? (a.songCount <= 3 ? t('Single') : t('Album')) : '\u00a0';
   return (
     <div className="page--flush">
       <header className="hero" style={{ '--hero': tint } as React.CSSProperties}>
         <Cover cover={a.cover} size={600} />
         <div>
-          <div className="hero__kind">{a.songCount <= 3 ? t('Single') : t('Album')}</div>
+          <div className="hero__kind">{kind}</div>
           <h1>{a.name}</h1>
           <div className="hero__meta">
             {a.artistId ? <Link to={`/artist/${a.artistId}`}>{a.artist}</Link> : a.artist}
             {a.year ? ` · ${a.year}` : ''} · {songs(a.songCount)}, {length(a.duration)}
+            {missing.length ? ` · ${tn(missing.length, '{n} not here yet', '{n} not here yet')}` : ''}
           </div>
         </div>
       </header>
@@ -71,8 +77,13 @@ export function Album() {
           <MoreHorizontal size={24} />
         </button>
       </div>
+      {missing.length > 0 && (
+        <div className="section section--tight">
+          <GetMissing waiting={missing} />
+        </div>
+      )}
       <div className="section">
-        <TrackList tracks={a.tracks} source={source} numbers compact />
+        <TrackList tracks={a.tracks} waiting={missing} source={source} numbers compact />
       </div>
       {a.moreBy.length > 0 && (
         <div className="section">

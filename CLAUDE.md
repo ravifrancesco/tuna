@@ -88,7 +88,9 @@ Notes for anyone (person or AI assistant) working on Tuna's code.
   it's complete slskd saves its results. `MOCK_COVER_MS` makes each cover that slow, as Navidrome
   on a Raspberry Pi. `MOCK_MUSIC_DIR` (tuna-mock-music in the temp folder) is Lidarr's music folder,
   a real one: imported files go there (through Lidarr's manual import, or straight in) and the fake
-  Navidrome finds them by their tags (ffprobe). ListenBrainz token for Settings: `mock-lb`.
+  Navidrome finds them by their tags (ffprobe). `MOCK_SLSKD_DIR` (tuna-mock-slskd in the temp folder) is
+  slskd's downloads folder, where finished downloads land as short real files; `MOCK_LIDARR_ALBUMS_ONLY=1`
+  makes Lidarr keep no singles or EPs, as its Standard metadata profile. ListenBrainz token for Settings: `mock-lb`.
 - `npm run typecheck` checks server and web; `npm run check:i18n` the Italian.
 - **Develop against the mock**, never against a real household's server.
 - A running server serves the web files from `web/dist` as they are: `npm run build -w web` to

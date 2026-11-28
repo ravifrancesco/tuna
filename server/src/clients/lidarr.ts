@@ -80,9 +80,19 @@ export const rootFolders = () => call<Array<{ id: number; path: string }>>('/roo
 export const qualityProfiles = () => call<Array<{ id: number; name: string }>>('/qualityprofile');
 export const metadataProfiles = () => call<Array<{ id: number; name: string }>>('/metadataprofile');
 
-/** An artist by its id: MusicBrainz's, or Deezer's ("1234@deezer", Tubifarry's metadata source, which answers to "deezer:1234"). */
-export const lookupArtist = (id: string) =>
-  call<LArtist[]>('/artist/lookup', { query: { term: id.endsWith('@deezer') ? `deezer:${id.slice(0, -'@deezer'.length)}` : `lidarr:${id}` } });
+const MBID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** MusicBrainz's ids (Lidarr's own); other sources' (Tubifarry's, "1234@deezer", "a1234@discogs") aren't. */
+export const isMbid = (id: string | undefined) => Boolean(id && MBID.test(id));
+
+/**
+ * An artist by its id: MusicBrainz's by the id itself; one Lidarr knows from another source (Deezer,
+ * Discogs…) by its name, the one with that id, so Tuna needn't know how each source is asked.
+ */
+export async function lookupArtist(id: string, name?: string): Promise<LArtist[]> {
+  if (isMbid(id)) return call<LArtist[]>('/artist/lookup', { query: { term: `lidarr:${id}` } });
+  const found = name ? await call<LArtist[]>('/artist/lookup', { query: { term: name }, timeoutMs: 20_000 }) : [];
+  return found.filter((a) => a.foreignArtistId === id);
+}
 
 /** Lidarr's own search by name (its metadata server, not MusicBrainz directly), as its "Add new" page. */
 export interface LFoundArtist {

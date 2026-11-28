@@ -1,11 +1,15 @@
-import type { ArtistDetail, Track, WorldAlbum, WorldAlbumDetail, WorldArtist, WorldArtistDetail } from '@tuna/shared';
+import type { AlbumWhole, ArtistDetail, Track, WaitingSong, WorldAlbum, WorldAlbumDetail, WorldArtist, WorldArtistDetail } from '@tuna/shared';
 import { subsonic, type ArtistID3, type Child, type SubsonicAuth } from '../clients/navidrome';
-import { coverArtFor, lastfmSimilar, mbArtist, mbArtistAlbums, mbReleaseGroup, mbReleases, mbSearchArtists, type MbReleaseGroup } from '../clients/public';
+import { coverArtFor, lastfmSimilar, mbArtist, mbArtistAlbums, mbReleaseGroup, mbReleases, mbSearchArtists, type MbRelease, type MbReleaseGroup } from '../clients/public';
+import { MINUTE, TTLCache } from '../lib/cache';
 import { settle } from '../lib/async';
 import { log } from '../lib/log';
 import { freshen, stateOf } from './getting';
-import { songState, withTracks } from './songs';
-import { findAlbum, findArtist, libraryIndex, norm, toAlbum, toArtist, toTrack, type LibraryIndex } from './library';
+import { cleanTitle, lidarrAlbumNamed, songState, songStates, withTracks } from './songs';
+import { album as libraryAlbum, findAlbum, findArtist, libraryIndex, norm, toAlbum, toArtist, toTrack, type LibraryIndex } from './library';
+import { alike } from './matching';
+import { resolve } from './stocking';
+import { isMbid } from '../clients/lidarr';
 
 /** Music beyond the library: MusicBrainz says what exists, Lidarr gets it. */
 
@@ -101,12 +105,17 @@ async function mostPlayed(auth: SubsonicAuth, albumIds: string[]): Promise<Track
 export const worldArtistFromName = (idx: LibraryIndex, name: string, mbid: string): WorldArtist => ({ mbid, name, artistId: findArtist(idx, mbid, name) });
 
 /** An album that isn't in the library: its songs from its earliest official release (the original). */
+/** The first official release of an album that has its songs listed (MusicBrainz lists several editions). */
+function firstRelease(releases: MbRelease[]) {
+  const withSongs = releases.filter((r) => r.media?.some((m) => m.tracks?.length));
+  const official = withSongs.filter((r) => !r.status || /official/i.test(r.status));
+  return (official.length ? official : withSongs).sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'))[0];
+}
+
 export async function worldAlbum(auth: SubsonicAuth, mbid: string): Promise<WorldAlbumDetail> {
   await freshen();
   const [group, releases, idx] = await Promise.all([mbReleaseGroup(mbid), settle(mbReleases(mbid), []), libraryIndex(auth)]);
-  const withSongs = releases.filter((r) => r.media?.some((m) => m.tracks?.length));
-  const official = withSongs.filter((r) => !r.status || /official/i.test(r.status));
-  const release = (official.length ? official : withSongs).sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'))[0];
+  const release = firstRelease(releases);
   const album = toWorldAlbum(group, idx);
   const tracks = (release?.media ?? []).flatMap((m) =>
     (m.tracks ?? []).map((tr) => {
@@ -115,4 +124,50 @@ export async function worldAlbum(auth: SubsonicAuth, mbid: string): Promise<Worl
     }),
   );
   return { ...album, tracks: await withTracks(auth, tracks.map((x) => ({ ...x, artist: album.artist }))) };
+}
+
+// ---- The rest of an album in the library ------------------------------------------------------------
+
+type Whole = { kind?: AlbumWhole['kind']; tracks: Array<{ title: string; number?: number; disc?: number }> };
+const KINDS: Record<string, AlbumWhole['kind']> = { album: 'Album', ep: 'EP', single: 'Single' };
+const wholes = new TTLCache<Whole | undefined>(300);
+
+/** All an album's songs, where they're known: Lidarr's edition (from whichever source it knows it), else MusicBrainz's. */
+async function wholeOf(artist: string, title: string): Promise<Whole | undefined> {
+  const lidarr = await lidarrAlbumNamed(artist, title).catch(() => undefined);
+  if (lidarr?.tracks.length) {
+    const tracks = [...lidarr.tracks].sort((a, b) => (a.mediumNumber ?? 1) - (b.mediumNumber ?? 1) || (a.absoluteTrackNumber ?? 0) - (b.absoluteTrackNumber ?? 0));
+    return { kind: KINDS[(lidarr.type ?? '').toLowerCase()] ?? 'Other', tracks: tracks.map((t) => ({ title: t.title, number: t.absoluteTrackNumber, disc: t.mediumNumber })) };
+  }
+  const found = await resolve(artist, title).catch(() => undefined);
+  if (!found || !isMbid(found.mbid)) return;
+  const [group, releases] = await Promise.all([mbReleaseGroup(found.mbid).catch(() => undefined), settle(mbReleases(found.mbid), [])]);
+  const release = firstRelease(releases);
+  if (!release) return;
+  return {
+    kind: KINDS[(group?.['primary-type'] ?? '').toLowerCase()] ?? 'Other',
+    tracks: (release.media ?? []).flatMap((m, d) => (m.tracks ?? []).map((t, i) => ({ title: t.title || t.recording?.title || '', number: i + 1, disc: d + 1 }))),
+  };
+}
+
+/**
+ * An album in the library as it really is: its kind (not guessed from how many of its songs are
+ * here), and its songs that aren't here, each where it belongs among the ones that are, to Get.
+ */
+export async function albumWhole(auth: SubsonicAuth, id: string): Promise<AlbumWhole> {
+  const a = await libraryAlbum(auth, id);
+  const whole = await wholes.wrap(id, 30 * MINUTE, () => wholeOf(a.artist, a.name)).catch(() => undefined);
+  if (!whole) return { missing: [] };
+  const same = (x: string, y: string) => norm(cleanTitle(x)) === norm(cleanTitle(y)) || alike(cleanTitle(x), cleanTitle(y));
+  const place = (disc: number | undefined, n: number | undefined) => (disc ?? 1) * 1000 + (n ?? 999);
+  const state = songStates();
+  const missing: WaitingSong[] = [];
+  for (const w of whole.tracks) {
+    if (!w.title || a.tracks.some((t) => same(t.title, w.title) || (w.number && t.track === w.number && (t.disc ?? 1) === (w.disc ?? 1)))) continue;
+    // After the last song here that comes before it on the album.
+    let after = -1;
+    a.tracks.forEach((t, i) => t.track && place(t.disc, t.track) < place(w.disc, w.number) && (after = i));
+    missing.push({ title: w.title, artist: a.artist, album: a.name, after, track: w.number, get: state({ artist: a.artist, title: w.title }) });
+  }
+  return { kind: whole.kind, missing };
 }

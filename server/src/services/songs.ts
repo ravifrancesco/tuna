@@ -57,8 +57,10 @@ interface Song {
   after?: number;
   progress?: number;
   ready?: string;
-  /** Why Lidarr has no album for it (then it goes straight into the music folder). */
+  /** Why Lidarr has no album for it (then it goes straight into the music folder), where Tuna put it, and when it last asked Lidarr again. */
   loose?: string;
+  path?: string;
+  lookedAt?: number;
   /** When it wasn't found (ms). */
   settled?: number;
   /** A file someone has for it, waiting to go into the library (in the music folder's .tuna), and its cover; who sent it. */
@@ -163,6 +165,8 @@ export function lookAgain(by: string): number {
   save();
   if (again.length) log.info('get', `${by} asked to look again for ${again.length} song${again.length === 1 ? '' : 's'}, to get ${AT_ONCE} at a time`);
   void tick();
+  // And the songs Tuna filed itself: Lidarr may know their albums by now.
+  void handOver(true);
   return again.length;
 }
 
@@ -269,6 +273,20 @@ async function placeOn(s: Song, albums: Album[]): Promise<boolean> {
     return true;
   }
   return false;
+}
+
+let lidarrArtists: { at: number; list: Promise<lidarr.LArtist[]> } | undefined;
+/** An album Lidarr has, by its artist's name and its own: its kind and the songs of the edition it files into. */
+export async function lidarrAlbumNamed(artist: string, title: string): Promise<{ type?: string; tracks: lidarr.LTrack[] } | undefined> {
+  if (!has.lidarr()) return;
+  if (!lidarrArtists || Date.now() - lidarrArtists.at > 10 * 60_000) lidarrArtists = { at: Date.now(), list: lidarr.artists() };
+  const want = artistsOf(artist);
+  const name = cleanAlbum(title);
+  for (const a of (await lidarrArtists.list).filter((x) => artistsOf(x.artistName).some((n) => want.includes(n)))) {
+    const found = (await lidarr.albums(a.id)).find((x) => norm(cleanAlbum(x.title)) === norm(name) || alike(cleanAlbum(x.title), name));
+    const at = found && (await edition(found, a.id, a.artistName));
+    if (found && at) return { type: found.albumType, tracks: at.tracks };
+  }
 }
 
 type Artists = Map<string, { id: number; albums: lidarr.LAlbum[] }>;
@@ -502,7 +520,7 @@ async function shelveDownload(s: Song, where: string): Promise<boolean> {
     await fs.promises.mkdir(path.dirname(staged), { recursive: true });
     await fs.promises.copyFile(where, staged);
     await fs.promises.rm(where, { force: true }).catch(() => undefined);
-    await shelve(staged, { title: s.title, artist: tagArtists(s.artist), album: s.album || s.title, albumArtist: firstArtist(s.artist) }, undefined, root);
+    s.path = await shelve(staged, { title: s.title, artist: tagArtists(s.artist), album: s.album || s.title, albumArtist: firstArtist(s.artist) }, undefined, root);
     arrived(s);
   } catch (err) {
     log.warn('get', `Couldn't put "${s.title}" by ${s.artist} in the music folder`, err);
@@ -955,7 +973,8 @@ async function bring(s: Song) {
       await tag(file, { title: names.title, artist: names.artist, album: album?.title, album_artist: album?.artist?.artistName, date: names.year }, cover);
       if (await viaLidarr(s, file)) return arrived(s);
     }
-    await shelve(file, names, cover, root);
+    s.path = await shelve(file, names, cover, root);
+    s.loose ??= 'not on an album Lidarr has';
     arrived(s);
   } catch (err) {
     log.warn('get', `Couldn't put "${s.title}" by ${s.artist} in the library`, err);
@@ -1024,7 +1043,7 @@ const safe = (name: string) =>
  * Into the music folder as Album artist/Album/NN - Title, with those names written into it, and the
  * cover next to it (cover.jpg, as players look for) unless the album has one.
  */
-async function shelve(file: string, n: Names, cover: string | undefined, root: string) {
+async function shelve(file: string, n: Names, cover: string | undefined, root: string): Promise<string> {
   await tag(file, { title: n.title, artist: n.artist, album_artist: n.albumArtist, album: n.album, date: n.year, track: n.number ? String(n.number) : undefined, disc: n.disc ? String(n.disc) : undefined }, cover);
   const dir = path.join(root, safe(n.albumArtist), safe(n.album));
   await fs.promises.mkdir(dir, { recursive: true });
@@ -1034,6 +1053,7 @@ async function shelve(file: string, n: Names, cover: string | undefined, root: s
   for (let i = 2; fs.existsSync(to); i++) to = path.join(dir, `${name} (${i})${ext}`);
   await fs.promises.rename(file, to);
   if (cover && !(await fs.promises.readdir(dir)).some((f) => /^(cover|folder)\.(jpe?g|png|webp)$/i.test(f))) await fs.promises.copyFile(cover, path.join(dir, `cover${path.extname(cover)}`));
+  return to;
 }
 
 /** Names (and the cover, where the file can hold one) written into the file; as it was where ffmpeg can't. */
@@ -1052,3 +1072,54 @@ async function tag(file: string, names: Record<string, string | undefined>, cove
   }
   await fs.promises.rm(out, { force: true });
 }
+
+// ---- Handing Lidarr what Tuna filed itself -----------------------------------------------------------
+
+/** Where Tuna put a song itself (before it kept the path: by the names it filed it under). */
+function shelvedAt(s: Song, root: string): string | undefined {
+  if (s.path) return fs.existsSync(s.path) ? s.path : undefined;
+  const dir = path.join(root, safe(firstArtist(s.artist)), safe(s.album || s.title));
+  const name = safe(s.title).toLowerCase();
+  const file = fs.existsSync(dir) ? fs.readdirSync(dir).find((f) => SONG_FILE.test(path.extname(f).toLowerCase()) && path.basename(f, path.extname(f)).replace(/^(\d+-)?\d+ - /, '').replace(/ \(\d+\)$/, '').toLowerCase() === name) : undefined;
+  return file && path.join(dir, file);
+}
+
+/**
+ * Songs Tuna put straight into the music folder because Lidarr had no album for them: once Lidarr
+ * knows it (Deezer's albums, singles and EPs once its metadata profile has them…), Lidarr files the
+ * song there, named, tagged and with its cover as everything else. Each is asked about once a day.
+ */
+async function handOver(now = false) {
+  const root = await musicFolder();
+  if (!root || !has.lidarr()) return;
+  for (const s of songs.filter((x) => x.state === 'ready' && (x.loose || x.imported) && !x.trackId && (now || Date.now() - (x.lookedAt ?? 0) > 86400_000))) {
+    s.lookedAt = Date.now();
+    const file = shelvedAt(s, root);
+    if (!file) continue;
+    try {
+      const why = await place(s);
+      if (why || !s.trackId) continue;
+      // Lidarr has a copy of its own already: Tuna's stays where it is, and isn't asked about again.
+      if ((await lidarr.tracks(s.albumId!)).find((t) => t.id === s.trackId)?.hasFile) {
+        log.info('get', `Lidarr has its own copy of "${s.title}" by ${s.artist}; Tuna's stays in ${path.dirname(file)}`);
+        Object.assign(s, { loose: undefined, imported: undefined, trackId: undefined });
+        continue;
+      }
+      if (await viaLidarr(s, file)) {
+        Object.assign(s, { loose: undefined, imported: undefined, path: undefined });
+        log.info('get', `Lidarr has "${s.title}" by ${s.artist} now, in its album`);
+        // Tuna's folder for it, if nothing else is left there (but a cover).
+        const dir = path.dirname(file);
+        const left = await fs.promises.readdir(dir).catch(() => ['?']);
+        if (left.every((f) => /^(cover|folder)\.(jpe?g|png|webp)$/i.test(f))) await fs.promises.rm(dir, { recursive: true, force: true }).catch(() => undefined);
+        void scanNavidrome();
+      }
+    } catch (err) {
+      log.warn('get', `Couldn't hand "${s.title}" by ${s.artist} to Lidarr`, err);
+    } finally {
+      save();
+    }
+  }
+}
+setTimeout(() => void handOver(), 5 * 60_000);
+setInterval(() => void handOver(), 6 * 3600_000);

@@ -1,4 +1,4 @@
-import type { Album, AlbumDetail, Artist, ArtistDetail, Connections, DeviceCommand, GetItem, GetState, Home, Listen, ListeningStats, Lyrics, Me, MissedAlbum, Mix, Person, Playlist, PlaylistDetail, Prefs, SearchResult, ServerInfo, SoulseekFiles, SpotifyImport, StatsPeriod, Stocking, TogetherControl, TogetherRoom, TogetherSummary, Track, WaitingSong, WorldAlbum, WorldAlbumDetail, WorldArtistDetail, YearInReview } from '@tuna/shared';
+import type { Album, AlbumDetail, AlbumWhole, Artist, ArtistDetail, Connections, DeviceCommand, GetItem, GetState, Home, Listen, ListeningStats, Lyrics, Me, MissedAlbum, Mix, Person, Playlist, PlaylistDetail, Prefs, SearchResult, ServerInfo, SoulseekFiles, SpotifyImport, StatsPeriod, Stocking, TogetherControl, TogetherRoom, TogetherSummary, Track, WaitingSong, WorldAlbum, WorldAlbumDetail, WorldArtistDetail, YearInReview } from '@tuna/shared';
 import { language } from './i18n';
 import { app } from './lib/native';
 
@@ -122,6 +122,8 @@ const q = (params: Record<string, string | number | undefined>) => {
 
 export const api = {
   server: () => call<ServerInfo>('GET', '/server'),
+  /** An album's kind and its songs that aren't in the library (a moment after the album: it may take a while). */
+  albumWhole: (id: string) => call<AlbumWhole>('GET', `/album/${encodeURIComponent(id)}/whole`),
   setup: (body: { code: string; navidromeUrl: string; lidarrUrl?: string; lidarrApiKey?: string }) => call<Connections>('POST', '/setup', body),
   login: (username: string, password: string) => call<{ me: Me; session: string }>('POST', '/login', { username, password }),
   logout: () => call('POST', '/logout'),

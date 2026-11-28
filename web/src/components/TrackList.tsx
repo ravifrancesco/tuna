@@ -45,7 +45,7 @@ export function TrackList({
   for (const w of waiting) after.set(w.after, [...(after.get(w.after) ?? []), w]);
   const rows: React.ReactNode[] = [];
   let n = 0;
-  const later = (i: number) => after.get(i)?.forEach((w, j) => rows.push(<WaitingRow key={`w${i}-${j}`} song={w} n={++n} showAlbum={!compact} />));
+  const later = (i: number) => after.get(i)?.forEach((w, j) => rows.push(<WaitingRow key={`w${i}-${j}`} song={w} n={numbers && w.track ? w.track : ++n} showAlbum={!compact} />));
   later(-1);
   tracks.forEach((tr, i) => {
     n++;

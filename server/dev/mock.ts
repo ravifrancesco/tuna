@@ -26,7 +26,7 @@
  *   a greatest hits ("The Hits") that Lidarr doesn't keep.
  *   MOCK_DEEZER=1: Lidarr also knows albums from Deezer, as with Tubifarry's Deezer metadata source:
  *   "Canzoni Sparse" by Valle Nera only there ("900001@deezer"; Lidarr finds Deezer artists by
- *   "deezer:<id>"), and a Deezer copy of Coral Avenue's first album beside MusicBrainz's.
+ *   "deezer:<id>", or by name), and a Deezer copy of Coral Avenue's first album beside MusicBrainz's.
  *   MOCK_COVER_MS (default 0): how long each cover takes, as Navidrome resizing pictures on a Raspberry Pi.
  *   ListenBrainz token for Settings: mock-lb.
  */
@@ -687,6 +687,8 @@ const lidarrAlbum = (a: MAlbum) => {
     albumType: a.type,
     releaseDate: `${a.year}-05-01T00:00:00Z`,
     artist: { id: artist.lidarrId ?? 0, artistName: artist.name, foreignArtistId: artist.mbid },
+    // Its cover from its source, as Lidarr has it (Deezer's albums: Deezer's picture).
+    images: fromDeezer(a.mbid) ? [{ coverType: 'cover', remoteUrl: `http://127.0.0.1:${PORT}/deezer/album/${a.mbid.replace('@deezer', '')}/image` }] : [],
     releases: [
       {
         id: releaseId(a),

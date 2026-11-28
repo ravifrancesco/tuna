@@ -28,7 +28,7 @@ import { listenbrainzOf, prefsOf, savePrefs } from './services/prefs';
 import { searchLibrary, searchWorld } from './services/search';
 import { nightWaves, saveNightWaves } from './services/nightWaves';
 import { waveOf } from './services/waveform';
-import { artistDetail, worldAlbum, worldArtist } from './services/world';
+import { albumWhole, artistDetail, worldAlbum, worldArtist } from './services/world';
 
 const me = (s: Session): Me => ({ id: s.userId, username: s.username, name: s.name, admin: s.admin, mediaKey: s.mediaKey, prefs: prefsOf(s.username) });
 
@@ -120,6 +120,8 @@ export async function apiRoutes(app: FastifyInstance) {
   });
 
   app.get<{ Params: { id: string } }>('/album/:id', async (req) => library.album(authOf(requireUser(req)), req.params.id));
+  // The rest of it (its songs that aren't here, to Get), a moment after: Lidarr or MusicBrainz may take a while.
+  app.get<{ Params: { id: string } }>('/album/:id/whole', async (req) => albumWhole(authOf(requireUser(req)), req.params.id));
   app.get('/artists', async (req) => library.artists(authOf(requireUser(req))));
   app.get<{ Params: { id: string } }>('/artist/:id', async (req) => artistDetail(authOf(requireUser(req)), req.params.id));
   app.get<{ Params: { id: string } }>('/song/:id', async (req) => library.song(authOf(requireUser(req)), req.params.id));

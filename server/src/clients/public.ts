@@ -107,14 +107,12 @@ export const mbReleases = (releaseGroupMbid: string) =>
 export const mbReleaseGroup = (mbid: string) =>
   cached(`g:${mbid}`, () => mb<MbReleaseGroup>(`/release-group/${mbid}`, { inc: 'artist-credits' }));
 
-/** The front cover of an album that isn't in the library (small; Tuna keeps a copy). */
-/** An album's cover: MusicBrainz's from the Cover Art Archive; one Lidarr knows from Deezer ("302127@deezer", Tubifarry's) from Deezer. */
-export const coverArtFor = (albumId: string) =>
-  isDeezer(albumId) ? `${config.deezerUrl}/album/${deezerId(albumId)}/image?size=big` : `${config.coverArtUrl}/release-group/${albumId}/front-250`;
-
-/** Albums and artists Lidarr knows from Deezer rather than MusicBrainz (Tubifarry's Deezer metadata source). */
-export const isDeezer = (id: string | undefined) => Boolean(id?.endsWith('@deezer'));
-export const deezerId = (id: string) => id.replace(/@deezer$/, '');
+const MBID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/**
+ * An album's cover: MusicBrainz's from the Cover Art Archive; one Lidarr knows from another source
+ * (Deezer, Discogs…, Tubifarry's ids) as Lidarr has it ("lidarr-album:", which /api/art looks up).
+ */
+export const coverArtFor = (albumId: string) => (MBID.test(albumId) ? `${config.coverArtUrl}/release-group/${albumId}/front-250` : `lidarr-album:${albumId}`);
 
 // ---- LRCLIB ------------------------------------------------------------------------------------
 

@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.5.3 (2026-11-27)
+
+**New**
+- **Albums show all their songs:** an album you have only some songs of shows the rest too, greyed
+  where they belong, each with Get, and **Get the missing songs** for all of them. It says whether
+  it's an album, an EP or a single as its sources do (not guessed from how many songs are here).
+- **Songs Tuna filed itself go to Lidarr once it knows their album** (after you turn on Deezer in
+  Lidarr, or singles and EPs): Lidarr files them into the album with its names, and its cover if it
+  writes covers (Settings → Metadata → Kodi/Emby → Album Images). Every few hours, and right away
+  with **Look again**.
+
+**Changed**
+- **Any source Lidarr knows albums from** (Deezer, Discogs… through Tubifarry's MetaMix) works in
+  Tuna the same way: Tuna asks Lidarr for the artist and the cover rather than each source.
+
+**Fixed**
+- **Songs that had arrived still showed as not here** in playlists when the library names them a
+  little differently: now the same artist's song with nearly the same title counts.
+
+To update: the server (pull the new image). The apps need nothing new.
+
 ## 0.5.2 (2026-11-27)
 
 **Changed**
