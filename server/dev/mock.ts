@@ -12,6 +12,8 @@
  *   MOCK_SLSKD_REFUSE=<user,…>: those peers refuse to send. MOCK_SLSKD_STUCK=<user,…>: their queues never move.
  *   MOCK_MUSIC_DIR (default tuna-mock-music in the temp folder): Lidarr's music folder, a real one: files
  *   people import go there (through Lidarr's manual import, or straight in), and Navidrome finds them.
+ *   MOCK_SLSKD_DIR (default tuna-mock-slskd in the temp folder): slskd's downloads folder, a real one.
+ *   MOCK_LIDARR_ALBUMS_ONLY=1: Lidarr keeps no singles or EPs (its Standard metadata profile, as it comes).
  *   MOCK_SLSKD_BLOCK=<phrase,…>: nobody answers searches with those phrases (Soulseek's server drops some).
  *   MOCK_SLSKD_SAVE_MS (default 1500): how long after a search says it's complete its results are saved
  *   (slskd saves them last; slower on a Raspberry Pi).
@@ -574,6 +576,17 @@ const downloads: Download[] = [];
 const monitored = new Set<string>();
 
 function tickDownloads() {
+  // Finished downloads land in slskd's downloads folder: a few seconds of the song's tune.
+  for (const x of onDisk()) {
+    if (x.landed) continue;
+    x.landed = true;
+    fs.mkdirSync(nodePath.dirname(localPath(x)), { recursive: true });
+    try {
+      execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', `sine=frequency=${300 + (x.n % 9) * 40}:duration=5`, localPath(x)]);
+    } catch {
+      fs.writeFileSync(localPath(x), Buffer.concat([wavHeader(5 * RATE * 2), Buffer.alloc(5 * RATE * 2)]));
+    }
+  }
   for (const d of [...downloads]) {
     if (Date.now() - d.started >= GET_SECONDS * 1000) {
       const a = albums.get(d.albumId)!;
@@ -757,7 +770,12 @@ let nextLidarrArtist = 1;
 
 // ---- slskd's side: Soulseek searches and downloads -------------------------------------------------
 
-const DOWNLOADS = '/downloads/slskd';
+/** slskd's downloads folder, a real one: finished downloads land there as (short) sound files. */
+const DOWNLOADS = process.env.MOCK_SLSKD_DIR ?? nodePath.join(os.tmpdir(), 'tuna-mock-slskd');
+fs.mkdirSync(DOWNLOADS, { recursive: true });
+/** MOCK_LIDARR_ALBUMS_ONLY=1: Lidarr keeps no singles or EPs (its Standard metadata profile, as it comes). */
+const ALBUMS_ONLY = process.env.MOCK_LIDARR_ALBUMS_ONLY === '1';
+const kept = (a: MAlbum) => !ALBUMS_ONLY || a.type === 'Album';
 const PEERS = ['vinyl_ghost', 'flacmeister', 'nightbus', 'tapehiss', 'cratedigger77', 'lunar.kev', 'oddsocks', 'basement_tapes', 'mp3owl', 'soulseeker'];
 const ROOTS = ['Music', 'Shared\\Music', 'Downloads\\Soulseek'];
 
@@ -781,6 +799,8 @@ interface Transfer {
   /** When it was taken off slskd's list. */
   removed?: number;
   imported?: boolean;
+  /** Its file is in the downloads folder. */
+  landed?: boolean;
 }
 const transfers: Transfer[] = [];
 
@@ -1285,8 +1305,8 @@ async function lidarr(path: string, q: URLSearchParams, req: http.IncomingMessag
   if (p === '/album' && req.method === 'GET') {
     const artist = artists.find((x) => x.lidarrId === Number(q.get('artistId')));
     // Only albums of artists in Lidarr, as Lidarr.
-    if (q.get('foreignAlbumId')) return json(res, 200, [...albums.values()].filter((a) => a.mbid === q.get('foreignAlbumId') && artists.find((x) => x.id === a.artistId)?.lidarrId).map(lidarrAlbum));
-    return json(res, 200, artist ? artist.albums.map(lidarrAlbum) : []);
+    if (q.get('foreignAlbumId')) return json(res, 200, [...albums.values()].filter((a) => a.mbid === q.get('foreignAlbumId') && kept(a) && artists.find((x) => x.id === a.artistId)?.lidarrId).map(lidarrAlbum));
+    return json(res, 200, artist ? artist.albums.filter(kept).map(lidarrAlbum) : []);
   }
   const one = p.match(/^\/album\/(\d+)$/);
   if (one) {

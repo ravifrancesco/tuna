@@ -48,7 +48,8 @@
   .hook { animation: hook 2.4s infinite; }
   .fish { animation: fish 2.4s infinite; }
   .tailpos { animation: tailpos 2.4s infinite; }
-  .tail { transform-box: fill-box; transform-origin: 100% 50%; animation: wag 0.45s ease-in-out infinite alternate; }
+  /* The tail swings about its tip. (Around its own box, WebKit cut its rounded edge off as it swung.) */
+  .tail { transform-box: view-box; transform-origin: 0 0; animation: wag 0.45s ease-in-out infinite alternate; }
 
   /* The fish hovers by the hook and nibbles at its point: a dart in, a touch, back again; once, then
      twice in a row. It's back where it started at 0% and at 42% (where the web page's bite begins). */
@@ -92,7 +93,7 @@
     88% { transform: translate(0px, 0.15px); animation-timing-function: ease-in-out; }
     94%, 100% { transform: translate(0px, 0px); }
   }
-  @keyframes wag { from { transform: rotate(-10deg); } to { transform: rotate(10deg); } }
+  @keyframes wag { from { transform: translate(10.8px,44px) rotate(-10deg) translate(-10.8px,-44px); } to { transform: translate(10.8px,44px) rotate(10deg) translate(-10.8px,-44px); } }
   @keyframes in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
   @media (prefers-reduced-motion: reduce) {

@@ -42,7 +42,7 @@ const CSS = `
 .tl .all,.tl .hook,.tl .fish,.tl .tailpos{transform-box:view-box;transform-origin:0 0}
 .tl .fish{transform:${F(0.02, -2.8, -12)}}
 .tl .tailpos{transform:translate(.14px,1.31px)}
-.tl .tail{transform-box:fill-box;transform-origin:100% 50%;animation:tl-wag .45s ease-in-out infinite alternate}
+.tl .tail{transform-box:view-box;transform-origin:0 0;animation:tl-wag .45s ease-in-out infinite alternate}
 .tl .fish{animation:tl-fish 2.4s infinite}.tl .tailpos{animation:tl-tail 2.4s infinite}.tl .hook{animation:tl-hook 2.4s infinite}
 .tl.is-biting .fish{animation:tl-bite-fish 1s forwards}.tl.is-biting .tailpos{animation:tl-bite-tail 1s forwards}.tl.is-biting .hook{animation:none}
 .tl.is-biting .curl{animation:tl-curl 1s forwards}.tl.is-biting .all{animation:tl-tug 1s}.tl.is-biting .tail{animation:tl-thrash 1s}
@@ -54,8 +54,8 @@ ${keyframes('tl-bite-tail', BITE, tail)}
 @keyframes tl-hook{0%,19.5%{transform:translate(0,0);animation-timing-function:cubic-bezier(.2,.8,.3,1)}23%{transform:translate(0,1.4px);animation-timing-function:ease-in-out}29%{transform:translate(0,-.5px);animation-timing-function:ease-in-out}36%{transform:translate(0,.2px);animation-timing-function:ease-in-out}42%,58.5%{transform:translate(0,0);animation-timing-function:cubic-bezier(.2,.8,.3,1)}62%{transform:translate(0,1.1px);animation-timing-function:ease-in-out}69.5%{transform:translate(0,-.2px);animation-timing-function:cubic-bezier(.2,.8,.3,1)}73%{transform:translate(0,1.4px);animation-timing-function:ease-in-out}80%{transform:translate(0,-.5px);animation-timing-function:ease-in-out}88%{transform:translate(0,.15px);animation-timing-function:ease-in-out}94%,100%{transform:translate(0,0)}}
 @keyframes tl-curl{0%,39%{opacity:1;animation-timing-function:steps(1,end)}40%,100%{opacity:0}}
 @keyframes tl-tug{0%,40%{transform:translate(0,0);animation-timing-function:cubic-bezier(.2,.8,.3,1)}48%{transform:translate(0,-5px);animation-timing-function:ease-in-out}60%{transform:translate(0,1px);animation-timing-function:ease-in-out}70%{transform:translate(0,0);animation-timing-function:ease-in-out}85%{transform:translate(0,-1.5px);animation-timing-function:ease-in-out}100%{transform:translate(0,0)}}
-@keyframes tl-thrash{0%{transform:rotate(-10deg)}15%{transform:rotate(14deg)}30%{transform:rotate(-14deg)}45%{transform:rotate(12deg)}60%{transform:rotate(-8deg)}78%{transform:rotate(4deg)}100%{transform:rotate(0)}}
-@keyframes tl-wag{from{transform:rotate(-10deg)}to{transform:rotate(10deg)}}
+@keyframes tl-thrash{0%{transform:translate(10.8px,44px) rotate(-10deg) translate(-10.8px,-44px)}15%{transform:translate(10.8px,44px) rotate(14deg) translate(-10.8px,-44px)}30%{transform:translate(10.8px,44px) rotate(-14deg) translate(-10.8px,-44px)}45%{transform:translate(10.8px,44px) rotate(12deg) translate(-10.8px,-44px)}60%{transform:translate(10.8px,44px) rotate(-8deg) translate(-10.8px,-44px)}78%{transform:translate(10.8px,44px) rotate(4deg) translate(-10.8px,-44px)}100%{transform:translate(10.8px,44px) rotate(0deg) translate(-10.8px,-44px)}}
+@keyframes tl-wag{from{transform:translate(10.8px,44px) rotate(-10deg) translate(-10.8px,-44px)}to{transform:translate(10.8px,44px) rotate(10deg) translate(-10.8px,-44px)}}
 @media (prefers-reduced-motion: reduce){.tl .all,.tl .hook,.tl .curl,.tl .fish,.tl .tailpos,.tl .tail{animation:none!important}.tl .curl{opacity:0}}
 `;
 

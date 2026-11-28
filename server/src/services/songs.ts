@@ -57,6 +57,8 @@ interface Song {
   after?: number;
   progress?: number;
   ready?: string;
+  /** Why Lidarr has no album for it (then it goes straight into the music folder). */
+  loose?: string;
   /** When it wasn't found (ms). */
   settled?: number;
   /** A file someone has for it, waiting to go into the library (in the music folder's .tuna), and its cover; who sent it. */
@@ -157,7 +159,7 @@ export const songsNotFound = () => songs.filter((s) => s.state === 'notFound' &&
 /** Looks for all of those again, from the start. */
 export function lookAgain(by: string): number {
   const again = songsNotFound();
-  for (const s of again) Object.assign(s, { state: 'waiting', tried: undefined, refused: undefined, failures: undefined, after: undefined, from: undefined, progress: undefined });
+  for (const s of again) Object.assign(s, { state: 'waiting', tried: undefined, refused: undefined, failures: undefined, after: undefined, from: undefined, progress: undefined, loose: undefined });
   save();
   if (again.length) log.info('get', `${by} asked to look again for ${again.length} song${again.length === 1 ? '' : 's'}, to get ${AT_ONCE} at a time`);
   void tick();
@@ -371,7 +373,10 @@ async function start(s: Song) {
   save();
   try {
     const why = s.trackId ? undefined : await place(s);
-    if (why) return notFound(s, why);
+    // Not on an album Lidarr has: from Soulseek all the same, straight into the music folder (where Tuna has it).
+    if (why && !(await musicFolder())) return notFound(s, why);
+    if (why) log.info('get', `"${s.title}" by ${s.artist} is ${why}: from Soulseek straight into the music folder`);
+    s.loose = why;
     // Lidarr had it already.
     if ((s.state as Song['state']) === 'ready') return void scanNavidrome();
     await fetchCopy(s);
@@ -394,7 +399,7 @@ async function fetchCopy(s: Song) {
   // The artist's longest word ("Kanye" of "Kanye West"), when the name has more than one.
   const word = (first.match(/[\p{L}\p{N}']+/gu) ?? []).sort((a, b) => b.length - a.length)[0];
   // Spotify's names, then MusicBrainz's. Soulseek doesn't answer searches for some names at all
-  // ("Kanye West"): then by the title and its album, then the title and one word of the name.
+  // ("Kanye West"): then by the title and its album, the title and one word of the name, the title alone.
   const searches = [
     ...new Set(
       [
@@ -402,6 +407,8 @@ async function fetchCopy(s: Song) {
         s.mb && clean(`${s.mb.artist} ${cleanTitle(s.mb.title)}`),
         s.album && norm(cleanAlbum(s.album)) !== norm(title) && clean(`${title} ${cleanAlbum(s.album)}`),
         word && norm(word) !== norm(first) && clean(`${title} ${word}`),
+        // As people search: the title alone (copies still need the artist in their path).
+        clean(title).length >= 4 && clean(title),
       ].filter((q): q is string => Boolean(q)),
     ),
   ];
@@ -460,6 +467,7 @@ async function inLidarr(remote: string): Promise<string> {
  */
 async function file(s: Song): Promise<boolean> {
   const where = await inLidarr(s.from!.filename);
+  if (s.loose) return shelveDownload(s, where);
   const candidates = await lidarr.importable(path.posix.dirname(where)).catch(() => []);
   const item = candidates.find((c) => c.path === where) ?? candidates.find((c) => path.posix.basename(c.path) === path.posix.basename(where));
   if (!item) {
@@ -472,6 +480,36 @@ async function file(s: Song): Promise<boolean> {
   }
   if (await intoAlbum(s, item)) arrived(s);
   else notFound(s, "Lidarr couldn't file it");
+  return true;
+}
+
+/**
+ * A song Lidarr has no album for: from slskd's downloads (where Lidarr would see them, in the data
+ * folder Tuna has too) straight into the music folder, named and tagged as it was asked for.
+ */
+async function shelveDownload(s: Song, where: string): Promise<boolean> {
+  const root = await musicFolder();
+  if (!root || !fs.existsSync(where)) {
+    s.from!.done ??= Date.now();
+    save();
+    if (Date.now() - s.from!.done < LANDING) return false;
+    log.warn('get', root ? `Tuna can't see "${where}": slskd's downloads folder needs to be in the data folder Tuna has` : "Tuna can't reach the music folder");
+    notFound(s, "Tuna can't see slskd's downloads");
+    return true;
+  }
+  const staged = path.join(root, STAGING, 'soulseek', crypto.randomUUID(), `song${path.extname(where).toLowerCase()}`);
+  try {
+    await fs.promises.mkdir(path.dirname(staged), { recursive: true });
+    await fs.promises.copyFile(where, staged);
+    await fs.promises.rm(where, { force: true }).catch(() => undefined);
+    await shelve(staged, { title: s.title, artist: tagArtists(s.artist), album: s.album || s.title, albumArtist: firstArtist(s.artist) }, undefined, root);
+    arrived(s);
+  } catch (err) {
+    log.warn('get', `Couldn't put "${s.title}" by ${s.artist} in the music folder`, err);
+    notFound(s, "it couldn't go into the music folder");
+  } finally {
+    await drop(staged);
+  }
   return true;
 }
 

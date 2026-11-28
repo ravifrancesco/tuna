@@ -21,7 +21,7 @@
     <Product>Tuna</Product>
     <Company>Tuna</Company>
     <AssemblyTitle>Tuna</AssemblyTitle>
-    <Version>0.5.1</Version>
+    <Version>0.5.2</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>

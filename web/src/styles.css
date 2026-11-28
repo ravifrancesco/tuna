@@ -1337,9 +1337,24 @@ html.tv .mobile-only {
     -webkit-touch-callout: none;
   }
 }
-/* Imported from Spotify, not in the library yet. */
-.track--waiting > :not(.track__get) {
-  opacity: 0.4;
+/*
+ * A long list (Liked songs can be thousands): rows off screen aren't laid out or drawn until they
+ * come near (each keeps its height meanwhile).
+ */
+.tracks > [role='listitem'] {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 56px;
+}
+/* Imported from Spotify, not in the library yet: dimmed by colour (see-through rows are slow to draw). */
+.track--waiting,
+.track--waiting .track__album {
+  color: #4a4560;
+}
+.track--waiting .track__title {
+  color: #625c78;
+}
+.track--waiting .track__main .cover {
+  background: rgba(255, 255, 255, 0.035);
 }
 .track--waiting:hover {
   background: none;

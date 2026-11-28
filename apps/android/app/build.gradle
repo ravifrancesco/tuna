@@ -3,7 +3,7 @@ plugins {
 }
 
 // Version shown in Settings; keep in step with the root package.json.
-def tunaVersion = '0.5.1'
+def tunaVersion = '0.5.2'
 
 android {
     namespace 'app.tuna.music'

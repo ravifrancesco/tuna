@@ -1,3 +1,4 @@
+import { memo, useCallback, useRef } from 'react';
 import { Link } from 'react-router';
 import { CircleArrowDown, Heart, ListEnd, MoreHorizontal, Pause, Play } from 'lucide-react';
 import type { Track, WaitingSong } from '@tuna/shared';
@@ -34,6 +35,12 @@ export function TrackList({
   waiting?: WaitingSong[];
   added?: (string | null)[];
 }) {
+  // Rows draw again only when their own song changes (a long Liked songs has thousands): what they
+  // call is the same each time, and finds the list as it is now.
+  const now = useRef({ tracks, source, onRemove });
+  now.current = { tracks, source, onRemove };
+  const play = useCallback((i: number) => playTracks(now.current.tracks, i, now.current.source, { shuffle: false }), []);
+  const remove = useCallback((i: number) => now.current.onRemove?.(i), []);
   const after = new Map<number, WaitingSong[]>();
   for (const w of waiting) after.set(w.after, [...(after.get(w.after) ?? []), w]);
   const rows: React.ReactNode[] = [];
@@ -42,7 +49,7 @@ export function TrackList({
   later(-1);
   tracks.forEach((tr, i) => {
     n++;
-    rows.push(<TrackRow key={`${tr.id}-${i}`} track={tr} added={added?.[i]} n={numbers ? (tr.track ?? i + 1) : n} showCover={!numbers} showAlbum={!compact} onPlay={() => playTracks(tracks, i, source, { shuffle: false })} onRemove={onRemove && (() => onRemove(i))} />);
+    rows.push(<TrackRow key={`${tr.id}-${i}`} track={tr} added={added?.[i]} n={numbers ? (tr.track ?? i + 1) : n} showCover={!numbers} showAlbum={!compact} index={i} play={play} remove={onRemove ? remove : undefined} />);
     later(i);
   });
   return (
@@ -53,7 +60,7 @@ export function TrackList({
 }
 
 /** A song that isn't in the library yet: where it belongs, not playable, with Get for just it. */
-function WaitingRow({ song, n, showAlbum }: { song: WaitingSong; n: number; showAlbum: boolean }) {
+const WaitingRow = memo(function WaitingRow({ song, n, showAlbum }: { song: WaitingSong; n: number; showAlbum: boolean }) {
   return (
     <div className="track track--waiting" role="listitem" aria-disabled data-added={song.added}>
       <div className="track__n">
@@ -72,27 +79,32 @@ function WaitingRow({ song, n, showAlbum }: { song: WaitingSong; n: number; show
       </div>
     </div>
   );
-}
+});
 
-function TrackRow({
+const TrackRow = memo(function TrackRow({
   track,
   added,
   n,
   showCover,
   showAlbum,
-  onPlay,
-  onRemove,
+  index,
+  play,
+  remove,
 }: {
   track: Track;
   added?: string | null;
   n: number;
   showCover: boolean;
   showAlbum: boolean;
-  onPlay: () => void;
-  onRemove?: () => void;
+  index: number;
+  play: (i: number) => void;
+  remove?: (i: number) => void;
 }) {
+  const onPlay = () => play(index);
+  const onRemove = remove && (() => remove(index));
+  // Only the row playing hears about play and pause (not every row of the list).
   const isCurrent = usePlayer((s) => s.queue[s.index]?.id === track.id);
-  const playing = usePlayer((s) => s.playing);
+  const playing = usePlayer((s) => s.queue[s.index]?.id === track.id && s.playing);
   const [liked, toggleLike] = useLiked('track', track.id, track.liked);
   const onDevice = useOnDevice(track.id);
   const menu = (e: React.MouseEvent) => showMenu(e, <TrackMenu track={track} onRemove={onRemove} />);
@@ -120,7 +132,7 @@ function TrackRow({
         <div className="track__n">
           <span>{n}</span>
           <button className="icon-btn" aria-label={t('Play {title}', { title: track.title })} onClick={() => (isCurrent && current() ? toggle() : onPlay())}>
-            {isCurrent && playing ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
+            {playing ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
           </button>
         </div>
         <div className="track__main">
@@ -146,4 +158,4 @@ function TrackRow({
       </div>
     </div>
   );
-}
+});

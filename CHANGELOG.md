@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.2 (2026-11-27)
+
+**Changed**
+- **Songs that aren't on an album Lidarr has** (singles and EPs its metadata profile leaves out, songs
+  MusicBrainz doesn't know) are now got from Soulseek all the same, and go straight into the music
+  folder, named and tagged as the playlist has them. Before, Tuna gave up on them without looking.
+  This needs slskd's downloads folder inside the data folder Tuna has (the log says if it isn't).
+- **One more search on Soulseek:** the song's title alone, as people search (a copy still needs the
+  artist in its path).
+
+**Fixed**
+- **Long playlists scrolled slowly** (a big Liked songs with many songs not here yet): songs off
+  screen are no longer laid out or drawn until they come near, songs not here yet are dimmed in a
+  way that's quicker to draw, and only the song playing hears about play and pause.
+- **The fish's tail was cut** in the opening away from home (iPhone and Mac): as it swung, its
+  rounded edge was clipped. It now swings about its tip.
+
+To update: the server (pull the new image), and the apps for the tail.
+
 ## 0.5.1 (2026-11-27)
 
 **Fixed**
