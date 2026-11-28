@@ -17,21 +17,21 @@
       "category": "entertainment",
       "versions": [
         {
-          "version": "0.5.3",
+          "version": "0.5.4",
           "buildVersion": "1",
           "date": "2026-11-27",
-          "localizedDescription": "New\n- Albums show all their songs: an album you have only some songs of shows the rest too, greyed where they belong, each with Get, and Get the missing songs for all of them. It says whether it's an album, an EP or a single as its sources do (not guessed from how many songs are here).\n- Songs Tuna filed itself go to Lidarr once it knows their album (after you turn on Deezer in Lidarr, or singles and EPs): Lidarr files them into the album with its names, and its cover if it writes covers (Settings → Metadata → Kodi/Emby → Album Images). Every few hours, and right away with Look again.\n\nChanged\n- Any source Lidarr knows albums from (Deezer, Discogs… through Tubifarry's MetaMix) works in Tuna the same way: Tuna asks Lidarr for the artist and the cover rather than each source.\n\nFixed\n- Songs that had arrived still showed as not here in playlists when the library names them a little differently: now the same artist's song with nearly the same title counts.\n\nTo update: the server (pull the new image). The apps need nothing new.",
-          "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.5.3/Tuna-ios.ipa",
-          "size": 4705836,
-          "sha256": "7b7e14ce8a3e0b5833a68f931bdaf11b6b6163d493edb40418e8c45d9d6225af",
+          "localizedDescription": "Changed\n- Look again and Get the missing songs show how it's going: while they work, a wheel turns and they say how many are still to go (\"Getting them · 10 to go\"). Pressed again, they stop: songs already downloading finish, the rest aren't looked for. Each song's dot shows at once.\n\nFixed\n- Songs Soulseek had that Tuna passed over: - \"Song - Original\" (and \"- Bonus Track\") was looked for with \"Original\" in it; now as \"Song\". - What's in brackets in a file's name counts: \"Love Is the Message (Live at Abbey Road Studios)\" and \"Baiana (Cosme Martin & Christian Vila Remix)\" were taken for the plain songs and passed over. - \"&\" may be written \"and\", a comma or nothing: small words like these no longer have to match. - Long searches can come back empty: Tuna also searches the artist and the title's main part.\n- A song not live or instrumental no longer takes a copy whose name says \"(Live)\" or \"(Instrumental)\" in brackets.\n\nTo update: the server (pull the new image). The apps need nothing new.",
+          "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.5.4/Tuna-ios.ipa",
+          "size": 4705838,
+          "sha256": "f97bc1350d5e4a11e8bd36a9afb83f61ac9d4a637c5ef1226d54b2e517c4f439",
           "minOSVersion": "16.0"
         }
       ],
-      "version": "0.5.3",
+      "version": "0.5.4",
       "versionDate": "2026-11-27",
-      "versionDescription": "New\n- Albums show all their songs: an album you have only some songs of shows the rest too, greyed where they belong, each with Get, and Get the missing songs for all of them. It says whether it's an album, an EP or a single as its sources do (not guessed from how many songs are here).\n- Songs Tuna filed itself go to Lidarr once it knows their album (after you turn on Deezer in Lidarr, or singles and EPs): Lidarr files them into the album with its names, and its cover if it writes covers (Settings → Metadata → Kodi/Emby → Album Images). Every few hours, and right away with Look again.\n\nChanged\n- Any source Lidarr knows albums from (Deezer, Discogs… through Tubifarry's MetaMix) works in Tuna the same way: Tuna asks Lidarr for the artist and the cover rather than each source.\n\nFixed\n- Songs that had arrived still showed as not here in playlists when the library names them a little differently: now the same artist's song with nearly the same title counts.\n\nTo update: the server (pull the new image). The apps need nothing new.",
-      "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.5.3/Tuna-ios.ipa",
-      "size": 4705836,
+      "versionDescription": "Changed\n- Look again and Get the missing songs show how it's going: while they work, a wheel turns and they say how many are still to go (\"Getting them · 10 to go\"). Pressed again, they stop: songs already downloading finish, the rest aren't looked for. Each song's dot shows at once.\n\nFixed\n- Songs Soulseek had that Tuna passed over: - \"Song - Original\" (and \"- Bonus Track\") was looked for with \"Original\" in it; now as \"Song\". - What's in brackets in a file's name counts: \"Love Is the Message (Live at Abbey Road Studios)\" and \"Baiana (Cosme Martin & Christian Vila Remix)\" were taken for the plain songs and passed over. - \"&\" may be written \"and\", a comma or nothing: small words like these no longer have to match. - Long searches can come back empty: Tuna also searches the artist and the title's main part.\n- A song not live or instrumental no longer takes a copy whose name says \"(Live)\" or \"(Instrumental)\" in brackets.\n\nTo update: the server (pull the new image). The apps need nothing new.",
+      "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.5.4/Tuna-ios.ipa",
+      "size": 4705838,
       "appPermissions": {
         "entitlements": [],
         "privacy": {
