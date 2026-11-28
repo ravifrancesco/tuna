@@ -17,21 +17,21 @@
       "category": "entertainment",
       "versions": [
         {
-          "version": "0.5.5",
+          "version": "0.5.6",
           "buildVersion": "1",
           "date": "2026-11-27",
-          "localizedDescription": "Fixed\n- \"Lidarr doesn't know this artist\" for artists Lidarr knows from Deezer (or Discogs): since 0.5.3 Tuna looked them up by name, which Lidarr's search doesn't always answer. Now as their source asks (\"deezer:…\"), then by name, and failing both, added by their id for Lidarr to fill in.\n- Titles with \"(con …)\", \"(featuring …)\" or \"(w/ …)\" (since 0.5.4, words in brackets count): those are other artists, not part of the title.\n- Copies were passed over for a word inside another (\"Oliver\" has \"live\" in it): the words that mark another version count only whole. More of them: extended, club mix, dub mix, acoustic, unplugged, VIP, rework, bootleg, mashup, nightcore.\n- Artists written without spaces in a copy's path (\"SeeMaw\" for See Maw) count.\n- Handing songs to Lidarr runs once at a time (Look again pressed twice started two, and MusicBrainz said it was busy); what couldn't be checked is tried again within the hour, and the log says in one line how many were and how many are still on no album Lidarr has.\n\nTo update: the server (pull the new image). The apps need nothing new.",
-          "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.5.5/Tuna-ios.ipa",
-          "size": 4705848,
-          "sha256": "2f1c6ce8d501e8aaeba4250100df127d7393b00fbed6e34711c2706095b0d966",
+          "localizedDescription": "Changed\n- Album pages show all their songs at once, the ones that aren't here yet among them, instead of yours first and the rest a moment later. An album starts loading when you point at or touch it, so it's usually there as you open it. If finding the missing songs takes long, yours show after a couple of seconds and the rest join them.\n\nFixed\n- Songs Tuna filed itself stayed \"on no album Lidarr has\" when Lidarr has their album from another source (Deezer, Discogs, through Tubifarry's MetaMix): Tuna only matched albums by their MusicBrainz id. Now also by name, among the artist's albums in Lidarr. Press Look again once after updating to check them all now (else each is checked within a day).\n- Covers from Soulseek of another album: a copy ripped from a compilation brought the compilation's cover with it. Now a copy keeps its cover only if it comes from the album asked for (its album tag says so, else the folder it was in). Songs Tuna filed before are checked once.\n\nTo update: the server (pull the new image). The apps need nothing new.",
+          "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.5.6/Tuna-ios.ipa",
+          "size": 4705854,
+          "sha256": "047db868fc0c004674769c8101ec48405202d4acdd65367121b61eb5bb3c3ef1",
           "minOSVersion": "16.0"
         }
       ],
-      "version": "0.5.5",
+      "version": "0.5.6",
       "versionDate": "2026-11-27",
-      "versionDescription": "Fixed\n- \"Lidarr doesn't know this artist\" for artists Lidarr knows from Deezer (or Discogs): since 0.5.3 Tuna looked them up by name, which Lidarr's search doesn't always answer. Now as their source asks (\"deezer:…\"), then by name, and failing both, added by their id for Lidarr to fill in.\n- Titles with \"(con …)\", \"(featuring …)\" or \"(w/ …)\" (since 0.5.4, words in brackets count): those are other artists, not part of the title.\n- Copies were passed over for a word inside another (\"Oliver\" has \"live\" in it): the words that mark another version count only whole. More of them: extended, club mix, dub mix, acoustic, unplugged, VIP, rework, bootleg, mashup, nightcore.\n- Artists written without spaces in a copy's path (\"SeeMaw\" for See Maw) count.\n- Handing songs to Lidarr runs once at a time (Look again pressed twice started two, and MusicBrainz said it was busy); what couldn't be checked is tried again within the hour, and the log says in one line how many were and how many are still on no album Lidarr has.\n\nTo update: the server (pull the new image). The apps need nothing new.",
-      "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.5.5/Tuna-ios.ipa",
-      "size": 4705848,
+      "versionDescription": "Changed\n- Album pages show all their songs at once, the ones that aren't here yet among them, instead of yours first and the rest a moment later. An album starts loading when you point at or touch it, so it's usually there as you open it. If finding the missing songs takes long, yours show after a couple of seconds and the rest join them.\n\nFixed\n- Songs Tuna filed itself stayed \"on no album Lidarr has\" when Lidarr has their album from another source (Deezer, Discogs, through Tubifarry's MetaMix): Tuna only matched albums by their MusicBrainz id. Now also by name, among the artist's albums in Lidarr. Press Look again once after updating to check them all now (else each is checked within a day).\n- Covers from Soulseek of another album: a copy ripped from a compilation brought the compilation's cover with it. Now a copy keeps its cover only if it comes from the album asked for (its album tag says so, else the folder it was in). Songs Tuna filed before are checked once.\n\nTo update: the server (pull the new image). The apps need nothing new.",
+      "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.5.6/Tuna-ios.ipa",
+      "size": 4705854,
       "appPermissions": {
         "entitlements": [],
         "privacy": {
