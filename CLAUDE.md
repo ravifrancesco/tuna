@@ -80,10 +80,13 @@ Notes for anyone (person or AI assistant) working on Tuna's code.
   peer's downloads fail), `MOCK_SLSKD_MOVE_SECONDS` (2: how long a finished download takes to reach
   slskd's downloads folder, as in slskd), `MOCK_SLSKD_REFUSE=<peer,…>` (they refuse to send),
   `MOCK_SLSKD_STUCK=<peer,…>` (their queues never move), `MOCK_SLSKD_BLOCK=<phrase,…>` (nobody answers
-  searches with those phrases, as Soulseek's server drops some). `MOCK_LIDARR_LOOKUP_FAIL=<word,…>` makes Lidarr's
+  searches with those phrases, as Soulseek's server drops some), `MOCK_SLSKD_COMPILATION=<word,…>` (songs
+  with those words are only on a compilation, "Nova Hits 4.1"; every copy carries its album's name and a
+  cover). `MOCK_LIDARR_LOOKUP_FAIL=<word,…>` makes Lidarr's
   search fail for names with those words, as its metadata server does for some. `MOCK_MB_CROWDED=<word,…>`
   makes songs with those words famous in MusicBrainz (150 compilation and live recordings before the
-  album's, and a greatest hits Lidarr doesn't keep). `MOCK_DEEZER=1` makes Lidarr know albums from Deezer
+  album's, and a greatest hits Lidarr doesn't keep). `MOCK_LIDARR_OTHER_IDS=<word,…>` gives Lidarr's albums with those words another source's id (Deezer's), as
+  MetaMix does. `MOCK_DEEZER=1` makes Lidarr know albums from Deezer
   too, as Tubifarry's Deezer source (`…@deezer` ids). `MOCK_SLSKD_SAVE_MS` (1500): how long after a search says
   it's complete slskd saves its results. `MOCK_COVER_MS` makes each cover that slow, as Navidrome
   on a Raspberry Pi. `MOCK_MUSIC_DIR` (tuna-mock-music in the temp folder) is Lidarr's music folder,

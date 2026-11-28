@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { Heart, ListEnd, ListPlus, ListStart, MoreHorizontal, Radio, Shuffle } from 'lucide-react';
@@ -20,6 +21,13 @@ export function Album() {
   const album = useQuery({ queryKey: ['album', id], queryFn: () => api.album(id) });
   // The rest of the album (its kind, and its songs that aren't here), once it's known.
   const whole = useQuery({ queryKey: ['album-whole', id], queryFn: () => api.albumWhole(id), staleTime: 5 * 60_000 });
+  // The songs show all at once, with those that aren't here; if finding those takes long, without them.
+  const [waited, setWaited] = useState('');
+  useEffect(() => {
+    const timer = window.setTimeout(() => setWaited(id), 2500);
+    return () => window.clearTimeout(timer);
+  }, [id]);
+  const complete = whole.isFetched || waited === id;
   const [liked, toggleLike] = useLiked('album', id, album.data?.liked);
   const tint = useTint(album.data?.cover);
   if (album.isLoading) return <Spinner />;
@@ -27,7 +35,7 @@ export function Album() {
   if (!a) return <Empty>{t("Couldn't find this album")}</Empty>;
   const source = { kind: 'album' as const, id: a.id, title: a.name };
   const missing = whole.data?.missing ?? [];
-  const kind = whole.data?.kind ? { Album: t('Album'), EP: t('EP'), Single: t('Single'), Other: t('Album') }[whole.data.kind] : whole.isFetched ? (a.songCount <= 3 ? t('Single') : t('Album')) : '\u00a0';
+  const kind = whole.data?.kind ? { Album: t('Album'), EP: t('EP'), Single: t('Single'), Other: t('Album') }[whole.data.kind] : complete ? (a.songCount <= 3 ? t('Single') : t('Album')) : '\u00a0';
   return (
     <div className="page--flush">
       <header className="hero" style={{ '--hero': tint } as React.CSSProperties}>
@@ -77,14 +85,12 @@ export function Album() {
           <MoreHorizontal size={24} />
         </button>
       </div>
-      {missing.length > 0 && (
+      {complete && missing.length > 0 && (
         <div className="section section--tight">
           <GetMissing waiting={missing} />
         </div>
       )}
-      <div className="section">
-        <TrackList tracks={a.tracks} waiting={missing} source={source} numbers compact />
-      </div>
+      <div className="section">{complete ? <TrackList tracks={a.tracks} waiting={missing} source={source} numbers compact /> : <div className="tracks-wait" aria-busy />}</div>
       {a.moreBy.length > 0 && (
         <div className="section">
           <Row title={t('More by {name}', { name: a.artist })}>

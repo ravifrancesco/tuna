@@ -61,6 +61,8 @@ interface Song {
   loose?: string;
   path?: string;
   lookedAt?: number;
+  /** The cover its Soulseek copy came with was checked (and taken off: another album's, a compilation's). */
+  coverChecked?: boolean;
   /** When it wasn't found (ms). */
   settled?: number;
   /** A file someone has for it, waiting to go into the library (in the music folder's .tuna), and its cover; who sent it. */
@@ -251,17 +253,20 @@ type Album = { mbid: string; artistMbid?: string; title: string; artist: string;
  * when it can't be placed.
  */
 async function place(s: Song): Promise<string | undefined> {
+  const artists: Artists = new Map();
   const coded = s.isrc ? releaseGroups(await mbSearchRecordings(`isrc:${s.isrc}`).catch(() => [])) : [];
   if (coded.length) {
     const named = s.album ? coded.filter((a) => alike(cleanAlbum(a.title), cleanAlbum(s.album!))) : [];
-    if (await placeOn(s, [...named, ...coded.filter((a) => !named.includes(a))])) return;
+    if (await placeOn(s, [...named, ...coded.filter((a) => !named.includes(a))], artists)) return;
   }
   // Lidarr's search fails for some names (its metadata server): then the song's own way, below.
   const named = s.album ? await resolve(s.artist, s.album).catch(() => undefined) : undefined;
-  if (named && (await placeOn(s, [named]))) return;
+  if (named && (await placeOn(s, [named], artists))) return;
   const own = (await releasesOf(s)).filter((a) => a.mbid !== named?.mbid);
-  if (!coded.length && !named && !own.length) return 'not in MusicBrainz';
-  if (!(await placeOn(s, own))) return 'not on an album Lidarr has';
+  if (await placeOn(s, own, artists)) return;
+  // Lidarr may have the album from another source (Deezer, Discogs…), under another id: by its name.
+  if (await placeNamed(s, [s.album, named?.title, ...coded.map((a) => a.title), ...own.map((a) => a.title), cleanTitle(s.title)], artists)) return;
+  return !coded.length && !named && !own.length ? 'not in MusicBrainz' : 'not on an album Lidarr has';
 }
 
 /** The albums, singles and EPs the song came out on (soundtracks after; no compilations, live albums or mixes), albums first. */
@@ -280,44 +285,74 @@ async function releasesOf(s: Song): Promise<Album[]> {
 }
 
 /** The song's track on the first of these albums that Lidarr has: its recording, else its name. */
-async function placeOn(s: Song, albums: Album[]): Promise<boolean> {
-  const artists: Artists = new Map();
-  const want = norm(cleanTitle(s.title));
+async function placeOn(s: Song, albums: Album[], artists: Artists = new Map()): Promise<boolean> {
   for (const album of albums) {
     const at = await lidarrAlbum(album, artists);
     const track = at && trackOf(at.tracks, s.title, album.recordings);
-    if (!at || !track) continue;
-    const differs = norm(cleanTitle(track.title)) !== want || !artistsOf(s.artist).some((a) => artistsOf(album.artist).includes(a));
-    Object.assign(s, {
-      albumMbid: album.mbid,
-      artistId: at.artistId,
-      albumId: at.albumId,
-      releaseId: at.releaseId,
-      trackId: track.id,
-      length: track.duration ? Math.round(track.duration / 1000) : undefined,
-      mb: differs ? { title: track.title, artist: album.artist } : undefined,
-    });
-    if (track.hasFile) Object.assign(s, { state: 'ready', ready: new Date().toISOString() });
-    return true;
+    if (at && track) return (placeAt(s, at, track), true);
   }
   return false;
 }
 
+/**
+ * The song's track on an album of its artist's in Lidarr, by the album's name (the first of these it
+ * has): the artists just looked at (`artists`), and those in Lidarr by the song's artists' names.
+ */
+async function placeNamed(s: Song, names: Array<string | undefined>, artists: Artists): Promise<boolean> {
+  const wanted = [...new Map(names.filter((n): n is string => Boolean(n)).map((n) => [norm(cleanAlbum(n)), cleanAlbum(n)])).values()];
+  const known = [...artists.values()];
+  for (const a of await lidarrArtistsNamed(s.artist)) if (!known.some((k) => k.id === a.id)) known.push({ id: a.id, name: a.artistName, albums: await lidarr.albums(a.id) });
+  for (const a of known) {
+    for (const name of wanted) {
+      const found = a.albums.find((x) => norm(cleanAlbum(x.title)) === norm(name) || alike(cleanAlbum(x.title), name));
+      const at = found && (await edition(found, a.id, a.name));
+      const track = at && trackOf(at.tracks, s.title, undefined, false);
+      if (at && track) return (placeAt(s, at, track), true);
+    }
+  }
+  return false;
+}
+
+/** The song is that track, which Lidarr files it into. */
+function placeAt(s: Song, at: InLidarr, track: lidarr.LTrack) {
+  const differs = norm(cleanTitle(track.title)) !== norm(cleanTitle(s.title)) || !artistsOf(s.artist).some((a) => artistsOf(at.artist).includes(a));
+  Object.assign(s, {
+    albumMbid: at.mbid,
+    artistId: at.artistId,
+    albumId: at.albumId,
+    releaseId: at.releaseId,
+    trackId: track.id,
+    length: track.duration ? Math.round(track.duration / 1000) : undefined,
+    mb: differs ? { title: track.title, artist: at.artist } : undefined,
+  });
+  if (track.hasFile) Object.assign(s, { state: 'ready', ready: new Date().toISOString() });
+}
+
 let lidarrArtists: { at: number; list: Promise<lidarr.LArtist[]> } | undefined;
+/** The artists in Lidarr by these names (asked again if none is: one may have just been added). */
+async function lidarrArtistsNamed(artist: string): Promise<lidarr.LArtist[]> {
+  const want = artistsOf(artist);
+  const fresh = () => (lidarrArtists = { at: Date.now(), list: lidarr.artists().catch((err: unknown) => ((lidarrArtists = undefined), Promise.reject(err))) });
+  if (!lidarrArtists || Date.now() - lidarrArtists.at > 10 * 60_000) fresh();
+  const mine = async () => (await lidarrArtists!.list).filter((x) => artistsOf(x.artistName).some((n) => want.includes(n)));
+  const found = await mine();
+  if (found.length || Date.now() - lidarrArtists!.at < 60_000) return found;
+  fresh();
+  return mine();
+}
+
 /** An album Lidarr has, by its artist's name and its own: its kind and the songs of the edition it files into. */
 export async function lidarrAlbumNamed(artist: string, title: string): Promise<{ type?: string; tracks: lidarr.LTrack[] } | undefined> {
   if (!has.lidarr()) return;
-  if (!lidarrArtists || Date.now() - lidarrArtists.at > 10 * 60_000) lidarrArtists = { at: Date.now(), list: lidarr.artists() };
-  const want = artistsOf(artist);
   const name = cleanAlbum(title);
-  for (const a of (await lidarrArtists.list).filter((x) => artistsOf(x.artistName).some((n) => want.includes(n)))) {
+  for (const a of await lidarrArtistsNamed(artist)) {
     const found = (await lidarr.albums(a.id)).find((x) => norm(cleanAlbum(x.title)) === norm(name) || alike(cleanAlbum(x.title), name));
     const at = found && (await edition(found, a.id, a.artistName));
     if (found && at) return { type: found.albumType, tracks: at.tracks };
   }
 }
 
-type Artists = Map<string, { id: number; albums: lidarr.LAlbum[] }>;
+type Artists = Map<string, { id: number; name: string; albums: lidarr.LAlbum[] }>;
 type InLidarr = { mbid: string; artistId: number; albumId: number; releaseId: number; title: string; artist: string; year?: string; tracks: lidarr.LTrack[] };
 
 /** An album as Lidarr has it (it adds the artist, watching nothing): the edition it files songs into, and that edition's songs. */
@@ -326,7 +361,7 @@ async function lidarrAlbum(album: Album, artists: Artists = new Map()): Promise<
   let artist = artists.get(album.artistMbid);
   if (!artist) {
     const id = await ensureArtist(album.artistMbid, album.artist);
-    artists.set(album.artistMbid, (artist = { id, albums: await albumsOf(id) }));
+    artists.set(album.artistMbid, (artist = { id, name: album.artist, albums: await albumsOf(id) }));
   }
   const found = artist.albums.find((a) => a.foreignAlbumId === album.mbid);
   return found && edition(found, artist.id, album.artist);
@@ -560,7 +595,9 @@ async function shelveDownload(s: Song, where: string): Promise<boolean> {
     await fs.promises.mkdir(path.dirname(staged), { recursive: true });
     await fs.promises.copyFile(where, staged);
     await fs.promises.rm(where, { force: true }).catch(() => undefined);
-    s.path = await shelve(staged, { title: s.title, artist: tagArtists(s.artist), album: s.album || s.title, albumArtist: firstArtist(s.artist) }, undefined, root);
+    const fits = coverFits(s, (await probe(staged))?.tags.album);
+    s.path = await shelve(staged, { title: s.title, artist: tagArtists(s.artist), album: s.album || s.title, albumArtist: firstArtist(s.artist) }, undefined, root, !fits);
+    s.coverChecked = true;
     arrived(s);
   } catch (err) {
     log.warn('get', `Couldn't put "${s.title}" by ${s.artist} in the music folder`, err);
@@ -569,6 +606,18 @@ async function shelveDownload(s: Song, where: string): Promise<boolean> {
     await drop(staged);
   }
   return true;
+}
+
+/**
+ * Whether the cover a Soulseek copy came with is its album's: the copy is from the album asked for (its
+ * album tag says so, else the folder it was in). A compilation's or another album's isn't kept.
+ */
+function coverFits(s: Song, albumTag?: string): boolean {
+  const want = words(cleanAlbum(s.album || s.title));
+  const from = albumTag || s.from?.filename.split(/[\\/]/).slice(-3, -1).join(' ');
+  if (!from || !want.length) return false;
+  const have = new Set(words(from));
+  return want.every((w) => have.has(w));
 }
 
 /** Lidarr files a copy into the song's track (renamed and tagged as everything it gets): true once it's there. */
@@ -1083,8 +1132,8 @@ const safe = (name: string) =>
  * Into the music folder as Album artist/Album/NN - Title, with those names written into it, and the
  * cover next to it (cover.jpg, as players look for) unless the album has one.
  */
-async function shelve(file: string, n: Names, cover: string | undefined, root: string): Promise<string> {
-  await tag(file, { title: n.title, artist: n.artist, album_artist: n.albumArtist, album: n.album, date: n.year, track: n.number ? String(n.number) : undefined, disc: n.disc ? String(n.disc) : undefined }, cover);
+async function shelve(file: string, n: Names, cover: string | undefined, root: string, bare = false): Promise<string> {
+  await tag(file, { title: n.title, artist: n.artist, album_artist: n.albumArtist, album: n.album, date: n.year, track: n.number ? String(n.number) : undefined, disc: n.disc ? String(n.disc) : undefined }, cover, bare);
   const dir = path.join(root, safe(n.albumArtist), safe(n.album));
   await fs.promises.mkdir(dir, { recursive: true });
   const ext = path.extname(file);
@@ -1096,15 +1145,18 @@ async function shelve(file: string, n: Names, cover: string | undefined, root: s
   return to;
 }
 
-/** Names (and the cover, where the file can hold one) written into the file; as it was where ffmpeg can't. */
-async function tag(file: string, names: Record<string, string | undefined>, cover?: string) {
+/**
+ * Names (and the cover, where the file can hold one) written into the file; as it was where ffmpeg can't.
+ * `bare`: without the picture it came with.
+ */
+async function tag(file: string, names: Record<string, string | undefined>, cover?: string, bare = false) {
   const ext = path.extname(file);
   const out = path.join(path.dirname(file), `tagged${ext}`);
   const meta = Object.entries(names).flatMap(([k, v]) => (v ? ['-metadata', `${k}=${v}`] : []));
-  if (!meta.length && !cover) return;
+  if (!meta.length && !cover && !bare) return;
   const ways = [
     ...(cover ? [['-i', file, '-i', cover, '-map', '0:a', '-map', '1:v', '-c', 'copy', '-disposition:v:0', 'attached_pic']] : []),
-    ['-i', file, '-map', '0', '-c', 'copy'],
+    ...(bare ? [] : [['-i', file, '-map', '0', '-c', 'copy']]),
     ['-i', file, '-map', '0:a', '-c', 'copy'],
   ];
   for (const way of ways) {
@@ -1138,6 +1190,7 @@ function handOver(now = false): Promise<void> {
 async function handOverNow(now: boolean) {
   const root = await musicFolder();
   if (!root || !has.lidarr()) return;
+  await checkCovers(root);
   const due = songs.filter((x) => x.state === 'ready' && (x.loose || x.imported) && !x.trackId && (now || Date.now() - (x.lookedAt ?? 0) > 86400_000));
   let still = 0;
   let later = 0;
@@ -1183,6 +1236,22 @@ async function handOverNow(now: boolean) {
   }
   if (still) log.info('get', `${still} song${still === 1 ? '' : 's'} Tuna filed itself ${still === 1 ? 'is' : 'are'} still on no album Lidarr has`);
   if (later) log.info('get', `${later} song${later === 1 ? '' : 's'} Tuna filed itself couldn't be checked with Lidarr just now (MusicBrainz or Lidarr busy): again within the hour`);
+}
+/** Songs Tuna filed itself before it checked their covers: a cover that came from another album comes off. */
+async function checkCovers(root: string) {
+  let off = 0;
+  for (const s of songs.filter((x) => x.state === 'ready' && x.loose && !x.imported && !x.coverChecked)) {
+    const file = shelvedAt(s, root);
+    if (file && !coverFits(s)) {
+      await tag(file, {}, undefined, true);
+      off++;
+    }
+    s.coverChecked = true;
+    save();
+  }
+  if (!off) return;
+  log.info('get', `${off} song${off === 1 ? '' : 's'} Tuna filed itself had another album's cover from Soulseek: taken off`);
+  void scanNavidrome();
 }
 setTimeout(() => void handOver(), 5 * 60_000);
 setInterval(() => void handOver(), 3600_000);

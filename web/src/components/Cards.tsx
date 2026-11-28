@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { Play } from 'lucide-react';
 import type { Album, Artist, Mix, Playlist, Row as RowData, Track, WorldAlbum, WorldArtist } from '@tuna/shared';
 import { api } from '../api';
@@ -38,9 +39,10 @@ function PlayOver({ onPlay, label }: { onPlay: () => void; label: string }) {
   );
 }
 
-function Card({ to, art, title, sub, onPlay, extra }: { to: string; art: ReactNode; title: string; sub?: ReactNode; onPlay?: () => void; extra?: ReactNode }) {
+function Card({ to, art, title, sub, onPlay, extra, ready }: { to: string; art: ReactNode; title: string; sub?: ReactNode; onPlay?: () => void; extra?: ReactNode; ready?: () => void }) {
+  // Pointed at or touched: what it opens is fetched already, so it shows at once.
   return (
-    <Link className="card" to={to}>
+    <Link className="card" to={to} onPointerEnter={ready} onFocus={ready} onTouchStart={ready}>
       <div className="card__art">
         {art}
         {onPlay && <PlayOver onPlay={onPlay} label={t('Play {title}', { title })} />}
@@ -54,15 +56,14 @@ function Card({ to, art, title, sub, onPlay, extra }: { to: string; art: ReactNo
   );
 }
 
-export const AlbumCard = ({ album, sub }: { album: Album; sub?: string }) => (
-  <Card
-    to={`/album/${album.id}`}
-    art={<Cover cover={album.cover} />}
-    title={album.name}
-    sub={sub ?? [album.year, album.artist].filter(Boolean).join(' · ')}
-    onPlay={() => void playAlbum(album)}
-  />
-);
+export function AlbumCard({ album, sub }: { album: Album; sub?: string }) {
+  const qc = useQueryClient();
+  const ready = () => {
+    void qc.prefetchQuery({ queryKey: ['album', album.id], queryFn: () => api.album(album.id), staleTime: 60_000 });
+    void qc.prefetchQuery({ queryKey: ['album-whole', album.id], queryFn: () => api.albumWhole(album.id), staleTime: 5 * 60_000 });
+  };
+  return <Card to={`/album/${album.id}`} art={<Cover cover={album.cover} />} title={album.name} sub={sub ?? [album.year, album.artist].filter(Boolean).join(' · ')} onPlay={() => void playAlbum(album)} ready={ready} />;
+}
 
 export const ArtistCard = ({ artist, sub }: { artist: Artist; sub?: string }) => (
   <Card to={`/artist/${artist.id}`} art={<Cover cover={artist.cover} round />} title={artist.name} sub={sub ?? t('Artist')} onPlay={() => void playMix({ id: `artist:${artist.id}`, title: artist.name })} />

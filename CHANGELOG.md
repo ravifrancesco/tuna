@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.6 (2026-11-27)
+
+**Changed**
+- **Album pages show all their songs at once**, the ones that aren't here yet among them, instead of
+  yours first and the rest a moment later. An album starts loading when you point at or touch it, so
+  it's usually there as you open it. If finding the missing songs takes long, yours show after a
+  couple of seconds and the rest join them.
+
+**Fixed**
+- **Songs Tuna filed itself stayed "on no album Lidarr has"** when Lidarr has their album from
+  another source (Deezer, Discogs, through Tubifarry's MetaMix): Tuna only matched albums by their
+  MusicBrainz id. Now also by name, among the artist's albums in Lidarr. Press Look again once after
+  updating to check them all now (else each is checked within a day).
+- **Covers from Soulseek of another album:** a copy ripped from a compilation brought the
+  compilation's cover with it. Now a copy keeps its cover only if it comes from the album asked for
+  (its album tag says so, else the folder it was in). Songs Tuna filed before are checked once.
+
+To update: the server (pull the new image). The apps need nothing new.
+
 ## 0.5.5 (2026-11-27)
 
 **Fixed**

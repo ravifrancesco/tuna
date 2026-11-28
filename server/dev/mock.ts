@@ -16,6 +16,8 @@
  *   MOCK_SLSKD_DIR (default tuna-mock-slskd in the temp folder): slskd's downloads folder, a real one.
  *   MOCK_LIDARR_ALBUMS_ONLY=1: Lidarr keeps no singles or EPs (its Standard metadata profile, as it comes).
  *   MOCK_SLSKD_BLOCK=<phrase,…>: nobody answers searches with those phrases (Soulseek's server drops some).
+ *   MOCK_SLSKD_COMPILATION=<word,…>: songs with those words are on Soulseek only from a compilation
+ *   ("Nova Hits 4.1", its cover in each file). Every copy has its album's name and a cover in it.
  *   MOCK_SLSKD_SAVE_MS (default 1500): how long after a search says it's complete its results are saved
  *   (slskd saves them last; slower on a Raspberry Pi).
  *   MOCK_SLSKD_MOVE_SECONDS (default 2): how long after a download succeeds its file is in slskd's
@@ -25,6 +27,8 @@
  *   MOCK_MB_CROWDED=<word,…>: songs with those words are famous in MusicBrainz: 150 recordings on
  *   compilations, live albums and DJ mixes come before the one on their album, and their artists have
  *   a greatest hits ("The Hits") that Lidarr doesn't keep.
+ *   MOCK_LIDARR_OTHER_IDS=<word,…>: Lidarr has albums with those words under another source's id (Deezer's),
+ *   as when Tubifarry's MetaMix takes an album from there.
  *   MOCK_DEEZER=1: Lidarr also knows albums from Deezer, as with Tubifarry's Deezer metadata source:
  *   "Canzoni Sparse" by Valle Nera only there ("900001@deezer"; Lidarr finds Deezer artists by
  *   "deezer:<id>", or by name), and a Deezer copy of Coral Avenue's first album beside MusicBrainz's.
@@ -50,6 +54,8 @@ const SLSKD_STUCK = (process.env.MOCK_SLSKD_STUCK ?? '').split(',').filter(Boole
 const SLSKD_MOVE_SECONDS = Number(process.env.MOCK_SLSKD_MOVE_SECONDS ?? 2);
 const SLSKD_SAVE_MS = Number(process.env.MOCK_SLSKD_SAVE_MS ?? 1500);
 const SLSKD_BLOCK = (process.env.MOCK_SLSKD_BLOCK ?? '').split(',').filter(Boolean);
+const COMPILATION = (process.env.MOCK_SLSKD_COMPILATION ?? '').toLowerCase().split(',').filter(Boolean);
+const OTHER_IDS = (process.env.MOCK_LIDARR_OTHER_IDS ?? '').toLowerCase().split(',').filter(Boolean);
 const MUSIC_DIR = process.env.MOCK_MUSIC_DIR ?? nodePath.join(os.tmpdir(), 'tuna-mock-music');
 fs.mkdirSync(MUSIC_DIR, { recursive: true });
 const SONG_FILE = /\.(flac|mp3|m4a|aac|ogg|oga|opus|wav|aiff?|wma)$/i;
@@ -580,13 +586,15 @@ const downloads: Download[] = [];
 const monitored = new Set<string>();
 
 function tickDownloads() {
-  // Finished downloads land in slskd's downloads folder: a few seconds of the song's tune.
+  // Finished downloads land in slskd's downloads folder: a few seconds of the song's tune, with the
+  // name of the album it was ripped from (its folder's) and a cover in it.
   for (const x of onDisk()) {
     if (x.landed) continue;
     x.landed = true;
     fs.mkdirSync(nodePath.dirname(localPath(x)), { recursive: true });
+    const album = x.filename.split(/[\\/]/).slice(-2)[0].replace(/\s*\(\d{4}\)\s*\[[^\]]*\]$/, '');
     try {
-      execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', `sine=frequency=${300 + (x.n % 9) * 40}:duration=5`, localPath(x)]);
+      execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', `sine=frequency=${300 + (x.n % 9) * 40}:duration=5`, '-f', 'lavfi', '-i', 'color=c=0xd4a017:s=64x64', '-frames:v', '1', '-map', '0:a', '-map', '1:v', '-c:v', 'png', '-disposition:v:0', 'attached_pic', '-metadata', `album=${album}`, localPath(x)]);
     } catch {
       fs.writeFileSync(localPath(x), Buffer.concat([wavHeader(5 * RATE * 2), Buffer.alloc(5 * RATE * 2)]));
     }
@@ -685,7 +693,7 @@ const lidarrAlbum = (a: MAlbum) => {
   return {
     id: a.lidarrId,
     title: a.name,
-    foreignAlbumId: a.mbid,
+    foreignAlbumId: OTHER_IDS.some((w) => a.name.toLowerCase().includes(w)) ? `${800000 + a.lidarrId}@deezer` : a.mbid,
     artistId: artist.lidarrId ?? 0,
     monitored: monitored.has(a.id),
     albumType: a.type,
@@ -836,13 +844,14 @@ function peersFor(text: string) {
       // Some FLACs are hi-res (24-bit, 96 kHz: about 25 MB a minute), as vinyl rips often are.
       const hires = flac && rng(`hires:${t.id}:${k}`)() < 0.4;
       const length = t.duration + (k === other ? (r() < 0.5 ? -1 : 1) * (25 + Math.floor(r() * 60)) : 0);
-      const folder = `${pick(r, ROOTS)}\\${t.artist}\\${a.name} (${a.year}) [${hires ? '24-96 FLAC' : flac ? 'FLAC' : 'MP3 320'}]`;
+      const compiled = COMPILATION.some((w) => t.title.toLowerCase().includes(w));
+      const folder = compiled ? `${pick(r, ROOTS)}\\VA\\Nova Hits 4.1 (2020) [FLAC]` : `${pick(r, ROOTS)}\\${t.artist}\\${a.name} (${a.year}) [${hires ? '24-96 FLAC' : flac ? 'FLAC' : 'MP3 320'}]`;
       const username = PEERS[(first + k * 3) % PEERS.length];
       const cd = flac ? 100_000 + Math.floor(r() * 40_000) : 0;
       byUser.set(username, [
         ...(byUser.get(username) ?? []),
         {
-          filename: `${folder}\\${String(t.track).padStart(2, '0')} - ${t.title}.${flac ? 'flac' : 'mp3'}`,
+          filename: `${folder}\\${String(compiled ? 7 : t.track).padStart(2, '0')} - ${compiled ? `${t.artist} - ` : ''}${t.title}.${flac ? 'flac' : 'mp3'}`,
           size: hires ? length * 420_000 : flac ? length * cd : length * 40_000 + 4096,
           ...(hires ? { bitDepth: 24, sampleRate: 96000 } : flac ? { bitDepth: 16, sampleRate: 44100 } : { bitRate: 320 }),
           length,
