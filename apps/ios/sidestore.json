@@ -17,21 +17,21 @@
       "category": "entertainment",
       "versions": [
         {
-          "version": "0.5.1",
+          "version": "0.5.2",
           "buildVersion": "1",
           "date": "2026-11-27",
-          "localizedDescription": "Fixed\n- The apps used a lot of energy on playlists with songs on their way: each of those songs asked the server where it was at by itself, every five seconds, for the whole list of what's on its way (on a playlist with 77 songs waiting, over 200 requests in 15 seconds, and every one of them spinning). Now one small look every five seconds covers every song on screen, and only what's moving is sent. Songs far down a long list now update too.\n\nChanged\n- A dot instead of a spinning circle: faint and still while a song waits its turn, glowing while it's looked for (a few at a time), then a little circle that fills up as it downloads. The button lines up with the ⋯ of the songs around it.\n\nTo update: the server (pull the new image). The apps need nothing new.",
-          "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.5.1/Tuna-ios.ipa",
-          "size": 4705783,
-          "sha256": "b6988ede614980440c0f68240dd137ceef6c12f33e42a8ec797631f3764bc13e",
+          "localizedDescription": "Changed\n- Songs that aren't on an album Lidarr has (singles and EPs its metadata profile leaves out, songs MusicBrainz doesn't know) are now got from Soulseek all the same, and go straight into the music folder, named and tagged as the playlist has them. Before, Tuna gave up on them without looking. This needs slskd's downloads folder inside the data folder Tuna has (the log says if it isn't).\n- One more search on Soulseek: the song's title alone, as people search (a copy still needs the artist in its path).\n\nFixed\n- Long playlists scrolled slowly (a big Liked songs with many songs not here yet): songs off screen are no longer laid out or drawn until they come near, songs not here yet are dimmed in a way that's quicker to draw, and only the song playing hears about play and pause.\n- The fish's tail was cut in the opening away from home (iPhone and Mac): as it swung, its rounded edge was clipped. It now swings about its tip.\n\nTo update: the server (pull the new image), and the apps for the tail.",
+          "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.5.2/Tuna-ios.ipa",
+          "size": 4705836,
+          "sha256": "0df7881d3765c85ebf47683c2cb6c17bce37379ac714664ba97728d4bc62f4bf",
           "minOSVersion": "16.0"
         }
       ],
-      "version": "0.5.1",
+      "version": "0.5.2",
       "versionDate": "2026-11-27",
-      "versionDescription": "Fixed\n- The apps used a lot of energy on playlists with songs on their way: each of those songs asked the server where it was at by itself, every five seconds, for the whole list of what's on its way (on a playlist with 77 songs waiting, over 200 requests in 15 seconds, and every one of them spinning). Now one small look every five seconds covers every song on screen, and only what's moving is sent. Songs far down a long list now update too.\n\nChanged\n- A dot instead of a spinning circle: faint and still while a song waits its turn, glowing while it's looked for (a few at a time), then a little circle that fills up as it downloads. The button lines up with the ⋯ of the songs around it.\n\nTo update: the server (pull the new image). The apps need nothing new.",
-      "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.5.1/Tuna-ios.ipa",
-      "size": 4705783,
+      "versionDescription": "Changed\n- Songs that aren't on an album Lidarr has (singles and EPs its metadata profile leaves out, songs MusicBrainz doesn't know) are now got from Soulseek all the same, and go straight into the music folder, named and tagged as the playlist has them. Before, Tuna gave up on them without looking. This needs slskd's downloads folder inside the data folder Tuna has (the log says if it isn't).\n- One more search on Soulseek: the song's title alone, as people search (a copy still needs the artist in its path).\n\nFixed\n- Long playlists scrolled slowly (a big Liked songs with many songs not here yet): songs off screen are no longer laid out or drawn until they come near, songs not here yet are dimmed in a way that's quicker to draw, and only the song playing hears about play and pause.\n- The fish's tail was cut in the opening away from home (iPhone and Mac): as it swung, its rounded edge was clipped. It now swings about its tip.\n\nTo update: the server (pull the new image), and the apps for the tail.",
+      "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.5.2/Tuna-ios.ipa",
+      "size": 4705836,
       "appPermissions": {
         "entitlements": [],
         "privacy": {
