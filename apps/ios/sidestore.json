@@ -17,21 +17,21 @@
       "category": "entertainment",
       "versions": [
         {
-          "version": "0.5.4",
+          "version": "0.5.5",
           "buildVersion": "1",
           "date": "2026-11-27",
-          "localizedDescription": "Changed\n- Look again and Get the missing songs show how it's going: while they work, a wheel turns and they say how many are still to go (\"Getting them · 10 to go\"). Pressed again, they stop: songs already downloading finish, the rest aren't looked for. Each song's dot shows at once.\n\nFixed\n- Songs Soulseek had that Tuna passed over: - \"Song - Original\" (and \"- Bonus Track\") was looked for with \"Original\" in it; now as \"Song\". - What's in brackets in a file's name counts: \"Love Is the Message (Live at Abbey Road Studios)\" and \"Baiana (Cosme Martin & Christian Vila Remix)\" were taken for the plain songs and passed over. - \"&\" may be written \"and\", a comma or nothing: small words like these no longer have to match. - Long searches can come back empty: Tuna also searches the artist and the title's main part.\n- A song not live or instrumental no longer takes a copy whose name says \"(Live)\" or \"(Instrumental)\" in brackets.\n\nTo update: the server (pull the new image). The apps need nothing new.",
-          "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.5.4/Tuna-ios.ipa",
-          "size": 4705838,
-          "sha256": "f97bc1350d5e4a11e8bd36a9afb83f61ac9d4a637c5ef1226d54b2e517c4f439",
+          "localizedDescription": "Fixed\n- \"Lidarr doesn't know this artist\" for artists Lidarr knows from Deezer (or Discogs): since 0.5.3 Tuna looked them up by name, which Lidarr's search doesn't always answer. Now as their source asks (\"deezer:…\"), then by name, and failing both, added by their id for Lidarr to fill in.\n- Titles with \"(con …)\", \"(featuring …)\" or \"(w/ …)\" (since 0.5.4, words in brackets count): those are other artists, not part of the title.\n- Copies were passed over for a word inside another (\"Oliver\" has \"live\" in it): the words that mark another version count only whole. More of them: extended, club mix, dub mix, acoustic, unplugged, VIP, rework, bootleg, mashup, nightcore.\n- Artists written without spaces in a copy's path (\"SeeMaw\" for See Maw) count.\n- Handing songs to Lidarr runs once at a time (Look again pressed twice started two, and MusicBrainz said it was busy); what couldn't be checked is tried again within the hour, and the log says in one line how many were and how many are still on no album Lidarr has.\n\nTo update: the server (pull the new image). The apps need nothing new.",
+          "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.5.5/Tuna-ios.ipa",
+          "size": 4705848,
+          "sha256": "2f1c6ce8d501e8aaeba4250100df127d7393b00fbed6e34711c2706095b0d966",
           "minOSVersion": "16.0"
         }
       ],
-      "version": "0.5.4",
+      "version": "0.5.5",
       "versionDate": "2026-11-27",
-      "versionDescription": "Changed\n- Look again and Get the missing songs show how it's going: while they work, a wheel turns and they say how many are still to go (\"Getting them · 10 to go\"). Pressed again, they stop: songs already downloading finish, the rest aren't looked for. Each song's dot shows at once.\n\nFixed\n- Songs Soulseek had that Tuna passed over: - \"Song - Original\" (and \"- Bonus Track\") was looked for with \"Original\" in it; now as \"Song\". - What's in brackets in a file's name counts: \"Love Is the Message (Live at Abbey Road Studios)\" and \"Baiana (Cosme Martin & Christian Vila Remix)\" were taken for the plain songs and passed over. - \"&\" may be written \"and\", a comma or nothing: small words like these no longer have to match. - Long searches can come back empty: Tuna also searches the artist and the title's main part.\n- A song not live or instrumental no longer takes a copy whose name says \"(Live)\" or \"(Instrumental)\" in brackets.\n\nTo update: the server (pull the new image). The apps need nothing new.",
-      "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.5.4/Tuna-ios.ipa",
-      "size": 4705838,
+      "versionDescription": "Fixed\n- \"Lidarr doesn't know this artist\" for artists Lidarr knows from Deezer (or Discogs): since 0.5.3 Tuna looked them up by name, which Lidarr's search doesn't always answer. Now as their source asks (\"deezer:…\"), then by name, and failing both, added by their id for Lidarr to fill in.\n- Titles with \"(con …)\", \"(featuring …)\" or \"(w/ …)\" (since 0.5.4, words in brackets count): those are other artists, not part of the title.\n- Copies were passed over for a word inside another (\"Oliver\" has \"live\" in it): the words that mark another version count only whole. More of them: extended, club mix, dub mix, acoustic, unplugged, VIP, rework, bootleg, mashup, nightcore.\n- Artists written without spaces in a copy's path (\"SeeMaw\" for See Maw) count.\n- Handing songs to Lidarr runs once at a time (Look again pressed twice started two, and MusicBrainz said it was busy); what couldn't be checked is tried again within the hour, and the log says in one line how many were and how many are still on no album Lidarr has.\n\nTo update: the server (pull the new image). The apps need nothing new.",
+      "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.5.5/Tuna-ios.ipa",
+      "size": 4705848,
       "appPermissions": {
         "entitlements": [],
         "privacy": {
