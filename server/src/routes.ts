@@ -16,7 +16,7 @@ import * as library from './services/library';
 import { listeningHistory, listeningStats, yearInReview } from './services/listens';
 import { importSpotify } from './services/spotify';
 import { getMany, missedAlbums, saveStocking, stillToAsk, stocking, stopAsking } from './services/stocking';
-import { checkStaged, discard, importStaged, lookAgain, musicFolder, songItems, songsMoving, songStates, songsNotFound, songsWaiting, stage, stopSongs, takeCover, wantSongs, withTracks, type ImportRequest } from './services/songs';
+import { checkStaged, discard, importStaged, lookAgain, lookingAgainLeft, musicFolder, stopLookingAgain, stopThese, songItems, songsMoving, songStates, songsNotFound, songsWaiting, stage, stopSongs, takeCover, wantSongs, withTracks, type ImportRequest } from './services/songs';
 import { arrived, discoverySettings, saveDiscovery, topUpRadio } from './services/discovery';
 import * as together from './services/together';
 import * as devices from './services/devices';
@@ -220,7 +220,10 @@ export async function apiRoutes(app: FastifyInstance) {
   app.post<{ Body: { albums?: Array<{ artist: string; album: string; isrc?: string }> } }>('/get/many', async (req) => ({ asked: getMany(requireUser(req), req.body?.albums ?? []) }));
   app.get('/get/missed', async (req) => (requireUser(req), missedAlbums()));
   // Everything people asked for that couldn't be found, looked for again (Settings).
-  app.get('/get/again', async (req) => (requireAdmin(req), { songs: songsNotFound().length, albums: missedAlbums().length }));
+  app.get('/get/again', async (req) => (requireAdmin(req), { songs: songsNotFound().length, albums: missedAlbums().length, looking: lookingAgainLeft() }));
+  app.post('/get/again/stop', async (req) => ({ stopped: stopLookingAgain(requireAdmin(req).name) }));
+  // A playlist's or an album's songs, its button pressed again while they're on their way: the ones not started yet.
+  app.post<{ Body: { songs?: Array<{ artist: string; title: string }> } }>('/get/songs/stop', async (req) => ({ stopped: stopThese(requireUser(req).name, (req.body?.songs ?? []).filter((x) => x.artist && x.title)) }));
   app.post('/get/again', async (req) => {
     const s = requireAdmin(req);
     const missed = missedAlbums().map((m) => ({ artist: m.artist, album: m.album, isrc: m.isrc }));

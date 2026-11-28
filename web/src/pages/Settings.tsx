@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, X } from 'lucide-react';
 import type { Me, Person, Prefs, SoulseekFiles, SpotifyImport, Stocking, StockingWhy } from '@tuna/shared';
 import { api, ApiError } from '../api';
 import { AwayFromHome } from '../components/AwayFromHome';
@@ -532,7 +532,8 @@ function WeeklyPicks() {
 /** Songs and albums people asked for that Get couldn't find, looked for again. */
 function LookAgain() {
   const qc = useQueryClient();
-  const left = useQuery({ queryKey: ['not-found'], queryFn: api.notFound });
+  // While it looks again, how many are still to go (every few seconds).
+  const left = useQuery({ queryKey: ['not-found'], queryFn: api.notFound, refetchInterval: (q) => ((q.state.data?.looking ?? 0) > 0 ? 5000 : false) });
   const [error, setError] = useState<string>();
   const n = left.data;
   if (!n) return null;
@@ -540,12 +541,16 @@ function LookAgain() {
     setError(undefined);
     try {
       await api.lookAgain();
-      qc.setQueryData(['not-found'], { songs: 0, albums: 0 });
-      for (const key of ['getting', 'missed', 'still-to-ask']) void qc.invalidateQueries({ queryKey: [key] });
+      for (const key of ['not-found', 'getting', 'missed', 'still-to-ask']) void qc.invalidateQueries({ queryKey: [key] });
       toast(t('Looking again'));
     } catch (err) {
       setError(failed(err));
     }
+  };
+  const stop = async () => {
+    await api.stopLookingAgain().catch(() => undefined);
+    void qc.invalidateQueries({ queryKey: ['not-found'] });
+    toast(t('Stopped'));
   };
   const what = [n.songs > 0 && tn(n.songs, '{n} song', '{n} songs'), n.albums > 0 && tn(n.albums, '{n} album', '{n} albums')].filter(Boolean).join(' · ');
   return (
@@ -553,10 +558,18 @@ function LookAgain() {
       <h2>{t("Couldn't find")}</h2>
       <p className="muted small">{t('Songs and albums someone asked for that Get couldn’t find. Looking again finds the ones that have turned up since, on Soulseek or in MusicBrainz.')}</p>
       <div className="account">
-        <span className="account__who">{what || t('Nothing')}</span>
-        <button className="btn btn--ghost btn--small" disabled={!what} onClick={() => void again()}>
-          {t('Look again')}
-        </button>
+        <span className="account__who">{what || (n.looking > 0 ? '' : t('Nothing'))}</span>
+        {n.looking > 0 ? (
+          <button className="btn btn--ghost btn--small btn--busy" onClick={() => void stop()} title={t('Stop')} aria-label={`${tn(n.looking, 'Looking again · the last one', 'Looking again · {n} to go')} · ${t('Stop')}`}>
+            <i className="btn__spin" aria-hidden />
+            <X size={15} className="btn__stop" aria-hidden />
+            {tn(n.looking, 'Looking again · the last one', 'Looking again · {n} to go')}
+          </button>
+        ) : (
+          <button className="btn btn--ghost btn--small" disabled={!what} onClick={() => void again()}>
+            {t('Look again')}
+          </button>
+        )}
       </div>
       {error && <p className="error small">{error}</p>}
     </section>

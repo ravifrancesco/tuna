@@ -330,6 +330,29 @@ body.resizing .right {
   background: transparent;
   border: 1px solid var(--line);
 }
+/* Working (Look again, Get the missing songs): a wheel turning; pointed at, the ✕ that stops it. */
+.btn--busy {
+  gap: 8px;
+}
+.btn__spin {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid rgba(220, 203, 255, 0.25);
+  border-top-color: var(--accent-light);
+  animation: spin 1.1s linear infinite;
+}
+.btn__stop {
+  display: none;
+}
+@media (hover: hover) {
+  .btn--busy:hover .btn__spin {
+    display: none;
+  }
+  .btn--busy:hover .btn__stop {
+    display: block;
+  }
+}
 .btn--small {
   height: 32px;
   padding: 0 14px;

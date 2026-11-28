@@ -100,12 +100,12 @@ const LANDING = 5 * 60_000;
 const busy = () => songs.filter((s) => s.state === 'looking' || s.state === 'downloading');
 export const songsOnTheWay = () => busy().length + songs.filter((s) => s.state === 'waiting').length;
 
-/** "Song (feat. X) - 2011 Remaster" is looked for as "Song". */
+/** "Song (feat. X) - 2011 Remaster" and "Song - Original" are looked for as "Song" (a remix or a live one isn't). */
 export const cleanTitle = (t: string) =>
   t
     .replace(/\s*[([](?:feat|ft|with)\.?\s[^)\]]*[)\]]/gi, '')
-    .replace(/\s+-\s+.*\b(?:remaster(?:ed)?|version|edit|mono|stereo|mix)\b.*$/i, '')
-    .replace(/\s*[([][^)\]]*\b(?:remaster(?:ed)?|version|edit)\b[^)\]]*[)\]]/gi, '')
+    .replace(/\s+-\s+.*\b(?:remaster(?:ed)?|version|edit|mono|stereo|mix|original|bonus(?: track)?)\b.*$/i, '')
+    .replace(/\s*[([][^)\]]*\b(?:remaster(?:ed)?|version|edit|original|bonus(?: track)?)\b[^)\]]*[)\]]/gi, '')
     .trim() || t;
 const words = (s: string) => norm(s).split(' ').filter((w) => w.length > 1);
 
@@ -158,9 +158,36 @@ export const songsWaiting = (by?: string) => songs.filter((s) => s.state === 'wa
 /** Songs people asked for that couldn't be found (not Tuna's own picks). */
 export const songsNotFound = () => songs.filter((s) => s.state === 'notFound' && !s.for?.length);
 
+/** The songs of the last Look again, to say how many are still to go (and to stop it). */
+let lookingAgain = new Set<string>();
+const going = (s: Song) => s.state === 'waiting' || s.state === 'looking' || s.state === 'downloading';
+export const lookingAgainLeft = () => songs.filter((s) => lookingAgain.has(s.id) && going(s)).length;
+
+/** Stops looking again: the songs not started yet are back among those not found (the ones on their way carry on). */
+export function stopLookingAgain(by: string): number {
+  const stopped = songs.filter((s) => lookingAgain.has(s.id) && s.state === 'waiting');
+  for (const s of stopped) Object.assign(s, { state: 'notFound', settled: Date.now() });
+  lookingAgain = new Set();
+  save();
+  if (stopped.length) log.info('get', `${by} stopped looking again (${stopped.length} song${stopped.length === 1 ? '' : 's'} not started)`);
+  return stopped.length;
+}
+
+/** Stops asking for these songs, where they haven't started yet (a playlist's or an album's, its button pressed again). */
+export function stopThese(by: string, list: Array<{ artist: string; title: string }>): number {
+  const keys = new Set(list.map(key));
+  const before = songs.length;
+  songs = songs.filter((s) => !(s.state === 'waiting' && keys.has(key(s))));
+  save();
+  const stopped = before - songs.length;
+  if (stopped) log.info('get', `${by} stopped asking for ${stopped} song${stopped === 1 ? '' : 's'}`);
+  return stopped;
+}
+
 /** Looks for all of those again, from the start. */
 export function lookAgain(by: string): number {
   const again = songsNotFound();
+  lookingAgain = new Set(again.map((s) => s.id));
   for (const s of again) Object.assign(s, { state: 'waiting', tried: undefined, refused: undefined, failures: undefined, after: undefined, from: undefined, progress: undefined, loose: undefined });
   save();
   if (again.length) log.info('get', `${by} asked to look again for ${again.length} song${again.length === 1 ? '' : 's'}, to get ${AT_ONCE} at a time`);
@@ -338,6 +365,10 @@ async function albumsOf(artistId: number): Promise<lidarr.LAlbum[]> {
 // ---- Finding a copy on Soulseek ----------------------------------------------------------------------
 
 const AUDIO = /\.(flac|mp3|m4a|aac|ogg|opus|wav|aiff?|alac)$/i;
+/** Words a title's copies needn't have ("&" may be "and", ",", or nothing). */
+const SMALL = new Set(['and', 'the', 'of', 'at', 'is', 'in', 'on', 'to', 'an', 'by', 'for', 'with']);
+/** Brackets as spaces (norm drops what's inside them). */
+const bracketed = (x: string) => x.replace(/[()[\]{}]/g, ' ');
 const UNWANTED = ['live', 'remix', 'instrumental', 'karaoke', 'cover', 'acapella', 'a capella', 'demo', 'slowed', 'sped up', 'reverb', '8d'];
 
 /** Why copies were passed over (for the log when none fit). */
@@ -350,7 +381,7 @@ type Passed = { title: number; artist: number; unwanted: number; length: number 
  * someone sending Tuna another song when someone else has it too.
  */
 function best(s: Song, responses: slskd.SResponse[], anyone = false, passed?: Passed) {
-  const titles = [s.title, s.mb?.title].filter(Boolean).map((x) => words(cleanTitle(x!)));
+  const titles = [s.title, s.mb?.title].filter(Boolean).map((x) => words(bracketed(cleanTitle(x!))).filter((w) => !SMALL.has(w)));
   const artist = [...artistsOf(s.artist), ...(s.mb ? artistsOf(s.mb.artist) : [])].map(words);
   const unwanted = UNWANTED.filter((u) => !norm(s.title).includes(u));
   const files = soulseekFiles();
@@ -360,8 +391,9 @@ function best(s: Song, responses: slskd.SResponse[], anyone = false, passed?: Pa
     if (!anyone && (refused.get(r.username) ?? 0) > Date.now()) continue;
     for (const f of r.files) {
       if (f.isLocked || !AUDIO.test(f.filename) || s.tried?.includes(`${r.username}|${f.filename}`)) continue;
-      const file = norm(f.filename.split(/[\\/]/).pop() ?? '');
-      const full = norm(f.filename);
+      // What's in brackets counts ("Song (Live at Abbey Road)", "Song (X Remix)").
+      const file = norm(bracketed(f.filename.split(/[\\/]/).pop() ?? ''));
+      const full = norm(bracketed(f.filename));
       const no = (why: keyof Passed) => (passed && passed[why]++, true);
       if (!titles.some((title) => title.every((w) => file.includes(w))) && no('title')) continue;
       if (!artist.some((a) => a.length && a.every((w) => full.includes(w))) && no('artist')) continue;
@@ -414,6 +446,8 @@ async function fetchCopy(s: Song) {
   const first = firstArtist(s.artist);
   const clean = (q: string) => q.replace(/[^\p{L}\p{N}' ]+/gu, ' ').replace(/\s+/g, ' ').trim();
   const title = cleanTitle(s.title);
+  // "Love Is the Message - Live at Abbey Road Studios" → "Love Is the Message".
+  const main = title.replace(/\s+-\s+.*$/, '').replace(/\s*[([].*$/, '').trim() || title;
   // The artist's longest word ("Kanye" of "Kanye West"), when the name has more than one.
   const word = (first.match(/[\p{L}\p{N}']+/gu) ?? []).sort((a, b) => b.length - a.length)[0];
   // Spotify's names, then MusicBrainz's. Soulseek doesn't answer searches for some names at all
@@ -422,6 +456,8 @@ async function fetchCopy(s: Song) {
     ...new Set(
       [
         clean(`${first} ${title}`),
+        // Long searches may come back empty: the artist and the title's main part.
+        main !== title && clean(`${first} ${main}`),
         s.mb && clean(`${s.mb.artist} ${cleanTitle(s.mb.title)}`),
         s.album && norm(cleanAlbum(s.album)) !== norm(title) && clean(`${title} ${cleanAlbum(s.album)}`),
         word && norm(word) !== norm(first) && clean(`${title} ${word}`),

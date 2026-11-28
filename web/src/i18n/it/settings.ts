@@ -132,6 +132,8 @@ export default {
   'Songs and albums someone asked for that Get couldn’t find. Looking again finds the ones that have turned up since, on Soulseek or in MusicBrainz.':
     'Brani e album richiesti che Richiedi non ha trovato. Cercandoli di nuovo trovi quelli comparsi nel frattempo, su Soulseek o in MusicBrainz.',
   'Look again': 'Cerca di nuovo',
+  'Looking again · the last one': 'Di nuovo in cerca · l’ultimo',
+  'Looking again · {n} to go': 'Di nuovo in cerca · ne mancano {n}',
   "To import files, Tuna needs Lidarr's music folder ({folder}) at the same path.": 'Per importare file, Tuna ha bisogno della cartella della musica di Lidarr ({folder}) allo stesso percorso.',
   Nothing: 'Niente',
   'Looking again': 'Di nuovo in cerca',

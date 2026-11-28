@@ -42,10 +42,10 @@ const subscribe = (l: () => void) => {
 };
 const nothing = () => () => undefined;
 
-/** Where one thing asked for is at, while `key` is given (it's on its way); looked at with everything else on screen. */
-export function useGetState(key: string | undefined): GetState | undefined {
+/** Looking every few seconds while anyone on screen is watching. */
+function useWatching(on: boolean) {
   useEffect(() => {
-    if (!key) return;
+    if (!on) return;
     if (watching++ === 0) {
       void look();
       timer = window.setInterval(() => void look(), 5000);
@@ -53,9 +53,22 @@ export function useGetState(key: string | undefined): GetState | undefined {
     return () => {
       if (--watching === 0) window.clearInterval(timer);
     };
-  }, [key]);
+  }, [on]);
+}
+
+/** Where one thing asked for is at, while `key` is given (it's on its way); looked at with everything else on screen. */
+export function useGetState(key: string | undefined): GetState | undefined {
+  useWatching(Boolean(key));
   const since = useMemo(() => round, [key]);
   return useSyncExternalStore(key ? subscribe : nothing, () => (key && (seen.get(key) ?? 0) > since ? states.get(key) : undefined));
+}
+
+/** Where several things are at (a playlist's songs, say), while `on`: each as last seen since then. */
+export function useGetStates(keys: string[], on: boolean): (key: string) => GetState | undefined {
+  useWatching(on);
+  const since = useMemo(() => round, [on]);
+  useSyncExternalStore(on ? subscribe : nothing, () => round);
+  return (key) => (on && (seen.get(key) ?? 0) > since ? states.get(key) : undefined);
 }
 
 let soon: number | undefined;

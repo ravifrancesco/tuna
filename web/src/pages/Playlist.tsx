@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Download, MoreHorizontal, Pencil, Shuffle, Trash2 } from 'lucide-react';
+import { Download, MoreHorizontal, Pencil, Shuffle, Trash2, X } from 'lucide-react';
 import { DownloadButton } from '../components/DownloadButton';
 import type { download } from '../lib/downloads';
-import type { Track, WaitingSong } from '@tuna/shared';
+import type { GetState, Track, WaitingSong } from '@tuna/shared';
 import { api } from '../api';
 import { Item, showMenu } from '../components/Menu';
 import { PlayButton } from '../components/PlayButton';
@@ -17,6 +17,7 @@ import { sum } from '../lib/actions';
 import { length, songs } from '../lib/format';
 import { playTracks, type Source } from '../lib/player';
 import { useTint } from '../lib/tint';
+import { songKey, useGetStates } from '../lib/getting';
 import { useMe } from '../lib/session';
 
 function Header({ kind, title, meta, cover, tint }: { kind: string; title: string; meta: string; cover: React.ReactNode; tint?: string }) {
@@ -32,23 +33,54 @@ function Header({ kind, title, meta, cover, tint }: { kind: string; title: strin
   );
 }
 
-/** A playlist's songs that aren't here yet, in its order: the songs themselves (or, without slskd, their albums). */
+const going = (g?: GetState) => g?.state === 'looking' || g?.state === 'downloading';
+
+/**
+ * A playlist's (or an album's) songs that aren't here yet: Get them all (or, without slskd, their
+ * albums). While they're on their way, how many are still to go, a wheel turning; pressed again, it
+ * stops those that haven't started.
+ */
 export function GetMissing({ waiting }: { waiting: WaitingSong[] }) {
-  const [asked, setAsked] = useState<string>();
+  const qc = useQueryClient();
+  const [albums, setAlbums] = useState<string>();
+  const [asked, setAsked] = useState(false);
+  const keys = useMemo(() => waiting.map((w) => songKey(w.title, w.artist)), [waiting]);
+  const watching = asked || waiting.some((w) => going(w.get));
+  const live = useGetStates(keys, watching);
   if (!waiting.length) return null;
-  const said = (r: { asked: number; songs: boolean }) => (r.songs ? tn(r.asked, 'Asked for {n} song', 'Asked for {n} songs') : tn(r.asked, 'Asked for {n} album', 'Asked for {n} albums'));
+  // Just asked: each counts as on its way until it's first seen.
+  const left = waiting.filter((w, i) => going(live(keys[i]) ?? (asked && w.get?.state !== 'ready' ? { state: 'looking' } : w.get))).length;
+  const stop = async () => {
+    setAsked(false);
+    await api.stopSongs(waiting.map((w) => ({ artist: w.artist, title: w.title }))).catch(() => undefined);
+    toast(t('Stopped'));
+    void qc.invalidateQueries();
+  };
+  if (left > 0)
+    return (
+      <button className="btn btn--small btn--busy" onClick={() => void stop()} title={t('Stop')} aria-label={`${tn(left, 'Getting the last one', 'Getting them · {n} to go')} · ${t('Stop')}`}>
+        <i className="btn__spin" aria-hidden />
+        <X size={15} className="btn__stop" aria-hidden />
+        {tn(left, 'Getting the last one', 'Getting them · {n} to go')}
+      </button>
+    );
   return (
     <button
       className="btn btn--small"
-      disabled={asked !== undefined}
+      disabled={albums !== undefined}
       onClick={() =>
         void api
           .getSongs(waiting.map((w) => ({ artist: w.artist, title: w.title, album: w.album, isrc: w.isrc })))
-          .then((r) => (setAsked(said(r)), toast(said(r))))
+          .then((r) => {
+            if (!r.songs) return setAlbums(tn(r.asked, 'Asked for {n} album', 'Asked for {n} albums')), toast(tn(r.asked, 'Asked for {n} album', 'Asked for {n} albums'));
+            setAsked(true);
+            // Each song's own dot, at once.
+            void qc.invalidateQueries();
+          })
           .catch((err: Error) => toast(err.message))
       }
     >
-      <Download size={16} /> {asked ?? t('Get the missing songs')}
+      <Download size={16} /> {albums ?? t('Get the missing songs')}
     </button>
   );
 }

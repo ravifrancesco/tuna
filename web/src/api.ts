@@ -188,7 +188,9 @@ export const api = {
   discardFiles: (batch: string) => call('DELETE', `/get/files${q({ batch })}`),
   missed: () => call<MissedAlbum[]>('GET', '/get/missed'),
   /** Songs and albums people asked for that couldn't be found (an admin's), and looking for them again. */
-  notFound: () => call<{ songs: number; albums: number }>('GET', '/get/again'),
+  notFound: () => call<{ songs: number; albums: number; looking: number }>('GET', '/get/again'),
+  stopLookingAgain: () => call<{ stopped: number }>('POST', '/get/again/stop'),
+  stopSongs: (songs: Array<{ artist: string; title: string }>) => call<{ stopped: number }>('POST', '/get/songs/stop', { songs }),
   lookAgain: () => call<{ songs: number; albums: number }>('POST', '/get/again'),
   /** New songs for each person every week (an admin sets how many; needs slskd), and a radio's. */
   discovery: () => call<{ perWeek: number; available: boolean }>('GET', '/discovery'),

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.4 (2026-11-27)
+
+**Changed**
+- **Look again and Get the missing songs show how it's going:** while they work, a wheel turns and
+  they say how many are still to go ("Getting them · 10 to go"). Pressed again, they stop: songs
+  already downloading finish, the rest aren't looked for. Each song's dot shows at once.
+
+**Fixed**
+- **Songs Soulseek had that Tuna passed over:**
+  - "Song - Original" (and "- Bonus Track") was looked for with "Original" in it; now as "Song".
+  - What's in brackets in a file's name counts: "Love Is the Message (Live at Abbey Road Studios)"
+    and "Baiana (Cosme Martin & Christian Vila Remix)" were taken for the plain songs and passed over.
+  - "&" may be written "and", a comma or nothing: small words like these no longer have to match.
+  - Long searches can come back empty: Tuna also searches the artist and the title's main part.
+- A song not live or instrumental no longer takes a copy whose name says "(Live)" or
+  "(Instrumental)" in brackets.
+
+To update: the server (pull the new image). The apps need nothing new.
+
 ## 0.5.3 (2026-11-27)
 
 **New**
