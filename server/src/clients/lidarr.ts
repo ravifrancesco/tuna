@@ -118,6 +118,9 @@ export const findAlbums = (term: string) => call<LFoundAlbum[]>('/album/lookup',
 export const addArtist = (body: Record<string, unknown>) => call<LArtist>('/artist', { method: 'POST', body });
 export const albumByMbid = (mbid: string) => call<LAlbum[]>('/album', { query: { foreignAlbumId: mbid } }).then((a) => a[0]);
 export const tracks = (albumId: number) => call<LTrack[]>('/track', { query: { albumId } });
+export const trackFiles = (query: { artistId: number } | { albumId: number }) => call<Array<{ id: number; albumId: number; path: string }>>('/trackfile', { query });
+/** Some of an artist's files named as Lidarr names everything (into its album's folder), or tagged as it tags. */
+export const tidyFiles = (name: 'RenameFiles' | 'RetagFiles', artistId: number, files: number[]) => call<{ id: number }>('/command', { method: 'POST', body: { name, artistId, files } });
 export const deleteTrackFile = (id: number) => call<unknown>(`/trackfile/${id}`, { method: 'DELETE' });
 export const remotePathMappings = () => call<Array<{ host: string; remotePath: string; localPath: string }>>('/remotepathmapping');
 

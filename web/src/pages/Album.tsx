@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
-import { Heart, ListEnd, ListPlus, ListStart, MoreHorizontal, Radio, Shuffle } from 'lucide-react';
-import { api } from '../api';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Heart, ImagePlus, ListEnd, ListPlus, ListStart, MoreHorizontal, Radio, Shuffle } from 'lucide-react';
+import { api, ApiError } from '../api';
 import { AlbumCard, Row } from '../components/Cards';
 import { Item, pickPlaylist, showMenu } from '../components/Menu';
 import { PlayButton } from '../components/PlayButton';
@@ -16,6 +16,16 @@ import { addToQueue, playNext, playTracks } from '../lib/player';
 import { useTint } from '../lib/tint';
 import { GetMissing } from './Playlist';
 
+/** A picture's width and height, as the browser reads it (undefined: not a picture). */
+const pictureSize = (file: Blob) =>
+  new Promise<{ width: number; height: number } | undefined>((done) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => (done({ width: img.naturalWidth, height: img.naturalHeight }), URL.revokeObjectURL(url));
+    img.onerror = () => (done(undefined), URL.revokeObjectURL(url));
+    img.src = url;
+  });
+
 export function Album() {
   const { id = '' } = useParams();
   const album = useQuery({ queryKey: ['album', id], queryFn: () => api.album(id) });
@@ -28,6 +38,29 @@ export function Album() {
     return () => window.clearTimeout(timer);
   }, [id]);
   const complete = whole.isFetched || waited === id;
+  // An album without a cover: one can be given (a square picture).
+  const qc = useQueryClient();
+  const picker = useRef<HTMLInputElement>(null);
+  const [bare, setBare] = useState<string>();
+  const [given, setGiven] = useState<{ id: string; url: string }>();
+  const [sending, setSending] = useState(false);
+  const giveCover = async (file: File | undefined) => {
+    if (!file) return;
+    const size = await pictureSize(file);
+    if (!size) return toast(t("That isn't a picture"));
+    if (Math.abs(size.width - size.height) > Math.max(size.width, size.height) * 0.01) return toast(t('The picture has to be square'));
+    setSending(true);
+    try {
+      await api.albumCover(id, file);
+      setGiven({ id, url: URL.createObjectURL(file) });
+      // Navidrome has it once it has looked at the album's folder again.
+      for (const ms of [5000, 20000]) window.setTimeout(() => void qc.invalidateQueries({ queryKey: ['album', id] }), ms);
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setSending(false);
+    }
+  };
   const [liked, toggleLike] = useLiked('album', id, album.data?.liked);
   const tint = useTint(album.data?.cover);
   if (album.isLoading) return <Spinner />;
@@ -39,7 +72,26 @@ export function Album() {
   return (
     <div className="page--flush">
       <header className="hero" style={{ '--hero': tint } as React.CSSProperties}>
-        <Cover cover={a.cover} size={600} />
+        {given?.id === a.id ? (
+          <Cover src={given.url} size={600} />
+        ) : !a.cover || bare === a.cover ? (
+          <button className="hero__give" aria-label={t('Add a cover')} title={t('Add a cover')} disabled={sending} onClick={() => picker.current?.click()}>
+            <Cover size={600} />
+            <span className="hero__give-mark">{sending ? <span className="btn__spin" /> : <ImagePlus size={30} />}</span>
+          </button>
+        ) : (
+          <Cover cover={a.cover} size={600} onMissing={() => setBare(a.cover)} />
+        )}
+        <input
+          ref={picker}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          hidden
+          onChange={(e) => {
+            void giveCover(e.target.files?.[0]);
+            e.target.value = '';
+          }}
+        />
         <div>
           <div className="hero__kind">{kind}</div>
           <h1>{a.name}</h1>

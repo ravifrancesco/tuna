@@ -124,6 +124,7 @@ export const api = {
   server: () => call<ServerInfo>('GET', '/server'),
   /** An album's kind and its songs that aren't in the library (a moment after the album: it may take a while). */
   albumWhole: (id: string) => call<AlbumWhole>('GET', `/album/${encodeURIComponent(id)}/whole`),
+  albumCover: (id: string, file: Blob) => send<{ ok: boolean }>(`/album/${encodeURIComponent(id)}/cover`, file),
   setup: (body: { code: string; navidromeUrl: string; lidarrUrl?: string; lidarrApiKey?: string }) => call<Connections>('POST', '/setup', body),
   login: (username: string, password: string) => call<{ me: Me; session: string }>('POST', '/login', { username, password }),
   logout: () => call('POST', '/logout'),

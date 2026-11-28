@@ -10,9 +10,12 @@ import { HookFish } from './Splash';
  * A cover that fades in as it arrives (one already here shows at once). `steady` (the player's): the
  * last picture stays until the next one is ready, so a new song changes all at once.
  */
-export function Cover({ cover, src, size = 300, round, className = '', alt = '', steady }: { cover?: string; src?: string; size?: number; round?: boolean; className?: string; alt?: string; steady?: boolean }) {
+export function Cover({ cover, src, size = 300, round, className = '', alt = '', steady, onMissing }: { cover?: string; src?: string; size?: number; round?: boolean; className?: string; alt?: string; steady?: boolean; onMissing?: () => void }) {
   const [failed, setFailed] = useState(false);
   const url = src ?? coverUrl(cover, size);
+  useEffect(() => {
+    if (!url) onMissing?.();
+  }, [url]); // eslint-disable-line react-hooks/exhaustive-deps
   const [held, setHeld] = useState(url);
   const [arrived, setArrived] = useState<string>();
   useEffect(() => {
@@ -44,7 +47,7 @@ export function Cover({ cover, src, size = 300, round, className = '', alt = '',
             if (el?.complete && el.naturalWidth && arrived !== shown) setArrived(shown);
           }}
           onLoad={() => setArrived(shown)}
-          onError={() => setFailed(true)}
+          onError={() => (setFailed(true), onMissing?.())}
         />
       ) : (
         <Music size={Math.max(18, size / 8)} />

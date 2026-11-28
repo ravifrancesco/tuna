@@ -639,7 +639,13 @@ function scanFolder() {
   const walk = (dir: string): string[] =>
     fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.name.startsWith('.') ? [] : d.isDirectory() ? walk(nodePath.join(dir, d.name)) : SONG_FILE.test(d.name) ? [nodePath.join(dir, d.name)] : []));
   for (const file of walk(MUSIC_DIR)) {
-    if (known.has(file)) continue;
+    if (known.has(file)) {
+      // A cover put beside songs it has: the album's from now on.
+      const t = [...tracks.values()].find((x) => x.file === file);
+      const cover = fs.readdirSync(nodePath.dirname(file)).find((f) => /^(cover|folder)\.(jpe?g|png|webp)$/i.test(f));
+      if (t && cover) albums.get(t.albumId)!.cover = nodePath.join(nodePath.dirname(file), cover);
+      continue;
+    }
     let tags: Record<string, string> = {};
     let duration = 0;
     try {
@@ -779,6 +785,43 @@ function manualImport(files: Array<{ path?: string; artistId?: number; albumId?:
   }
   return problems.join('; ') || undefined;
 }
+/**
+ * Lidarr's Organize: each file as its naming has it, in its album's folder ("Album (Year)/Artist - Album
+ * - 01 - Title"), with the album's cover beside it (the Kodi/Emby metadata's Album Images).
+ */
+function renameFiles(ids: number[] = []) {
+  for (const t of [...tracks.values()].filter((x) => x.fileId !== undefined && ids.includes(x.fileId))) {
+    if (!t.file || !fs.existsSync(t.file)) continue;
+    const a = albums.get(t.albumId)!;
+    const dir = nodePath.join(MUSIC_DIR, a.artist, `${a.name} (${a.year})`);
+    const to = nodePath.join(dir, `${a.artist} - ${a.name} - ${String(t.track).padStart(2, '0')} - ${t.title}${nodePath.extname(t.file)}`);
+    if (to === t.file) continue;
+    fs.mkdirSync(dir, { recursive: true });
+    fs.renameSync(t.file, to);
+    const cover = nodePath.join(dir, 'cover.jpg');
+    if (!fs.existsSync(cover)) fs.writeFileSync(cover, coverPng(a.mbid, 500));
+    console.log(`mock lidarr: organized ${t.file} as ${to}`);
+    Object.assign(t, { file: to });
+    a.cover = cover;
+  }
+}
+
+/** Lidarr's Retag: its album, artist, title and track number written into each file. */
+function retagFiles(ids: number[] = []) {
+  for (const t of [...tracks.values()].filter((x) => x.fileId !== undefined && ids.includes(x.fileId))) {
+    if (!t.file || !fs.existsSync(t.file)) continue;
+    const a = albums.get(t.albumId)!;
+    const out = `${t.file}.tagged${nodePath.extname(t.file)}`;
+    try {
+      execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', t.file, '-map', '0', '-c', 'copy', '-map_metadata', '0', '-metadata', `album=${a.name}`, '-metadata', `album_artist=${a.artist}`, '-metadata', `artist=${t.artist}`, '-metadata', `title=${t.title}`, '-metadata', `track=${t.track}`, out]);
+      fs.renameSync(out, t.file);
+      console.log(`mock lidarr: retagged ${t.file}`);
+    } catch {
+      fs.rmSync(out, { force: true });
+    }
+  }
+}
+
 const lidarrArtist = (a: MArtist) => ({ id: a.lidarrId ?? 0, artistName: a.name, foreignArtistId: a.mbid, monitored: true, disambiguation: '' });
 let nextLidarrArtist = 1;
 
@@ -1194,6 +1237,8 @@ function navidrome(method: string, q: URLSearchParams, req: http.IncomingMessage
       const albumOf = id.startsWith('al-') ? id.slice(3) : id.startsWith('mf-') ? tracks.get(id.slice(3))?.albumId : albums.has(id) ? id : tracks.get(id)?.albumId;
       const real = albumOf ? albums.get(albumOf)?.cover : undefined;
       if (real && fs.existsSync(real)) return streamFile(real, req, res);
+      // Songs from files in the music folder with no cover beside them: no picture (as Navidrome).
+      if (albumOf && albums.get(albumOf)?.tracks.some((t) => t.file)) return void res.writeHead(404).end();
       const image =
         albumOf && albums.has(albumOf)
           ? coverPng(albums.get(albumOf)!.mbid, s)
@@ -1341,6 +1386,11 @@ async function lidarr(path: string, q: URLSearchParams, req: http.IncomingMessag
     const a = [...albums.values()].find((x) => x.lidarrId === Number(q.get('albumId')) || releaseId(x) === Number(q.get('albumReleaseId')));
     return json(res, 200, a ? a.tracks.map(lidarrTrack) : []);
   }
+  if (p === '/trackfile' && req.method === 'GET') {
+    const artist = artists.find((x) => x.lidarrId !== undefined && x.lidarrId === Number(q.get('artistId')));
+    const theirs = q.get('albumId') ? [...albums.values()].filter((a) => a.lidarrId === Number(q.get('albumId'))) : artist ? [...albums.values()].filter((a) => a.artistId === artist.id) : [];
+    return json(res, 200, theirs.flatMap((a) => a.tracks.filter((t) => t.fileId !== undefined).map((t) => ({ id: t.fileId, albumId: a.lidarrId, path: t.file ?? nodePath.join(MUSIC_DIR, a.artist, `${a.name} (${a.year})`, `${String(t.track).padStart(2, '0')} - ${t.title}.flac`) }))));
+  }
   const file = p.match(/^\/trackfile\/(\d+)$/);
   if (file && req.method === 'DELETE') {
     const t = [...tracks.values()].find((x) => x.fileId === Number(file[1]));
@@ -1386,6 +1436,8 @@ async function lidarr(path: string, q: URLSearchParams, req: http.IncomingMessag
     // It runs a moment later.
     setTimeout(() => {
       const problem = b.name === 'ManualImport' ? manualImport(Array.isArray(b.files) ? b.files : []) : undefined;
+      if (b.name === 'RenameFiles') renameFiles(b.files as number[]);
+      if (b.name === 'RetagFiles') retagFiles(b.files as number[]);
       Object.assign(c, { status: problem ? 'failed' : 'completed', message: problem ?? 'Completed', ended: new Date().toISOString() });
     }, 1000);
     return json(res, 201, c);

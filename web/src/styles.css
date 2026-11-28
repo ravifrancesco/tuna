@@ -970,6 +970,40 @@ html.tv .mobile-only {
 .hero__meta a:hover {
   text-decoration: underline;
 }
+/* An album without a cover: pressing it gives it one. */
+.hero__give {
+  position: relative;
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.hero__give .cover {
+  transition: filter 0.15s;
+}
+.hero__give-mark {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(19, 17, 27, 0.72);
+  color: var(--accent-light);
+}
+.hero__give-mark .btn__spin {
+  width: 20px;
+  height: 20px;
+}
+.hero__give:hover .cover,
+.hero__give:focus-visible .cover {
+  filter: brightness(1.25);
+}
 @media (max-width: 899px) {
   .hero {
     flex-direction: column;

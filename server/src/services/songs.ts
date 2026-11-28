@@ -15,7 +15,7 @@ import { log } from '../lib/log';
 import { writeJson } from '../lib/storage';
 import { HttpError } from '../lib/upstream';
 import { albumSent, ensureArtist, scanNavidrome } from './getting';
-import type { SubsonicAuth } from '../clients/navidrome';
+import { subsonic, type SubsonicAuth } from '../clients/navidrome';
 import { norm, toTrack } from './library';
 import { alike, artistsOf, cleanAlbum, firstArtist, matcher, releaseGroups, songIndex } from './matching';
 import { missedSent, resolve } from './stocking';
@@ -336,7 +336,7 @@ async function lidarrArtistsNamed(artist: string): Promise<lidarr.LArtist[]> {
   if (!lidarrArtists || Date.now() - lidarrArtists.at > 10 * 60_000) fresh();
   const mine = async () => (await lidarrArtists!.list).filter((x) => artistsOf(x.artistName).some((n) => want.includes(n)));
   const found = await mine();
-  if (found.length || Date.now() - lidarrArtists!.at < 60_000) return found;
+  if (found.length || Date.now() - lidarrArtists!.at < 10_000) return found;
   fresh();
   return mine();
 }
@@ -623,6 +623,11 @@ function coverFits(s: Song, albumTag?: string): boolean {
 /** Lidarr files a copy into the song's track (renamed and tagged as everything it gets): true once it's there. */
 async function intoAlbum(s: Pick<Song, 'artistId' | 'albumId' | 'releaseId' | 'trackId'>, item: { path: string; quality: lidarr.LQuality }): Promise<boolean> {
   const { id } = await lidarr.importSong({ path: item.path, artistId: s.artistId!, albumId: s.albumId!, albumReleaseId: s.releaseId!, trackId: s.trackId!, quality: item.quality });
+  return finished(id);
+}
+
+/** A command Lidarr was given: true once it has done it. */
+async function finished(id: number): Promise<boolean> {
   for (let i = 0; i < 60; i++) {
     await new Promise((r) => setTimeout(r, 2000));
     const c = await lidarr.command(id);
@@ -846,10 +851,7 @@ export async function takeCover(batch: string, body: Readable) {
   }
   const raw = path.join(coversIn(), `${batch}.in`);
   await keep(body, raw, COVER_LIMIT);
-  const head = Buffer.alloc(12);
-  const fd = await fs.promises.open(raw, 'r');
-  await fd.read(head, 0, 12, 0).finally(() => fd.close());
-  const kind = head[0] === 0xff && head[1] === 0xd8 ? '.jpg' : head.toString('hex', 0, 4) === '89504e47' ? '.png' : head.toString('latin1', 8, 12) === 'WEBP' ? '.webp' : undefined;
+  const kind = await pictureKind(raw);
   if (!kind) {
     await fs.promises.rm(raw, { force: true });
     throw new HttpError(400, t("That isn't a picture"));
@@ -860,6 +862,80 @@ export async function takeCover(batch: string, body: Readable) {
     await fs.promises.rename(raw, path.join(coversIn(), batch + kind));
   }
   await fs.promises.rm(raw, { force: true });
+}
+
+/** A JPEG's, PNG's or WebP's extension, by what's in the file. */
+async function pictureKind(file: string): Promise<'.jpg' | '.png' | '.webp' | undefined> {
+  const head = Buffer.alloc(12);
+  const fd = await fs.promises.open(file, 'r');
+  await fd.read(head, 0, 12, 0).finally(() => fd.close());
+  return head[0] === 0xff && head[1] === 0xd8 ? '.jpg' : head.toString('hex', 0, 4) === '89504e47' ? '.png' : head.toString('latin1', 8, 12) === 'WEBP' ? '.webp' : undefined;
+}
+
+/** A picture's width and height (undefined: no ffprobe). */
+function pictureSize(file: string): Promise<{ width: number; height: number } | undefined> {
+  return new Promise((done) => {
+    execFile(process.env.FFPROBE ?? 'ffprobe', ['-v', 'quiet', '-print_format', 'json', '-show_streams', '-select_streams', 'v:0', file], { timeout: 30_000 }, (err, out) => {
+      try {
+        const v = (JSON.parse(out) as { streams?: Array<{ width?: number; height?: number }> }).streams?.[0];
+        done(!err && v?.width && v.height ? { width: v.width, height: v.height } : undefined);
+      } catch {
+        done(undefined);
+      }
+    });
+  });
+}
+
+type NdAlbum = { name: string; artist?: string; song?: Array<{ path?: string }> };
+
+/**
+ * A cover someone gives an album that has none: square, as cover.jpg in the album's folders, where
+ * Navidrome takes it from.
+ */
+export async function coverAlbum(auth: SubsonicAuth, by: string, id: string, body: Readable) {
+  const root = await musicFolder();
+  if (!root) throw new HttpError(409, t("Tuna can't reach the music folder"));
+  const album = (await subsonic<{ album?: NdAlbum }>(auth, 'getAlbum', { id })).album;
+  if (!album) throw new HttpError(404, t("Couldn't find this album"));
+  const folders = await albumFolders(root, album);
+  if (!folders.length) throw new HttpError(404, t("Couldn't find this album's folder"));
+  const raw = path.join(coversIn(), `album-${crypto.randomUUID()}.in`);
+  const jpg = `${raw}.jpg`;
+  try {
+    await keep(body, raw, COVER_LIMIT);
+    const kind = await pictureKind(raw);
+    if (!kind) throw new HttpError(400, t("That isn't a picture"));
+    const size = await pictureSize(raw);
+    if (size && Math.abs(size.width - size.height) > Math.max(size.width, size.height) * 0.01) throw new HttpError(400, t('The picture has to be square'));
+    const made = await ffmpeg(['-i', raw, '-vf', "scale='min(1400,iw)':-2", '-frames:v', '1', '-q:v', '3', '-y', jpg]);
+    for (const dir of folders) {
+      for (const f of await fs.promises.readdir(dir)) if (/^cover\.(jpe?g|png|webp)$/i.test(f)) await fs.promises.rm(path.join(dir, f), { force: true });
+      await fs.promises.copyFile(made ? jpg : raw, path.join(dir, `cover${made ? '.jpg' : kind}`));
+    }
+    log.info('covers', `${by} gave "${album.name}" by ${album.artist ?? '?'} a cover`);
+    void scanNavidrome();
+  } finally {
+    await fs.promises.rm(raw, { force: true });
+    await fs.promises.rm(jpg, { force: true });
+  }
+}
+
+/** The folders an album's songs are in: as Lidarr has them, as Tuna put them, or as Navidrome says. */
+async function albumFolders(root: string, album: NdAlbum): Promise<string[]> {
+  const dirs = new Set<string>();
+  const artists = artistsOf(album.artist ?? '');
+  const name = cleanAlbum(album.name);
+  const same = (x: string) => norm(cleanAlbum(x)) === norm(name) || alike(cleanAlbum(x), name);
+  if (has.lidarr()) {
+    for (const a of await lidarrArtistsNamed(album.artist ?? '').catch(() => [])) {
+      for (const al of (await lidarr.albums(a.id).catch(() => [])).filter((x) => same(x.title))) {
+        for (const f of await lidarr.trackFiles({ albumId: al.id }).catch(() => [])) dirs.add(path.dirname(f.path));
+      }
+    }
+  }
+  for (const s of songs) if (s.path && same(s.album || s.title) && artistsOf(s.artist).some((n) => artists.includes(n))) dirs.add(path.dirname(s.path));
+  for (const x of album.song ?? []) if (x.path) dirs.add(path.dirname(path.join(root, x.path)));
+  return [...dirs].filter((d) => d.startsWith(root + path.sep) && fs.existsSync(d) && fs.readdirSync(d).some((f) => SONG_FILE.test(path.extname(f).toLowerCase())));
 }
 
 /** What a file seems to be: by its tags, else its folders (Artist/Album/…) and its name. */
@@ -1179,7 +1255,8 @@ function shelvedAt(s: Song, root: string): string | undefined {
 /**
  * Songs Tuna put straight into the music folder because Lidarr had no album for them: once Lidarr
  * knows it (Deezer's albums, singles and EPs once its metadata profile has them…), Lidarr files the
- * song there, named, tagged and with its cover as everything else. Each is asked about once a day.
+ * song there, named, tagged and with its cover as everything else (one its scan of the artist's folder
+ * took in where it lies, Lidarr moves and tags the same way). Each is asked about once a day.
  */
 let handing: Promise<void> | undefined;
 /** One run at a time (Look again pressed twice doesn't start two). */
@@ -1203,6 +1280,7 @@ async function handOverNow(now: boolean) {
       continue;
     }
     try {
+      if (await tidyTaken(s, file)) continue;
       const why = await place(s);
       if (why || !s.trackId) {
         still++;
@@ -1210,21 +1288,13 @@ async function handOverNow(now: boolean) {
       }
       // Lidarr has a copy of its own already: Tuna's stays where it is, and isn't asked about again.
       if ((await lidarr.tracks(s.albumId!)).find((t) => t.id === s.trackId)?.hasFile) {
+        if (await tidyTaken(s, file)) continue;
         log.info('get', `Lidarr has its own copy of "${s.title}" by ${s.artist}; Tuna's stays in ${path.dirname(file)}`);
         Object.assign(s, { loose: undefined, imported: undefined, trackId: undefined });
         continue;
       }
-      if (await viaLidarr(s, file)) {
-        Object.assign(s, { loose: undefined, imported: undefined, path: undefined });
-        log.info('get', `Lidarr has "${s.title}" by ${s.artist} now, in its album`);
-        // Tuna's folder for it, if nothing else is left there (but a cover).
-        const dir = path.dirname(file);
-        const left = await fs.promises.readdir(dir).catch(() => ['?']);
-        if (left.every((f) => /^(cover|folder)\.(jpe?g|png|webp)$/i.test(f))) await fs.promises.rm(dir, { recursive: true, force: true }).catch(() => undefined);
-        void scanNavidrome();
-      } else {
-        throw new Error("Lidarr couldn't file it");
-      }
+      if (await viaLidarr(s, file)) await handedOver(s, file);
+      else throw new Error("Lidarr couldn't file it");
     } catch {
       // MusicBrainz or Lidarr busy, say: again within the hour.
       later++;
@@ -1237,6 +1307,39 @@ async function handOverNow(now: boolean) {
   if (still) log.info('get', `${still} song${still === 1 ? '' : 's'} Tuna filed itself ${still === 1 ? 'is' : 'are'} still on no album Lidarr has`);
   if (later) log.info('get', `${later} song${later === 1 ? '' : 's'} Tuna filed itself couldn't be checked with Lidarr just now (MusicBrainz or Lidarr busy): again within the hour`);
 }
+/**
+ * Lidarr took Tuna's file in where it lies (its scan of the artist's folder, where Tuna put it, found it):
+ * it moves and tags it as everything else (into its album's folder, the cover beside it). True if so.
+ */
+async function tidyTaken(s: Song, file: string): Promise<boolean> {
+  const taken = await takenIn(s, file);
+  if (!taken) return false;
+  if (!(await finished((await lidarr.tidyFiles('RenameFiles', taken.artistId, [taken.id])).id))) throw new Error("Lidarr couldn't file it");
+  await finished((await lidarr.tidyFiles('RetagFiles', taken.artistId, [taken.id])).id);
+  await handedOver(s, file);
+  return true;
+}
+
+/** Tuna's own file, if Lidarr has it as one of its artist's files. */
+async function takenIn(s: Song, file: string): Promise<{ artistId: number; id: number } | undefined> {
+  const same = (p: string) => path.resolve(p).normalize('NFC') === path.resolve(file).normalize('NFC');
+  const ids = [...new Set([s.artistId, ...(await lidarrArtistsNamed(s.artist)).map((a) => a.id)])].filter((id): id is number => id !== undefined);
+  for (const artistId of ids) {
+    const found = (await lidarr.trackFiles({ artistId }).catch(() => [])).find((f) => same(f.path));
+    if (found) return { artistId, id: found.id };
+  }
+}
+
+/** Lidarr has the song in its album now: Tuna's folder for it goes, if nothing else is left there (but a cover). */
+async function handedOver(s: Song, file: string) {
+  Object.assign(s, { loose: undefined, imported: undefined, path: undefined });
+  log.info('get', `Lidarr has "${s.title}" by ${s.artist} now, in its album`);
+  const dir = path.dirname(file);
+  const left = await fs.promises.readdir(dir).catch(() => ['?']);
+  if (left.every((f) => /^(cover|folder)\.(jpe?g|png|webp)$/i.test(f))) await fs.promises.rm(dir, { recursive: true, force: true }).catch(() => undefined);
+  void scanNavidrome();
+}
+
 /** Songs Tuna filed itself before it checked their covers: a cover that came from another album comes off. */
 async function checkCovers(root: string) {
   let off = 0;

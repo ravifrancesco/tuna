@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.7 (2026-11-27)
+
+**New**
+- **A cover for an album that has none:** on the album's page, press the empty cover and choose a
+  square picture. It goes beside the album's songs as `cover.jpg`, where Navidrome (and every app)
+  takes it from.
+
+**Fixed**
+- **Songs Lidarr took in where Tuna had put them** (scanning an artist's folder, Lidarr finds the songs
+  Tuna filed there itself) stayed in Tuna's folders, named and tagged as Tuna had them, without their
+  album's cover. Now Tuna has Lidarr move them into its album's folder and tag them as everything
+  else, so the cover comes too, and Tuna's folder goes. Press Look again once to do it now (else
+  within a day).
+
+To update: the server (pull the new image). The apps need nothing new.
+
 ## 0.5.6 (2026-11-27)
 
 **Changed**

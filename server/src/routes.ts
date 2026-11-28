@@ -16,7 +16,7 @@ import * as library from './services/library';
 import { listeningHistory, listeningStats, yearInReview } from './services/listens';
 import { importSpotify } from './services/spotify';
 import { getMany, missedAlbums, saveStocking, stillToAsk, stocking, stopAsking } from './services/stocking';
-import { checkStaged, discard, importStaged, lookAgain, lookingAgainLeft, musicFolder, stopLookingAgain, stopThese, songItems, songsMoving, songStates, songsNotFound, songsWaiting, stage, stopSongs, takeCover, wantSongs, withTracks, type ImportRequest } from './services/songs';
+import { checkStaged, coverAlbum, discard, importStaged, lookAgain, lookingAgainLeft, musicFolder, stopLookingAgain, stopThese, songItems, songsMoving, songStates, songsNotFound, songsWaiting, stage, stopSongs, takeCover, wantSongs, withTracks, type ImportRequest } from './services/songs';
 import { arrived, discoverySettings, saveDiscovery, topUpRadio } from './services/discovery';
 import * as together from './services/together';
 import * as devices from './services/devices';
@@ -262,6 +262,13 @@ export async function apiRoutes(app: FastifyInstance) {
   // Files people have themselves, each as it is (a cover first, if they have one): into the library.
   app.addContentTypeParser('application/x-tuna-file', (_req, payload, done) => done(null, payload));
   const sent = (body: unknown) => (Buffer.isBuffer(body) ? Readable.from([body]) : (body as Readable));
+  // A cover for an album that has none.
+  app.post<{ Params: { id: string } }>('/album/:id/cover', async (req) => {
+    const s = requireUser(req);
+    if (!req.body) throw new HttpError(400, 'the picture');
+    await coverAlbum(authOf(s), s.name, req.params.id, sent(req.body));
+    return { ok: true };
+  });
   app.post<{ Querystring: { batch?: string } }>('/get/files/cover', async (req) => {
     requireUser(req);
     if (!req.query.batch || !req.body) throw new HttpError(400, 'batch and the picture');
