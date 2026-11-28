@@ -17,21 +17,21 @@
       "category": "entertainment",
       "versions": [
         {
-          "version": "0.5.6",
+          "version": "0.5.7",
           "buildVersion": "1",
           "date": "2026-11-27",
-          "localizedDescription": "Changed\n- Album pages show all their songs at once, the ones that aren't here yet among them, instead of yours first and the rest a moment later. An album starts loading when you point at or touch it, so it's usually there as you open it. If finding the missing songs takes long, yours show after a couple of seconds and the rest join them.\n\nFixed\n- Songs Tuna filed itself stayed \"on no album Lidarr has\" when Lidarr has their album from another source (Deezer, Discogs, through Tubifarry's MetaMix): Tuna only matched albums by their MusicBrainz id. Now also by name, among the artist's albums in Lidarr. Press Look again once after updating to check them all now (else each is checked within a day).\n- Covers from Soulseek of another album: a copy ripped from a compilation brought the compilation's cover with it. Now a copy keeps its cover only if it comes from the album asked for (its album tag says so, else the folder it was in). Songs Tuna filed before are checked once.\n\nTo update: the server (pull the new image). The apps need nothing new.",
-          "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.5.6/Tuna-ios.ipa",
-          "size": 4705854,
-          "sha256": "047db868fc0c004674769c8101ec48405202d4acdd65367121b61eb5bb3c3ef1",
+          "localizedDescription": "New\n- A cover for an album that has none: on the album's page, press the empty cover and choose a square picture. It goes beside the album's songs as cover.jpg, where Navidrome (and every app) takes it from.\n\nFixed\n- Songs Lidarr took in where Tuna had put them (scanning an artist's folder, Lidarr finds the songs Tuna filed there itself) stayed in Tuna's folders, named and tagged as Tuna had them, without their album's cover. Now Tuna has Lidarr move them into its album's folder and tag them as everything else, so the cover comes too, and Tuna's folder goes. Press Look again once to do it now (else within a day).\n\nTo update: the server (pull the new image). The apps need nothing new.",
+          "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.5.7/Tuna-ios.ipa",
+          "size": 4705839,
+          "sha256": "4b267ab7e0ffcfd41c2ef0aed47726baf07ff016f208e5a3b09592c6bd744d4e",
           "minOSVersion": "16.0"
         }
       ],
-      "version": "0.5.6",
+      "version": "0.5.7",
       "versionDate": "2026-11-27",
-      "versionDescription": "Changed\n- Album pages show all their songs at once, the ones that aren't here yet among them, instead of yours first and the rest a moment later. An album starts loading when you point at or touch it, so it's usually there as you open it. If finding the missing songs takes long, yours show after a couple of seconds and the rest join them.\n\nFixed\n- Songs Tuna filed itself stayed \"on no album Lidarr has\" when Lidarr has their album from another source (Deezer, Discogs, through Tubifarry's MetaMix): Tuna only matched albums by their MusicBrainz id. Now also by name, among the artist's albums in Lidarr. Press Look again once after updating to check them all now (else each is checked within a day).\n- Covers from Soulseek of another album: a copy ripped from a compilation brought the compilation's cover with it. Now a copy keeps its cover only if it comes from the album asked for (its album tag says so, else the folder it was in). Songs Tuna filed before are checked once.\n\nTo update: the server (pull the new image). The apps need nothing new.",
-      "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.5.6/Tuna-ios.ipa",
-      "size": 4705854,
+      "versionDescription": "New\n- A cover for an album that has none: on the album's page, press the empty cover and choose a square picture. It goes beside the album's songs as cover.jpg, where Navidrome (and every app) takes it from.\n\nFixed\n- Songs Lidarr took in where Tuna had put them (scanning an artist's folder, Lidarr finds the songs Tuna filed there itself) stayed in Tuna's folders, named and tagged as Tuna had them, without their album's cover. Now Tuna has Lidarr move them into its album's folder and tag them as everything else, so the cover comes too, and Tuna's folder goes. Press Look again once to do it now (else within a day).\n\nTo update: the server (pull the new image). The apps need nothing new.",
+      "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.5.7/Tuna-ios.ipa",
+      "size": 4705839,
       "appPermissions": {
         "entitlements": [],
         "privacy": {
