@@ -90,7 +90,8 @@ Notes for anyone (person or AI assistant) working on Tuna's code.
   a real one: imported files go there (through Lidarr's manual import, or straight in) and the fake
   Navidrome finds them by their tags (ffprobe). `MOCK_SLSKD_DIR` (tuna-mock-slskd in the temp folder) is
   slskd's downloads folder, where finished downloads land as short real files; `MOCK_LIDARR_ALBUMS_ONLY=1`
-  makes Lidarr keep no singles or EPs, as its Standard metadata profile. ListenBrainz token for Settings: `mock-lb`.
+  makes Lidarr keep no singles or EPs, as its Standard metadata profile; `MOCK_LIDARR_ARTIST_LOOKUP_FAIL=<word,…>`
+  makes only looking up those artists fail (Lidarr's album search still finds them). ListenBrainz token for Settings: `mock-lb`.
 - `npm run typecheck` checks server and web; `npm run check:i18n` the Italian.
 - **Develop against the mock**, never against a real household's server.
 - A running server serves the web files from `web/dist` as they are: `npm run build -w web` to

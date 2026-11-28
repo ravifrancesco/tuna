@@ -100,10 +100,11 @@ const LANDING = 5 * 60_000;
 const busy = () => songs.filter((s) => s.state === 'looking' || s.state === 'downloading');
 export const songsOnTheWay = () => busy().length + songs.filter((s) => s.state === 'waiting').length;
 
-/** "Song (feat. X) - 2011 Remaster" and "Song - Original" are looked for as "Song" (a remix or a live one isn't). */
+/** "Song (feat. X) - 2011 Remaster", "Song (con X)" and "Song - Original" are looked for as "Song" (a remix or a live one isn't). */
 export const cleanTitle = (t: string) =>
   t
-    .replace(/\s*[([](?:feat|ft|with)\.?\s[^)\]]*[)\]]/gi, '')
+    .replace(/\s*[([](?:feat|ft|featuring|with|con|w\/)\.?\s[^)\]]*[)\]]/gi, '')
+    .replace(/\s+(?:feat|ft|featuring)\.?\s.*$/i, '')
     .replace(/\s+-\s+.*\b(?:remaster(?:ed)?|version|edit|mono|stereo|mix|original|bonus(?: track)?)\b.*$/i, '')
     .replace(/\s*[([][^)\]]*\b(?:remaster(?:ed)?|version|edit|original|bonus(?: track)?)\b[^)\]]*[)\]]/gi, '')
     .trim() || t;
@@ -369,7 +370,9 @@ const AUDIO = /\.(flac|mp3|m4a|aac|ogg|opus|wav|aiff?|alac)$/i;
 const SMALL = new Set(['and', 'the', 'of', 'at', 'is', 'in', 'on', 'to', 'an', 'by', 'for', 'with']);
 /** Brackets as spaces (norm drops what's inside them). */
 const bracketed = (x: string) => x.replace(/[()[\]{}]/g, ' ');
-const UNWANTED = ['live', 'remix', 'instrumental', 'karaoke', 'cover', 'acapella', 'a capella', 'demo', 'slowed', 'sped up', 'reverb', '8d'];
+/** Another version of a song (unless that's the one asked for): words in a copy's name, whole ("Oliver" isn't live). */
+const UNWANTED = ['live', 'remix', 'instrumental', 'karaoke', 'cover', 'acapella', 'a capella', 'demo', 'slowed', 'sped up', 'reverb', '8d', 'acoustic', 'unplugged', 'extended', 'club mix', 'dub mix', 'vip', 'rework', 'bootleg', 'mashup', 'nightcore'];
+const hasWords = (text: string, phrase: string) => ` ${text} `.includes(` ${phrase} `);
 
 /** Why copies were passed over (for the log when none fit). */
 type Passed = { title: number; artist: number; unwanted: number; length: number };
@@ -383,7 +386,7 @@ type Passed = { title: number; artist: number; unwanted: number; length: number 
 function best(s: Song, responses: slskd.SResponse[], anyone = false, passed?: Passed) {
   const titles = [s.title, s.mb?.title].filter(Boolean).map((x) => words(bracketed(cleanTitle(x!))).filter((w) => !SMALL.has(w)));
   const artist = [...artistsOf(s.artist), ...(s.mb ? artistsOf(s.mb.artist) : [])].map(words);
-  const unwanted = UNWANTED.filter((u) => !norm(s.title).includes(u));
+  const unwanted = UNWANTED.filter((u) => !hasWords(norm(bracketed(s.title)), u) && !(s.mb && hasWords(norm(bracketed(s.mb.title)), u)));
   const files = soulseekFiles();
   const sending = new Set(songs.filter((x) => x !== s && x.state === 'downloading').map((x) => x.from!.username));
   const out: Array<{ username: string; filename: string; size: number; rank: number; busy: boolean; score: number }> = [];
@@ -396,8 +399,9 @@ function best(s: Song, responses: slskd.SResponse[], anyone = false, passed?: Pa
       const full = norm(bracketed(f.filename));
       const no = (why: keyof Passed) => (passed && passed[why]++, true);
       if (!titles.some((title) => title.every((w) => file.includes(w))) && no('title')) continue;
-      if (!artist.some((a) => a.length && a.every((w) => full.includes(w))) && no('artist')) continue;
-      if (unwanted.some((u) => file.includes(u)) && no('unwanted')) continue;
+      const together = full.replace(/ /g, '');
+      if (!artist.some((a) => a.length && (a.every((w) => full.includes(w)) || together.includes(a.join('')))) && no('artist')) continue;
+      if (unwanted.some((u) => hasWords(file, u)) && no('unwanted')) continue;
       if (s.length && f.length && Math.abs(f.length - s.length) > 6 && no('length')) continue;
       const ext = f.filename.split('.').pop()!.toLowerCase();
       const lossless = ext === 'flac' || ext === 'alac';
@@ -1125,16 +1129,32 @@ function shelvedAt(s: Song, root: string): string | undefined {
  * knows it (Deezer's albums, singles and EPs once its metadata profile has them…), Lidarr files the
  * song there, named, tagged and with its cover as everything else. Each is asked about once a day.
  */
-async function handOver(now = false) {
+let handing: Promise<void> | undefined;
+/** One run at a time (Look again pressed twice doesn't start two). */
+function handOver(now = false): Promise<void> {
+  return (handing ??= handOverNow(now).finally(() => (handing = undefined)));
+}
+
+async function handOverNow(now: boolean) {
   const root = await musicFolder();
   if (!root || !has.lidarr()) return;
-  for (const s of songs.filter((x) => x.state === 'ready' && (x.loose || x.imported) && !x.trackId && (now || Date.now() - (x.lookedAt ?? 0) > 86400_000))) {
+  const due = songs.filter((x) => x.state === 'ready' && (x.loose || x.imported) && !x.trackId && (now || Date.now() - (x.lookedAt ?? 0) > 86400_000));
+  let still = 0;
+  let later = 0;
+  for (const s of due) {
     s.lookedAt = Date.now();
     const file = shelvedAt(s, root);
-    if (!file) continue;
+    // Not where Tuna put it any more (moved or deleted): nothing to hand over.
+    if (!file) {
+      Object.assign(s, { loose: undefined, imported: undefined, path: undefined });
+      continue;
+    }
     try {
       const why = await place(s);
-      if (why || !s.trackId) continue;
+      if (why || !s.trackId) {
+        still++;
+        continue;
+      }
       // Lidarr has a copy of its own already: Tuna's stays where it is, and isn't asked about again.
       if ((await lidarr.tracks(s.albumId!)).find((t) => t.id === s.trackId)?.hasFile) {
         log.info('get', `Lidarr has its own copy of "${s.title}" by ${s.artist}; Tuna's stays in ${path.dirname(file)}`);
@@ -1149,13 +1169,20 @@ async function handOver(now = false) {
         const left = await fs.promises.readdir(dir).catch(() => ['?']);
         if (left.every((f) => /^(cover|folder)\.(jpe?g|png|webp)$/i.test(f))) await fs.promises.rm(dir, { recursive: true, force: true }).catch(() => undefined);
         void scanNavidrome();
+      } else {
+        throw new Error("Lidarr couldn't file it");
       }
-    } catch (err) {
-      log.warn('get', `Couldn't hand "${s.title}" by ${s.artist} to Lidarr`, err);
+    } catch {
+      // MusicBrainz or Lidarr busy, say: again within the hour.
+      later++;
+      s.lookedAt = Date.now() - 23 * 3600_000;
+      Object.assign(s, { trackId: undefined });
     } finally {
       save();
     }
   }
+  if (still) log.info('get', `${still} song${still === 1 ? '' : 's'} Tuna filed itself ${still === 1 ? 'is' : 'are'} still on no album Lidarr has`);
+  if (later) log.info('get', `${later} song${later === 1 ? '' : 's'} Tuna filed itself couldn't be checked with Lidarr just now (MusicBrainz or Lidarr busy): again within the hour`);
 }
 setTimeout(() => void handOver(), 5 * 60_000);
-setInterval(() => void handOver(), 6 * 3600_000);
+setInterval(() => void handOver(), 3600_000);

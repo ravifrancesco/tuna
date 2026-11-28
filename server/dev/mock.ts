@@ -12,6 +12,7 @@
  *   MOCK_SLSKD_REFUSE=<user,…>: those peers refuse to send. MOCK_SLSKD_STUCK=<user,…>: their queues never move.
  *   MOCK_MUSIC_DIR (default tuna-mock-music in the temp folder): Lidarr's music folder, a real one: files
  *   people import go there (through Lidarr's manual import, or straight in), and Navidrome finds them.
+ *   MOCK_LIDARR_ARTIST_LOOKUP_FAIL=<word,…>: only looking those artists up fails (Lidarr's album search finds them).
  *   MOCK_SLSKD_DIR (default tuna-mock-slskd in the temp folder): slskd's downloads folder, a real one.
  *   MOCK_LIDARR_ALBUMS_ONLY=1: Lidarr keeps no singles or EPs (its Standard metadata profile, as it comes).
  *   MOCK_SLSKD_BLOCK=<phrase,…>: nobody answers searches with those phrases (Soulseek's server drops some).
@@ -60,6 +61,9 @@ const crowded = (title: string) => CROWDED.some((w) => title.toLowerCase().inclu
 const DEEZER = process.env.MOCK_DEEZER === '1';
 const fromDeezer = (id: string) => id.endsWith('@deezer');
 const lookupFails = (name: string) => LOOKUP_FAIL.some((w) => name.toLowerCase().includes(w));
+/** MOCK_LIDARR_ARTIST_LOOKUP_FAIL=<word,…>: only looking up those artists fails (by id or by name); Lidarr's album search still finds them. */
+const ARTIST_LOOKUP_FAIL = (process.env.MOCK_LIDARR_ARTIST_LOOKUP_FAIL ?? '').toLowerCase().split(',').filter(Boolean);
+const artistLookupFails = (name: string) => lookupFails(name) || ARTIST_LOOKUP_FAIL.some((w) => name.toLowerCase().includes(w));
 
 // ---- A made-up world, the same every time ------------------------------------------------------
 
@@ -1273,6 +1277,7 @@ async function lidarr(path: string, q: URLSearchParams, req: http.IncomingMessag
     // Deezer's artists by "deezer:<id>" (Tubifarry); "lidarr:" goes to Lidarr's own server, which doesn't know them.
     if (term.startsWith('deezer:')) {
       const a = artists.find((x) => x.mbid === `${term.slice(7)}@deezer`);
+      if (a && artistLookupFails(a.name)) return lookupFailed(term);
       return json(res, 200, a ? [{ ...lidarrArtist(a), id: undefined }] : []);
     }
     if (term.startsWith('lidarr:')) {
@@ -1282,7 +1287,7 @@ async function lidarr(path: string, q: URLSearchParams, req: http.IncomingMessag
       return json(res, 200, a ? [{ ...lidarrArtist(a), id: undefined }] : []);
     }
     // A name, as Lidarr's "Add new" search.
-    if (lookupFails(term)) return lookupFailed(term);
+    if (artistLookupFails(term)) return lookupFailed(term);
     const query = cleanQuery(term);
     const found = artists.filter((a) => score(a.name, query) > 0).sort((x, y) => score(y.name, query) - score(x.name, query));
     return json(res, 200, found.slice(0, 10).map((a) => ({ ...lidarrArtist(a), id: undefined })));

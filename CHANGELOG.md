@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.5.5 (2026-11-27)
+
+**Fixed**
+- **"Lidarr doesn't know this artist"** for artists Lidarr knows from Deezer (or Discogs): since
+  0.5.3 Tuna looked them up by name, which Lidarr's search doesn't always answer. Now as their source
+  asks ("deezer:…"), then by name, and failing both, added by their id for Lidarr to fill in.
+- **Titles with "(con …)", "(featuring …)" or "(w/ …)"** (since 0.5.4, words in brackets count):
+  those are other artists, not part of the title.
+- **Copies were passed over for a word inside another** ("Oliver" has "live" in it): the words that
+  mark another version count only whole. More of them: extended, club mix, dub mix, acoustic,
+  unplugged, VIP, rework, bootleg, mashup, nightcore.
+- **Artists written without spaces** in a copy's path ("SeeMaw" for See Maw) count.
+- **Handing songs to Lidarr** runs once at a time (Look again pressed twice started two, and
+  MusicBrainz said it was busy); what couldn't be checked is tried again within the hour, and the log
+  says in one line how many were and how many are still on no album Lidarr has.
+
+To update: the server (pull the new image). The apps need nothing new.
+
 ## 0.5.4 (2026-11-27)
 
 **Changed**

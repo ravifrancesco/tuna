@@ -85,13 +85,17 @@ const MBID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const isMbid = (id: string | undefined) => Boolean(id && MBID.test(id));
 
 /**
- * An artist by its id: MusicBrainz's by the id itself; one Lidarr knows from another source (Deezer,
- * Discogs…) by its name, the one with that id, so Tuna needn't know how each source is asked.
+ * An artist by its id: MusicBrainz's by the id itself. One Lidarr knows from another source
+ * (Tubifarry's: "1234@deezer", "a1234@discogs") as that source answers ("deezer:1234",
+ * "discogs:a:1234"), else among those its name finds.
  */
 export async function lookupArtist(id: string, name?: string): Promise<LArtist[]> {
   if (isMbid(id)) return call<LArtist[]>('/artist/lookup', { query: { term: `lidarr:${id}` } });
-  const found = name ? await call<LArtist[]>('/artist/lookup', { query: { term: name }, timeoutMs: 20_000 }) : [];
-  return found.filter((a) => a.foreignArtistId === id);
+  const m = id.match(/^([a-z])?(\d+)@(\w+)$/i);
+  const byId = m ? await call<LArtist[]>('/artist/lookup', { query: { term: `${m[3]}:${m[1] ? `${m[1]}:` : ''}${m[2]}` }, timeoutMs: 20_000 }).catch(() => []) : [];
+  const found = byId.filter((a) => a.foreignArtistId === id);
+  if (found.length || !name) return found;
+  return (await call<LArtist[]>('/artist/lookup', { query: { term: name }, timeoutMs: 20_000 }).catch(() => [])).filter((a) => a.foreignArtistId === id);
 }
 
 /** Lidarr's own search by name (its metadata server, not MusicBrainz directly), as its "Add new" page. */

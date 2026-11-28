@@ -205,9 +205,11 @@ export async function ensureArtist(artistMbid: string, name: string): Promise<nu
   const existing = (await lidarr.artists()).find((a) => a.foreignArtistId === artistMbid);
   if (existing) return existing.id;
   const [found] = await lidarr.lookupArtist(artistMbid, name);
-  if (!found) throw new HttpError(404, t("Lidarr doesn't know this artist"));
+  // One from another source its searches don't list: added by its id, Lidarr fills in the rest from that source.
+  const artist = found ?? (lidarr.isMbid(artistMbid) ? undefined : { artistName: name, foreignArtistId: artistMbid });
+  if (!artist) throw new HttpError(404, t("Lidarr doesn't know this artist"));
   const added = await lidarr.addArtist({
-    ...found,
+    ...artist,
     ...(await profiles()),
     monitored: true,
     monitorNewItems: 'none',

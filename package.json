@@ -1,6 +1,6 @@
 {
   "name": "tuna",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "private": true,
   "description": "A Spotify-style front door for a Navidrome + Lidarr home music stack.",
   "license": "MIT",
