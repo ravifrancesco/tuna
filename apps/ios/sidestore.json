@@ -17,20 +17,20 @@
       "category": "entertainment",
       "versions": [
         {
-          "version": "0.5.2",
+          "version": "0.5.3",
           "buildVersion": "1",
           "date": "2026-11-27",
-          "localizedDescription": "Changed\n- Songs that aren't on an album Lidarr has (singles and EPs its metadata profile leaves out, songs MusicBrainz doesn't know) are now got from Soulseek all the same, and go straight into the music folder, named and tagged as the playlist has them. Before, Tuna gave up on them without looking. This needs slskd's downloads folder inside the data folder Tuna has (the log says if it isn't).\n- One more search on Soulseek: the song's title alone, as people search (a copy still needs the artist in its path).\n\nFixed\n- Long playlists scrolled slowly (a big Liked songs with many songs not here yet): songs off screen are no longer laid out or drawn until they come near, songs not here yet are dimmed in a way that's quicker to draw, and only the song playing hears about play and pause.\n- The fish's tail was cut in the opening away from home (iPhone and Mac): as it swung, its rounded edge was clipped. It now swings about its tip.\n\nTo update: the server (pull the new image), and the apps for the tail.",
-          "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.5.2/Tuna-ios.ipa",
+          "localizedDescription": "New\n- Albums show all their songs: an album you have only some songs of shows the rest too, greyed where they belong, each with Get, and Get the missing songs for all of them. It says whether it's an album, an EP or a single as its sources do (not guessed from how many songs are here).\n- Songs Tuna filed itself go to Lidarr once it knows their album (after you turn on Deezer in Lidarr, or singles and EPs): Lidarr files them into the album with its names, and its cover if it writes covers (Settings → Metadata → Kodi/Emby → Album Images). Every few hours, and right away with Look again.\n\nChanged\n- Any source Lidarr knows albums from (Deezer, Discogs… through Tubifarry's MetaMix) works in Tuna the same way: Tuna asks Lidarr for the artist and the cover rather than each source.\n\nFixed\n- Songs that had arrived still showed as not here in playlists when the library names them a little differently: now the same artist's song with nearly the same title counts.\n\nTo update: the server (pull the new image). The apps need nothing new.",
+          "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.5.3/Tuna-ios.ipa",
           "size": 4705836,
-          "sha256": "0df7881d3765c85ebf47683c2cb6c17bce37379ac714664ba97728d4bc62f4bf",
+          "sha256": "7b7e14ce8a3e0b5833a68f931bdaf11b6b6163d493edb40418e8c45d9d6225af",
           "minOSVersion": "16.0"
         }
       ],
-      "version": "0.5.2",
+      "version": "0.5.3",
       "versionDate": "2026-11-27",
-      "versionDescription": "Changed\n- Songs that aren't on an album Lidarr has (singles and EPs its metadata profile leaves out, songs MusicBrainz doesn't know) are now got from Soulseek all the same, and go straight into the music folder, named and tagged as the playlist has them. Before, Tuna gave up on them without looking. This needs slskd's downloads folder inside the data folder Tuna has (the log says if it isn't).\n- One more search on Soulseek: the song's title alone, as people search (a copy still needs the artist in its path).\n\nFixed\n- Long playlists scrolled slowly (a big Liked songs with many songs not here yet): songs off screen are no longer laid out or drawn until they come near, songs not here yet are dimmed in a way that's quicker to draw, and only the song playing hears about play and pause.\n- The fish's tail was cut in the opening away from home (iPhone and Mac): as it swung, its rounded edge was clipped. It now swings about its tip.\n\nTo update: the server (pull the new image), and the apps for the tail.",
-      "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.5.2/Tuna-ios.ipa",
+      "versionDescription": "New\n- Albums show all their songs: an album you have only some songs of shows the rest too, greyed where they belong, each with Get, and Get the missing songs for all of them. It says whether it's an album, an EP or a single as its sources do (not guessed from how many songs are here).\n- Songs Tuna filed itself go to Lidarr once it knows their album (after you turn on Deezer in Lidarr, or singles and EPs): Lidarr files them into the album with its names, and its cover if it writes covers (Settings → Metadata → Kodi/Emby → Album Images). Every few hours, and right away with Look again.\n\nChanged\n- Any source Lidarr knows albums from (Deezer, Discogs… through Tubifarry's MetaMix) works in Tuna the same way: Tuna asks Lidarr for the artist and the cover rather than each source.\n\nFixed\n- Songs that had arrived still showed as not here in playlists when the library names them a little differently: now the same artist's song with nearly the same title counts.\n\nTo update: the server (pull the new image). The apps need nothing new.",
+      "downloadURL": "https://github.com/ravifrancesco/tuna/releases/download/v0.5.3/Tuna-ios.ipa",
       "size": 4705836,
       "appPermissions": {
         "entitlements": [],
